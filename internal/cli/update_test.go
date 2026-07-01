@@ -114,6 +114,48 @@ func TestExecute_Update_ChangedGamelistMetadata_ReportsUpdated(t *testing.T) {
 	}
 }
 
+func TestExecute_Update_NominalFixture_PrintsProgressPerSystemAndGame(t *testing.T) {
+	romsFolder := writeUpdateFixtureRomsFolder(t)
+	setUpdateConfig(t, romsFolder)
+	var out bytes.Buffer
+
+	code := Execute([]string{"update"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	output := out.String()
+	if !strings.Contains(output, "megadrive") {
+		t.Errorf("output = %q, want it to mention the system being processed", output)
+	}
+	if !strings.Contains(output, "[1/2]") || !strings.Contains(output, "[2/2]") {
+		t.Errorf("output = %q, want per-game progress counters", output)
+	}
+	if !strings.Contains(output, "Sonic") || !strings.Contains(output, "Golden Axe") {
+		t.Errorf("output = %q, want game names in the progress output", output)
+	}
+
+	summaryIndex := strings.Index(output, "2 added")
+	progressIndex := strings.Index(output, "[1/2]")
+	if summaryIndex == -1 || progressIndex == -1 || progressIndex > summaryIndex {
+		t.Errorf("output = %q, want progress lines to appear before the final summary", output)
+	}
+}
+
+func TestExecute_Update_NoRomsFoldersConfigured_PrintsNoProgressLines(t *testing.T) {
+	setUpdateConfig(t, "")
+	var out bytes.Buffer
+
+	code := Execute([]string{"update"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if strings.Contains(out.String(), "[") {
+		t.Errorf("output = %q, want no per-game progress when no ROMs folder is configured", out.String())
+	}
+}
+
 func TestExecute_Update_NoRomsFoldersConfigured_PrintsZeroSummary(t *testing.T) {
 	setUpdateConfig(t, "")
 	var out bytes.Buffer

@@ -210,7 +210,7 @@ func TestImportFromRomsFolder_NominalFixture_ImportsGamesGroupedBySystem(t *test
 	registryFolder := t.TempDir()
 	reg := &Registry{}
 
-	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder, registryFolder)
+	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder, registryFolder, nil)
 
 	if err != nil {
 		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)
@@ -247,9 +247,9 @@ func TestImportFromRomsFolder_ReimportSameFolder_NoDuplicates(t *testing.T) {
 	romsFolder := writeFixtureRomsFolder(t)
 	registryFolder := t.TempDir()
 	reg := &Registry{}
-	ImportFromRomsFolder(reg, romsFolder, registryFolder)
+	ImportFromRomsFolder(reg, romsFolder, registryFolder, nil)
 
-	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder, registryFolder)
+	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder, registryFolder, nil)
 
 	if err != nil {
 		t.Fatalf("second ImportFromRomsFolder() error = %v, want nil", err)
@@ -272,7 +272,7 @@ func TestImportFromRomsFolder_ChangedGamelistMetadata_UpdatesEntry(t *testing.T)
 	romsFolder := writeFixtureRomsFolder(t)
 	registryFolder := t.TempDir()
 	reg := &Registry{}
-	ImportFromRomsFolder(reg, romsFolder, registryFolder)
+	ImportFromRomsFolder(reg, romsFolder, registryFolder, nil)
 
 	changedXML := `<?xml version="1.0"?>
 <gameList>
@@ -283,7 +283,7 @@ func TestImportFromRomsFolder_ChangedGamelistMetadata_UpdatesEntry(t *testing.T)
 		t.Fatalf("rewrite megadrive gamelist: %v", err)
 	}
 
-	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder, registryFolder)
+	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder, registryFolder, nil)
 
 	if err != nil {
 		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)
@@ -299,10 +299,62 @@ func TestImportFromRomsFolder_ChangedGamelistMetadata_UpdatesEntry(t *testing.T)
 	}
 }
 
+func TestImportFromRomsFolder_NominalFixture_ReportsProgressPerGame(t *testing.T) {
+	romsFolder := writeFixtureRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	var events []ProgressEvent
+	_, _, _, err := ImportFromRomsFolder(reg, romsFolder, registryFolder, func(e ProgressEvent) {
+		events = append(events, e)
+	})
+
+	if err != nil {
+		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("got %d progress events, want 3 (one per game)", len(events))
+	}
+
+	var sonicEvent, alexKiddEvent *ProgressEvent
+	for i := range events {
+		if events[i].GameName == "Sonic" {
+			sonicEvent = &events[i]
+		}
+		if events[i].GameName == "Alex Kidd" {
+			alexKiddEvent = &events[i]
+		}
+	}
+	if sonicEvent == nil {
+		t.Fatal("no progress event reported for Sonic")
+	}
+	if sonicEvent.System != "megadrive" || sonicEvent.GameIndex != 1 || sonicEvent.GameCount != 2 {
+		t.Errorf("Sonic event = %+v, want System=megadrive GameIndex=1 GameCount=2", *sonicEvent)
+	}
+	if alexKiddEvent == nil {
+		t.Fatal("no progress event reported for Alex Kidd")
+	}
+	if alexKiddEvent.System != "mastersystem" || alexKiddEvent.GameIndex != 1 || alexKiddEvent.GameCount != 1 {
+		t.Errorf("Alex Kidd event = %+v, want System=mastersystem GameIndex=1 GameCount=1", *alexKiddEvent)
+	}
+}
+
+func TestImportFromRomsFolder_NilProgressCallback_DoesNotPanic(t *testing.T) {
+	romsFolder := writeFixtureRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	_, _, _, err := ImportFromRomsFolder(reg, romsFolder, registryFolder, nil)
+
+	if err != nil {
+		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)
+	}
+}
+
 func TestImportFromRomsFolder_RomsFolderDoesNotExist_ReturnsError(t *testing.T) {
 	reg := &Registry{}
 
-	_, _, _, err := ImportFromRomsFolder(reg, filepath.Join(t.TempDir(), "does-not-exist"), t.TempDir())
+	_, _, _, err := ImportFromRomsFolder(reg, filepath.Join(t.TempDir(), "does-not-exist"), t.TempDir(), nil)
 
 	if err == nil {
 		t.Fatal("ImportFromRomsFolder() error = nil, want error for missing ROMs folder")
@@ -345,7 +397,7 @@ func TestImportFromRomsFolder_GameWithMedia_CopiesMediaMirroringBatoceraLayout(t
 	registryFolder := t.TempDir()
 	reg := &Registry{}
 
-	_, _, _, err := ImportFromRomsFolder(reg, romsFolder, registryFolder)
+	_, _, _, err := ImportFromRomsFolder(reg, romsFolder, registryFolder, nil)
 
 	if err != nil {
 		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)
@@ -370,14 +422,14 @@ func TestImportFromRomsFolder_ReimportUnchangedGame_DoesNotRecopyMedia(t *testin
 	romsFolder := writeFixtureRomsFolderWithMedia(t)
 	registryFolder := t.TempDir()
 	reg := &Registry{}
-	ImportFromRomsFolder(reg, romsFolder, registryFolder)
+	ImportFromRomsFolder(reg, romsFolder, registryFolder, nil)
 
 	copiedImage := filepath.Join(registryFolder, "megadrive", "images", "Sonic.png")
 	if err := os.Remove(copiedImage); err != nil {
 		t.Fatalf("failed to remove copied image fixture: %v", err)
 	}
 
-	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder, registryFolder)
+	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder, registryFolder, nil)
 
 	if err != nil {
 		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)

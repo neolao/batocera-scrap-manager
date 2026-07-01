@@ -151,6 +151,15 @@ func (r *Registry) indexOf(system, path string) int {
 	return -1
 }
 
+// ProgressEvent describes one game being processed by ImportFromRomsFolder,
+// for callers that want to report progress to the user as the import runs.
+type ProgressEvent struct {
+	System    string
+	GameIndex int // 1-based index of this game within System's game list
+	GameCount int // total number of games found for System
+	GameName  string
+}
+
 // ImportFromRomsFolder scans the immediate subdirectories of romsFolder (each
 // one a Batocera system) for a gamelist.xml file, parses it, and imports its
 // entries into reg. Subdirectories without a gamelist.xml are skipped
@@ -158,8 +167,9 @@ func (r *Registry) indexOf(system, path string) int {
 // is newly added or whose metadata changed, its referenced media files
 // (cover art, video, marquee, thumbnail) are copied from romsFolder into
 // registryFolder, mirroring the Batocera per-system arborescence; unchanged
-// games are not recopied.
-func ImportFromRomsFolder(reg *Registry, romsFolder, registryFolder string) (added, updated, unchanged int, err error) {
+// games are not recopied. If onProgress is non-nil, it is called once per
+// game as it is processed.
+func ImportFromRomsFolder(reg *Registry, romsFolder, registryFolder string, onProgress func(ProgressEvent)) (added, updated, unchanged int, err error) {
 	dirEntries, err := os.ReadDir(romsFolder)
 	if err != nil {
 		return 0, 0, 0, err
@@ -181,7 +191,11 @@ func ImportFromRomsFolder(reg *Registry, romsFolder, registryFolder string) (add
 			return added, updated, unchanged, parseErr
 		}
 
-		for _, g := range games {
+		for i, g := range games {
+			if onProgress != nil {
+				onProgress(ProgressEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: g.Name})
+			}
+
 			status := reg.importGame(system, g)
 			switch status {
 			case statusAdded:

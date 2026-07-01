@@ -37,3 +37,12 @@ Defined in: `internal/registry/registry.go`
 |---|---|---|
 | Entries | []Entry | centralized index, reconstructed by scanning `<registryFolder>/<system>/*.json` (one file per game, no single index file); media files referenced by each `Game` are copied under `<registryFolder>/<system>/...`, mirroring the Batocera ROMs layout |
 Defined in: `internal/registry/registry.go`
+
+## ProgressEvent
+| Field | Type | Notes |
+|---|---|---|
+| System | string | Batocera system name of the game being processed |
+| GameIndex | int | 1-based index of this game within System's game list |
+| GameCount | int | total number of games found for System |
+| GameName | string | |
+Defined in: `internal/registry/registry.go` (passed to the optional `onProgress` callback of `ImportFromRomsFolder`)

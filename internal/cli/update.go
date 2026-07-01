@@ -31,9 +31,16 @@ func runUpdate(out io.Writer) int {
 		return 1
 	}
 
+	onProgress := func(e registry.ProgressEvent) {
+		if e.GameIndex == 1 {
+			fmt.Fprintf(out, "%s: %d game(s)\n", e.System, e.GameCount)
+		}
+		fmt.Fprintf(out, "  [%d/%d] %s\n", e.GameIndex, e.GameCount, e.GameName)
+	}
+
 	var added, updated, unchanged int
 	for _, romsFolder := range cfg.RomsFolders {
-		a, u, unc, err := registry.ImportFromRomsFolder(reg, romsFolder, cfg.RegistryFolder)
+		a, u, unc, err := registry.ImportFromRomsFolder(reg, romsFolder, cfg.RegistryFolder, onProgress)
 		if err != nil {
 			fmt.Fprintf(out, "error: %v\n", err)
 			return 1

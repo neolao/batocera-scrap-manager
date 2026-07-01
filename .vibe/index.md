@@ -17,6 +17,7 @@
 - Multi-word CLI commands (e.g. `config`) are dispatched from a dedicated file in `internal/cli/` (`config.go`) rather than bloating `cli.go`.
 - Single-word CLI commands without subcommands (e.g. `update`) are also dispatched from a dedicated file (`update.go`), with a single `run<Command>(out io.Writer) int` function (without the `args` parameter when there is no subcommand to parse).
 - Media files referenced by a relative path (as found in `gamelist.xml`) are copied preserving that same relative path under the destination system folder, so the stored path string stays valid without rewriting it.
+- Long-running operations report progress via a nil-safe callback parameter (e.g. `onProgress func(ProgressEvent)`) rather than writing output directly, keeping the reporting/printing concern in the CLI layer and out of the domain package.
 
 ## Other context files
 - [`models.md`](.vibe/models.md) — data models

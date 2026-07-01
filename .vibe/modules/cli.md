@@ -18,6 +18,7 @@ The config file path is resolved via `config.DefaultPath()`: the `BATOCERA_SCRAP
 `internal/cli/update.go` implements `runUpdate(out io.Writer) int`, dispatched by `Execute` on `args[0] == "update"`.
 
 - Loads the config, fails with exit code 1 if `RegistryFolder` is not set (explicit error message).
-- Loads the registry, then calls `registry.ImportFromRomsFolder` (passing the ROMs folder and the registry folder) for each configured ROMs folder; stops and returns exit code 1 as soon as a folder is not found.
+- Loads the registry, then calls `registry.ImportFromRomsFolder` (passing the ROMs folder, the registry folder, and a progress callback) for each configured ROMs folder; stops and returns exit code 1 as soon as a folder is not found.
+- The progress callback prints one line per system when its first game starts (`"<system>: <N> game(s)"`) and one line per game processed (`"  [<index>/<count>] <name>"`), as plain sequential output (no carriage-return overwrites or ANSI codes), so it stays readable when redirected to a file.
 - Saves the updated registry, then prints a summary `"%d added, %d updated, %d unchanged"`.
-- No configured ROMs folder is a valid case (not an error): it prints a zero summary.
+- No configured ROMs folder is a valid case (not an error): it prints a zero summary, with no progress lines.

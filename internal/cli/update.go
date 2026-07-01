@@ -20,12 +20,12 @@ func runUpdate(out io.Writer) int {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 1
 	}
-	if cfg.RegistryPath == "" {
+	if cfg.RegistryFolder == "" {
 		fmt.Fprintln(out, "error: registry not configured, run 'config set-registry' first")
 		return 1
 	}
 
-	reg, err := registry.Load(cfg.RegistryPath)
+	reg, err := registry.Load(cfg.RegistryFolder)
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 1
@@ -33,7 +33,7 @@ func runUpdate(out io.Writer) int {
 
 	var added, updated, unchanged int
 	for _, romsFolder := range cfg.RomsFolders {
-		a, u, unc, err := registry.ImportFromRomsFolder(reg, romsFolder)
+		a, u, unc, err := registry.ImportFromRomsFolder(reg, romsFolder, cfg.RegistryFolder)
 		if err != nil {
 			fmt.Fprintf(out, "error: %v\n", err)
 			return 1
@@ -43,7 +43,7 @@ func runUpdate(out io.Writer) int {
 		unchanged += unc
 	}
 
-	if err := registry.Save(cfg.RegistryPath, reg); err != nil {
+	if err := registry.Save(cfg.RegistryFolder, reg); err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 1
 	}

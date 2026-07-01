@@ -16,15 +16,19 @@ Keeps track of two essential pieces of information between runs: where the regis
 Knows how to read `gamelist.xml` files, the standard format used by Batocera/EmulationStation to describe a system's games (name, description, cover art, video, rating, release date, developer, publisher, genre, number of players...).
 
 **Registry**
-The heart of the tool: a centralized index of all already-known games, along with their metadata. It knows how to import game sheets from ROMs folders without creating duplicates, and to detect when the metadata of an already-known game has changed so it can be refreshed automatically.
+The heart of the tool: a centralized index of all already-known games, along with their metadata and a copy of their media (cover art, video, marquee, thumbnail). It knows how to import game sheets from ROMs folders without creating duplicates, and to detect when the metadata of an already-known game has changed so it can be refreshed automatically.
 
 ## How data flows
 
 1. The user specifies, via the configuration, where the registry lives and which ROMs folders to watch.
 2. On every update, the tool scans the configured ROMs folders: each subfolder corresponds to a Batocera system (e.g. `megadrive`, `mastersystem`).
 3. For each system, the `gamelist.xml` file (if it exists) is read and its games are compared against the content already present in the registry.
-4. An unknown game is added to the registry; an already-known game whose metadata changed is refreshed; an already-known, unchanged game is left untouched.
+4. An unknown game is added to the registry, and its media files are copied into the registry; an already-known game whose metadata changed is refreshed and its media re-copied; an already-known, unchanged game is left untouched, with no unnecessary copying.
 5. The updated registry is saved, and a summary (games added, updated, unchanged) is displayed to the user.
+
+## Registry layout
+
+The registry mirrors Batocera's own folder layout: each system gets its own subfolder at the top level of the registry, containing the same media subfolders (images, videos, etc.) found on the original ROMs folder. The game metadata itself is kept in a single index file at the root of the registry, separate from the media.
 
 ## Principles followed
 

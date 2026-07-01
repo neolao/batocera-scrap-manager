@@ -1,5 +1,5 @@
 // Package config manages the persisted configuration of batocera-scrap-manager:
-// the registry path and the Batocera ROMs folders to watch.
+// the registry folder and the Batocera ROMs folders to watch.
 package config
 
 import (
@@ -15,8 +15,8 @@ const EnvConfigPath = "BATOCERA_SCRAP_MANAGER_CONFIG"
 
 // Config holds the persisted settings of batocera-scrap-manager.
 type Config struct {
-	RegistryPath string   `json:"registry_path"`
-	RomsFolders  []string `json:"roms_folders"`
+	RegistryFolder string   `json:"registry_folder"`
+	RomsFolders    []string `json:"roms_folders"`
 }
 
 // DefaultPath returns the configuration file path: the EnvConfigPath
@@ -63,13 +63,13 @@ func Save(path string, cfg Config) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-// SetRegistryPath sets the registry path, resolved to an absolute path.
-func (c *Config) SetRegistryPath(path string) error {
+// SetRegistryFolder sets the registry folder, resolved to an absolute path.
+func (c *Config) SetRegistryFolder(path string) error {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return err
 	}
-	c.RegistryPath = abs
+	c.RegistryFolder = abs
 	return nil
 }
 

@@ -37,7 +37,7 @@ func runConfig(args []string, out io.Writer) int {
 			fmt.Fprintln(out, "error: missing path argument")
 			return 1
 		}
-		if err := cfg.SetRegistryPath(args[1]); err != nil {
+		if err := cfg.SetRegistryFolder(args[1]); err != nil {
 			fmt.Fprintf(out, "error: %v\n", err)
 			return 1
 		}
@@ -45,7 +45,7 @@ func runConfig(args []string, out io.Writer) int {
 			fmt.Fprintf(out, "error: %v\n", err)
 			return 1
 		}
-		fmt.Fprintf(out, "registry set to %s\n", cfg.RegistryPath)
+		fmt.Fprintf(out, "registry set to %s\n", cfg.RegistryFolder)
 		return 0
 
 	case "add-roms-folder":
@@ -70,10 +70,10 @@ func runConfig(args []string, out io.Writer) int {
 		return 0
 
 	case "list":
-		if cfg.RegistryPath == "" {
+		if cfg.RegistryFolder == "" {
 			fmt.Fprintln(out, "registry: (not set)")
 		} else {
-			fmt.Fprintf(out, "registry: %s\n", cfg.RegistryPath)
+			fmt.Fprintf(out, "registry: %s\n", cfg.RegistryFolder)
 		}
 		if len(cfg.RomsFolders) == 0 {
 			fmt.Fprintln(out, "roms folders: (none)")

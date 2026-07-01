@@ -3,7 +3,7 @@
 ## Config
 | Field | Type | Notes |
 |---|---|---|
-| RegistryPath | string | absolute path, `json:"registry_path"` |
+| RegistryFolder | string | absolute path to the registry folder, `json:"registry_folder"` |
 | RomsFolders | []string | absolute paths, deduplicated, `json:"roms_folders"` |
 Defined in: `internal/config/config.go`
 
@@ -35,5 +35,5 @@ Defined in: `internal/registry/registry.go`
 ## Registry
 | Field | Type | Notes |
 |---|---|---|
-| Entries | []Entry | centralized index, persisted as JSON |
+| Entries | []Entry | centralized index, persisted as JSON at `<registryFolder>/registry.json`; media files referenced by each `Game` are copied under `<registryFolder>/<system>/...`, mirroring the Batocera ROMs layout |
 Defined in: `internal/registry/registry.go`

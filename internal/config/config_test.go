@@ -14,8 +14,8 @@ func TestLoad_FileDoesNotExist_ReturnsEmptyConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v, want nil", err)
 	}
-	if cfg.RegistryPath != "" {
-		t.Errorf("RegistryPath = %q, want empty", cfg.RegistryPath)
+	if cfg.RegistryFolder != "" {
+		t.Errorf("RegistryFolder = %q, want empty", cfg.RegistryFolder)
 	}
 	if len(cfg.RomsFolders) != 0 {
 		t.Errorf("RomsFolders = %v, want empty", cfg.RomsFolders)
@@ -37,7 +37,7 @@ func TestLoad_MalformedJSON_ReturnsError(t *testing.T) {
 
 func TestSave_WritesConfigThatCanBeReloaded(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
-	cfg := Config{RegistryPath: "/registry", RomsFolders: []string{"/roms1", "/roms2"}}
+	cfg := Config{RegistryFolder: "/registry", RomsFolders: []string{"/roms1", "/roms2"}}
 
 	if err := Save(path, cfg); err != nil {
 		t.Fatalf("Save() error = %v, want nil", err)
@@ -47,8 +47,8 @@ func TestSave_WritesConfigThatCanBeReloaded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v, want nil", err)
 	}
-	if got.RegistryPath != cfg.RegistryPath {
-		t.Errorf("RegistryPath = %q, want %q", got.RegistryPath, cfg.RegistryPath)
+	if got.RegistryFolder != cfg.RegistryFolder {
+		t.Errorf("RegistryFolder = %q, want %q", got.RegistryFolder, cfg.RegistryFolder)
 	}
 	if len(got.RomsFolders) != 2 || got.RomsFolders[0] != "/roms1" || got.RomsFolders[1] != "/roms2" {
 		t.Errorf("RomsFolders = %v, want [/roms1 /roms2]", got.RomsFolders)
@@ -58,7 +58,7 @@ func TestSave_WritesConfigThatCanBeReloaded(t *testing.T) {
 func TestSave_CreatesParentDirectories(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "dir", "config.json")
 
-	if err := Save(path, Config{RegistryPath: "/registry"}); err != nil {
+	if err := Save(path, Config{RegistryFolder: "/registry"}); err != nil {
 		t.Fatalf("Save() error = %v, want nil", err)
 	}
 
@@ -67,15 +67,15 @@ func TestSave_CreatesParentDirectories(t *testing.T) {
 	}
 }
 
-func TestSetRegistryPath_RelativePath_StoresAbsolutePath(t *testing.T) {
+func TestSetRegistryFolder_RelativePath_StoresAbsolutePath(t *testing.T) {
 	var cfg Config
 
-	if err := cfg.SetRegistryPath("relative/registry"); err != nil {
-		t.Fatalf("SetRegistryPath() error = %v, want nil", err)
+	if err := cfg.SetRegistryFolder("relative/registry"); err != nil {
+		t.Fatalf("SetRegistryFolder() error = %v, want nil", err)
 	}
 
-	if !filepath.IsAbs(cfg.RegistryPath) {
-		t.Errorf("RegistryPath = %q, want absolute path", cfg.RegistryPath)
+	if !filepath.IsAbs(cfg.RegistryFolder) {
+		t.Errorf("RegistryFolder = %q, want absolute path", cfg.RegistryFolder)
 	}
 }
 

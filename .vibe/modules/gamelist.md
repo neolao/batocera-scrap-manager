@@ -1,11 +1,11 @@
 # Module: gamelist
-**Role:** Parse les fichiers `gamelist.xml` au format EmulationStation/Batocera.
+**Role:** Parses `gamelist.xml` files in the EmulationStation/Batocera format.
 **Files:** `internal/gamelist/gamelist.go`
 **Exports:**
-- `gamelist.Game` — un jeu (path, name, desc, image, video, marquee, thumbnail, rating, release_date, developer, publisher, genre, players), tags `xml` et `json`
+- `gamelist.Game` — a game (path, name, desc, image, video, marquee, thumbnail, rating, release_date, developer, publisher, genre, players), `xml` and `json` tags
 - `gamelist.Parse(r io.Reader) ([]Game, error)`
 - `gamelist.ParseFile(path string) ([]Game, error)`
 
-**Depends on:** (aucun module interne)
+**Depends on:** (no internal module)
 
-Un `gameList` vide ou avec des champs optionnels absents ne produit pas d'erreur (valeurs zéro).
+An empty `gameList`, or one with missing optional fields, does not produce an error (zero values).

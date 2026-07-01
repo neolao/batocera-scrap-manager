@@ -1,1 +1,56 @@
 # batocera-scrap-manager
+
+A command-line tool for managing game scraping data (metadata, box art, etc.) on Batocera. It centralizes into a registry the information already scraped on your ROMs folders, so you can browse it and keep it up to date.
+
+<!-- vibe:begin:features -->
+## Features
+
+- Configure the registry location and one or more Batocera ROMs folders to watch.
+- Browse the configured registry and the list of watched ROMs folders at any time.
+- Update the registry in one step from the configured ROMs folders: new games are added, games whose metadata changed are refreshed, and a summary (added / updated / unchanged) is displayed.
+<!-- vibe:end:features -->
+
+<!-- vibe:begin:install -->
+## Installation
+
+Prerequisite: Go 1.26 or later.
+
+With `go install`:
+
+```sh
+go install github.com/neolao/batocera-scrap-manager@latest
+```
+
+Or by building from source:
+
+```sh
+git clone https://github.com/neolao/batocera-scrap-manager.git
+cd batocera-scrap-manager
+go build -o batocera-scrap-manager .
+```
+<!-- vibe:end:install -->
+
+<!-- vibe:begin:usage -->
+## Usage
+
+Show help or version:
+
+```sh
+batocera-scrap-manager --help
+batocera-scrap-manager --version
+```
+
+Configure the registry location and the ROMs folders to watch:
+
+```sh
+batocera-scrap-manager config set-registry /userdata/saves/scrap-registry.json
+batocera-scrap-manager config add-roms-folder /userdata/roms
+batocera-scrap-manager config list
+```
+
+Update the registry from the configured ROMs folders:
+
+```sh
+batocera-scrap-manager update
+```
+<!-- vibe:end:usage -->

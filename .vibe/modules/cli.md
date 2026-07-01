@@ -1,23 +1,23 @@
 # Module: cli
-**Role:** Point d'entrée et interface en ligne de commande de batocera-scrap-manager — parse les arguments et dispatche vers les commandes.
+**Role:** Entry point and command-line interface of batocera-scrap-manager — parses arguments and dispatches to commands.
 **Files:** `main.go`, `internal/cli/cli.go`, `internal/cli/config.go`, `internal/cli/update.go`
 **Exports:** `cli.Execute(args []string, out io.Writer) int`
 **Depends on:** [`modules/config.md`](config.md), [`modules/registry.md`](registry.md)
 
-## Sous-commande `config`
-`internal/cli/config.go` implémente `runConfig(args []string, out io.Writer) int`, dispatché par `Execute` sur `args[0] == "config"`.
+## `config` subcommand
+`internal/cli/config.go` implements `runConfig(args []string, out io.Writer) int`, dispatched by `Execute` on `args[0] == "config"`.
 
-- `config set-registry <path>` — définit le chemin du registry (converti en chemin absolu via `internal/config`), persiste dans le fichier de config.
-- `config add-roms-folder <path>` — ajoute un dossier de ROMs Batocera à surveiller (dédoublonné par chemin absolu).
-- `config list` — affiche le registry configuré (ou "(not set)") et la liste des dossiers de ROMs (ou "(none)").
-- Toute sous-commande absente ou inconnue retourne le code de sortie 1.
+- `config set-registry <path>` — sets the registry path (converted to an absolute path via `internal/config`), persisted to the config file.
+- `config add-roms-folder <path>` — adds a Batocera ROMs folder to watch (deduplicated by absolute path).
+- `config list` — displays the configured registry (or "(not set)") and the list of ROMs folders (or "(none)").
+- Any missing or unknown subcommand returns exit code 1.
 
-Le chemin du fichier de config est résolu via `config.DefaultPath()` : variable d'environnement `BATOCERA_SCRAP_MANAGER_CONFIG` si définie, sinon `os.UserConfigDir()/batocera-scrap-manager/config.json`.
+The config file path is resolved via `config.DefaultPath()`: the `BATOCERA_SCRAP_MANAGER_CONFIG` environment variable if set, otherwise `os.UserConfigDir()/batocera-scrap-manager/config.json`.
 
-## Sous-commande `update`
-`internal/cli/update.go` implémente `runUpdate(out io.Writer) int`, dispatché par `Execute` sur `args[0] == "update"`.
+## `update` subcommand
+`internal/cli/update.go` implements `runUpdate(out io.Writer) int`, dispatched by `Execute` on `args[0] == "update"`.
 
-- Charge la config, refuse avec le code de sortie 1 si `RegistryPath` n'est pas défini (message d'erreur explicite).
-- Charge le registry, puis appelle `registry.ImportFromRomsFolder` pour chaque dossier de ROMs configuré ; s'arrête et retourne le code 1 dès qu'un dossier est introuvable.
-- Sauvegarde le registry mis à jour, puis affiche un résumé `"%d added, %d updated, %d unchanged"`.
-- Aucun dossier de ROMs configuré n'est un cas valide (pas une erreur) : affiche un résumé à zéro.
+- Loads the config, fails with exit code 1 if `RegistryPath` is not set (explicit error message).
+- Loads the registry, then calls `registry.ImportFromRomsFolder` for each configured ROMs folder; stops and returns exit code 1 as soon as a folder is not found.
+- Saves the updated registry, then prints a summary `"%d added, %d updated, %d unchanged"`.
+- No configured ROMs folder is a valid case (not an error): it prints a zero summary.

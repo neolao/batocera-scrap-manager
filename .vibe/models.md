@@ -3,14 +3,14 @@
 ## Config
 | Field | Type | Notes |
 |---|---|---|
-| RegistryPath | string | chemin absolu, `json:"registry_path"` |
-| RomsFolders | []string | chemins absolus, dédoublonnés, `json:"roms_folders"` |
+| RegistryPath | string | absolute path, `json:"registry_path"` |
+| RomsFolders | []string | absolute paths, deduplicated, `json:"roms_folders"` |
 Defined in: `internal/config/config.go`
 
 ## Game
 | Field | Type | Notes |
 |---|---|---|
-| Path | string | chemin du ROM relatif au dossier système, clé de dédoublonnage |
+| Path | string | ROM path relative to the system folder, deduplication key |
 | Name | string | |
 | Desc | string | |
 | Image | string | |
@@ -23,17 +23,17 @@ Defined in: `internal/config/config.go`
 | Publisher | string | |
 | Genre | string | |
 | Players | string | |
-Defined in: `internal/gamelist/gamelist.go` (issu du parsing de `gamelist.xml`, format EmulationStation/Batocera)
+Defined in: `internal/gamelist/gamelist.go` (parsed from `gamelist.xml`, EmulationStation/Batocera format)
 
 ## Entry
 | Field | Type | Notes |
 |---|---|---|
-| System | string | nom du système Batocera (nom du sous-dossier, ex. `megadrive`) |
+| System | string | Batocera system name (subfolder name, e.g. `megadrive`) |
 | Game | Game | |
 Defined in: `internal/registry/registry.go`
 
 ## Registry
 | Field | Type | Notes |
 |---|---|---|
-| Entries | []Entry | index centralisé, persisté en JSON |
+| Entries | []Entry | centralized index, persisted as JSON |
 Defined in: `internal/registry/registry.go`

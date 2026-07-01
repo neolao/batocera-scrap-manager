@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 depends_on: [001]
 ---
 # Commande CLI de Mise à Jour du Registre

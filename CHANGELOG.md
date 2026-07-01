@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Users can now update the registry from the configured ROMs folders with `batocera-scrap-manager update`, which adds new games, refreshes games whose metadata changed, and prints a summary of added/updated/unchanged entries.
+
 ## [0.1.0] - 2026-07-01
 
 ### Added

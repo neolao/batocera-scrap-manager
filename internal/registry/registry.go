@@ -56,37 +56,42 @@ func Save(path string, reg *Registry) error {
 
 // Import merges games (belonging to system) into the registry. An entry is
 // considered already known when an existing entry has the same system and
-// the same game path; such entries are counted as unchanged rather than
-// duplicated.
-func (r *Registry) Import(system string, games []gamelist.Game) (added, unchanged int) {
+// the same game path; if its metadata differs from the imported game it is
+// replaced and counted as updated, otherwise it is counted as unchanged.
+func (r *Registry) Import(system string, games []gamelist.Game) (added, updated, unchanged int) {
 	for _, g := range games {
-		if r.contains(system, g.Path) {
-			unchanged++
+		if i := r.indexOf(system, g.Path); i != -1 {
+			if r.Entries[i].Game == g {
+				unchanged++
+			} else {
+				r.Entries[i].Game = g
+				updated++
+			}
 			continue
 		}
 		r.Entries = append(r.Entries, Entry{System: system, Game: g})
 		added++
 	}
-	return added, unchanged
+	return added, updated, unchanged
 }
 
-func (r *Registry) contains(system, path string) bool {
-	for _, e := range r.Entries {
+func (r *Registry) indexOf(system, path string) int {
+	for i, e := range r.Entries {
 		if e.System == system && e.Game.Path == path {
-			return true
+			return i
 		}
 	}
-	return false
+	return -1
 }
 
 // ImportFromRomsFolder scans the immediate subdirectories of romsFolder (each
 // one a Batocera system) for a gamelist.xml file, parses it, and imports its
 // entries into reg. Subdirectories without a gamelist.xml are skipped
 // silently, since not every system has been scraped yet.
-func ImportFromRomsFolder(reg *Registry, romsFolder string) (added, unchanged int, err error) {
+func ImportFromRomsFolder(reg *Registry, romsFolder string) (added, updated, unchanged int, err error) {
 	dirEntries, err := os.ReadDir(romsFolder)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 
 	for _, dirEntry := range dirEntries {
@@ -102,13 +107,14 @@ func ImportFromRomsFolder(reg *Registry, romsFolder string) (added, unchanged in
 
 		games, parseErr := gamelist.ParseFile(gamelistPath)
 		if parseErr != nil {
-			return added, unchanged, parseErr
+			return added, updated, unchanged, parseErr
 		}
 
-		a, u := reg.Import(system, games)
+		a, u, unc := reg.Import(system, games)
 		added += a
-		unchanged += u
+		updated += u
+		unchanged += unc
 	}
 
-	return added, unchanged, nil
+	return added, updated, unchanged, nil
 }

@@ -18,6 +18,6 @@
 **Code:** `gamelist.Game`, `gamelist.Parse` in `internal/gamelist/gamelist.go`
 
 ## Import
-**Definition:** Action de peupler le registry à partir des `gamelist.xml` déjà présents dans les dossiers de ROMs, sans dupliquer les entrées déjà connues (clé de dédoublonnage : système + chemin du ROM).
+**Definition:** Action de peupler le registry à partir des `gamelist.xml` déjà présents dans les dossiers de ROMs, sans dupliquer les entrées déjà connues (clé de dédoublonnage : système + chemin du ROM), en détectant aussi les métadonnées qui ont changé depuis le dernier import.
 **Code:** `(*Registry).Import`, `registry.ImportFromRomsFolder` in `internal/registry/registry.go`
-**Do not confuse with:** la mise à jour incrémentale (item de backlog 002, commande `update`), qui réutilisera ce même mécanisme pour détecter les changements après un nouveau scraping.
+**Do not confuse with:** la commande `update` (`internal/cli/update.go`), qui est la commande CLI exposant ce mécanisme d'import à l'utilisateur.

@@ -5,7 +5,7 @@
 - [`modules/cli.md`](.vibe/modules/cli.md) — point d'entrée et interface en ligne de commande
 - [`modules/config.md`](.vibe/modules/config.md) — persistance du registry et des dossiers de ROMs configurés
 - [`modules/gamelist.md`](.vibe/modules/gamelist.md) — parsing des `gamelist.xml` EmulationStation/Batocera
-- [`modules/registry.md`](.vibe/modules/registry.md) — index centralisé des jeux, import sans doublon depuis les dossiers de ROMs
+- [`modules/registry.md`](.vibe/modules/registry.md) — index centralisé des jeux, import et détection de mises à jour depuis les dossiers de ROMs
 
 ## Observed patterns
 
@@ -15,6 +15,7 @@
 - Les fonctions `Load`/chargement retournent une valeur zéro (pas d'erreur) quand le fichier n'existe pas encore ; seule une erreur de parsing ou de lecture est remontée en erreur.
 - La résolution du chemin de configuration est surchargeable via une variable d'environnement (`BATOCERA_SCRAP_MANAGER_CONFIG`), ce qui permet d'isoler les tests et les smoke tests du vrai `$HOME`.
 - Les commandes CLI multi-mots (ex. `config`) sont dispatchées depuis un fichier dédié dans `internal/cli/` (`config.go`) plutôt que d'alourdir `cli.go`.
+- Les commandes CLI mono-mot sans sous-commande (ex. `update`) sont aussi dispatchées depuis un fichier dédié (`update.go`), avec une seule fonction `run<Commande>(out io.Writer) int` (sans le paramètre `args` quand il n'y a pas de sous-commande à parser).
 
 ## Other context files
 - [`models.md`](.vibe/models.md) — data models

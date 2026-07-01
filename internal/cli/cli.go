@@ -17,6 +17,7 @@ Commands:
   --version   Print the version and exit
   --help      Print this help message and exit
   config      Configure the registry path and ROMs folders
+  update      Update the registry from the configured ROMs folders
 `
 
 // Execute runs the CLI with the given arguments and writes output to out.
@@ -36,6 +37,8 @@ func Execute(args []string, out io.Writer) int {
 		return 0
 	case "config":
 		return runConfig(args[1:], out)
+	case "update":
+		return runUpdate(out)
 	default:
 		fmt.Fprintf(out, "unknown command: %s\n", args[0])
 		return 1

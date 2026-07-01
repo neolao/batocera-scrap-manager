@@ -1,0 +1,158 @@
+package cli
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func writeUpdateFixtureRomsFolder(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+
+	megadrive := filepath.Join(root, "megadrive")
+	if err := os.MkdirAll(megadrive, 0o755); err != nil {
+		t.Fatalf("mkdir megadrive: %v", err)
+	}
+	xml := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Sonic.zip</path><name>Sonic</name></game>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(megadrive, "gamelist.xml"), []byte(xml), 0o644); err != nil {
+		t.Fatalf("write megadrive gamelist: %v", err)
+	}
+
+	return root
+}
+
+func setUpdateConfig(t *testing.T, romsFolder string) string {
+	t.Helper()
+	withTempConfig(t)
+	registryPath := filepath.Join(t.TempDir(), "registry.json")
+
+	var out bytes.Buffer
+	Execute([]string{"config", "set-registry", registryPath}, &out)
+	if romsFolder != "" {
+		Execute([]string{"config", "add-roms-folder", romsFolder}, &out)
+	}
+	return registryPath
+}
+
+func TestExecute_Update_NominalFixture_AddsEntriesAndPrintsSummary(t *testing.T) {
+	romsFolder := writeUpdateFixtureRomsFolder(t)
+	registryPath := setUpdateConfig(t, romsFolder)
+	var out bytes.Buffer
+
+	code := Execute([]string{"update"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "2 added") {
+		t.Errorf("output = %q, want it to mention 2 added", out.String())
+	}
+	if !strings.Contains(out.String(), "0 updated") {
+		t.Errorf("output = %q, want it to mention 0 updated", out.String())
+	}
+	if !strings.Contains(out.String(), "0 unchanged") {
+		t.Errorf("output = %q, want it to mention 0 unchanged", out.String())
+	}
+	if _, err := os.Stat(registryPath); err != nil {
+		t.Errorf("registry file not created: %v", err)
+	}
+}
+
+func TestExecute_Update_RerunWithoutChanges_ReportsUnchanged(t *testing.T) {
+	romsFolder := writeUpdateFixtureRomsFolder(t)
+	setUpdateConfig(t, romsFolder)
+	var firstOut bytes.Buffer
+	Execute([]string{"update"}, &firstOut)
+
+	var out bytes.Buffer
+	code := Execute([]string{"update"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "0 added") {
+		t.Errorf("output = %q, want it to mention 0 added", out.String())
+	}
+	if !strings.Contains(out.String(), "2 unchanged") {
+		t.Errorf("output = %q, want it to mention 2 unchanged", out.String())
+	}
+}
+
+func TestExecute_Update_ChangedGamelistMetadata_ReportsUpdated(t *testing.T) {
+	romsFolder := writeUpdateFixtureRomsFolder(t)
+	setUpdateConfig(t, romsFolder)
+	var firstOut bytes.Buffer
+	Execute([]string{"update"}, &firstOut)
+
+	changedXML := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Sonic.zip</path><name>Sonic</name><desc>Updated description</desc></game>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"), []byte(changedXML), 0o644); err != nil {
+		t.Fatalf("rewrite megadrive gamelist: %v", err)
+	}
+
+	var out bytes.Buffer
+	code := Execute([]string{"update"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "1 updated") {
+		t.Errorf("output = %q, want it to mention 1 updated", out.String())
+	}
+	if !strings.Contains(out.String(), "1 unchanged") {
+		t.Errorf("output = %q, want it to mention 1 unchanged", out.String())
+	}
+}
+
+func TestExecute_Update_NoRomsFoldersConfigured_PrintsZeroSummary(t *testing.T) {
+	setUpdateConfig(t, "")
+	var out bytes.Buffer
+
+	code := Execute([]string{"update"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "0 added") || !strings.Contains(out.String(), "0 updated") || !strings.Contains(out.String(), "0 unchanged") {
+		t.Errorf("output = %q, want a zero summary", out.String())
+	}
+}
+
+func TestExecute_Update_RegistryNotConfigured_ReturnsErrorCode(t *testing.T) {
+	withTempConfig(t)
+	var out bytes.Buffer
+
+	code := Execute([]string{"update"}, &out)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), "registry") {
+		t.Errorf("output = %q, want it to mention the registry is not configured", out.String())
+	}
+}
+
+func TestExecute_Update_RomsFolderMissingOnDisk_ReturnsErrorCode(t *testing.T) {
+	missingFolder := filepath.Join(t.TempDir(), "does-not-exist")
+	setUpdateConfig(t, missingFolder)
+	var out bytes.Buffer
+
+	code := Execute([]string{"update"}, &out)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), "error") {
+		t.Errorf("output = %q, want it to mention an error", out.String())
+	}
+}

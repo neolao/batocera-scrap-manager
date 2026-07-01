@@ -55,10 +55,13 @@ func TestImport_NewGames_AddsAllAndReturnsCount(t *testing.T) {
 	reg := &Registry{}
 	games := []gamelist.Game{{Path: "./a.zip", Name: "A"}, {Path: "./b.zip", Name: "B"}}
 
-	added, unchanged := reg.Import("megadrive", games)
+	added, updated, unchanged := reg.Import("megadrive", games)
 
 	if added != 2 {
 		t.Errorf("added = %d, want 2", added)
+	}
+	if updated != 0 {
+		t.Errorf("updated = %d, want 0", updated)
 	}
 	if unchanged != 0 {
 		t.Errorf("unchanged = %d, want 0", unchanged)
@@ -73,10 +76,13 @@ func TestImport_SameGameReimported_NotDuplicated(t *testing.T) {
 	games := []gamelist.Game{{Path: "./a.zip", Name: "A"}}
 	reg.Import("megadrive", games)
 
-	added, unchanged := reg.Import("megadrive", games)
+	added, updated, unchanged := reg.Import("megadrive", games)
 
 	if added != 0 {
 		t.Errorf("added = %d, want 0", added)
+	}
+	if updated != 0 {
+		t.Errorf("updated = %d, want 0", updated)
 	}
 	if unchanged != 1 {
 		t.Errorf("unchanged = %d, want 1", unchanged)
@@ -91,16 +97,42 @@ func TestImport_SamePathDifferentSystem_TreatedAsDistinctEntries(t *testing.T) {
 	games := []gamelist.Game{{Path: "./a.zip", Name: "A"}}
 	reg.Import("megadrive", games)
 
-	added, unchanged := reg.Import("mastersystem", games)
+	added, updated, unchanged := reg.Import("mastersystem", games)
 
 	if added != 1 {
 		t.Errorf("added = %d, want 1 (same path but different system)", added)
+	}
+	if updated != 0 {
+		t.Errorf("updated = %d, want 0", updated)
 	}
 	if unchanged != 0 {
 		t.Errorf("unchanged = %d, want 0", unchanged)
 	}
 	if len(reg.Entries) != 2 {
 		t.Errorf("Entries = %v, want 2 distinct entries", reg.Entries)
+	}
+}
+
+func TestImport_ExistingGameWithChangedMetadata_UpdatesEntryAndReturnsCount(t *testing.T) {
+	reg := &Registry{}
+	reg.Import("megadrive", []gamelist.Game{{Path: "./a.zip", Name: "A", Desc: "old desc"}})
+
+	added, updated, unchanged := reg.Import("megadrive", []gamelist.Game{{Path: "./a.zip", Name: "A", Desc: "new desc"}})
+
+	if added != 0 {
+		t.Errorf("added = %d, want 0", added)
+	}
+	if updated != 1 {
+		t.Errorf("updated = %d, want 1", updated)
+	}
+	if unchanged != 0 {
+		t.Errorf("unchanged = %d, want 0", unchanged)
+	}
+	if len(reg.Entries) != 1 {
+		t.Fatalf("Entries = %v, want still 1 (no duplicate)", reg.Entries)
+	}
+	if reg.Entries[0].Game.Desc != "new desc" {
+		t.Errorf("Entries[0].Game.Desc = %q, want %q", reg.Entries[0].Game.Desc, "new desc")
 	}
 }
 
@@ -146,13 +178,16 @@ func TestImportFromRomsFolder_NominalFixture_ImportsGamesGroupedBySystem(t *test
 	romsFolder := writeFixtureRomsFolder(t)
 	reg := &Registry{}
 
-	added, unchanged, err := ImportFromRomsFolder(reg, romsFolder)
+	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder)
 
 	if err != nil {
 		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)
 	}
 	if added != 3 {
 		t.Errorf("added = %d, want 3", added)
+	}
+	if updated != 0 {
+		t.Errorf("updated = %d, want 0", updated)
 	}
 	if unchanged != 0 {
 		t.Errorf("unchanged = %d, want 0", unchanged)
@@ -181,13 +216,16 @@ func TestImportFromRomsFolder_ReimportSameFolder_NoDuplicates(t *testing.T) {
 	reg := &Registry{}
 	ImportFromRomsFolder(reg, romsFolder)
 
-	added, unchanged, err := ImportFromRomsFolder(reg, romsFolder)
+	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder)
 
 	if err != nil {
 		t.Fatalf("second ImportFromRomsFolder() error = %v, want nil", err)
 	}
 	if added != 0 {
 		t.Errorf("added = %d, want 0 on reimport", added)
+	}
+	if updated != 0 {
+		t.Errorf("updated = %d, want 0 on reimport", updated)
 	}
 	if unchanged != 3 {
 		t.Errorf("unchanged = %d, want 3 on reimport", unchanged)
@@ -197,10 +235,40 @@ func TestImportFromRomsFolder_ReimportSameFolder_NoDuplicates(t *testing.T) {
 	}
 }
 
+func TestImportFromRomsFolder_ChangedGamelistMetadata_UpdatesEntry(t *testing.T) {
+	romsFolder := writeFixtureRomsFolder(t)
+	reg := &Registry{}
+	ImportFromRomsFolder(reg, romsFolder)
+
+	changedXML := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Sonic.zip</path><name>Sonic</name><desc>Updated description</desc></game>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"), []byte(changedXML), 0o644); err != nil {
+		t.Fatalf("rewrite megadrive gamelist: %v", err)
+	}
+
+	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder)
+
+	if err != nil {
+		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)
+	}
+	if added != 0 {
+		t.Errorf("added = %d, want 0", added)
+	}
+	if updated != 1 {
+		t.Errorf("updated = %d, want 1", updated)
+	}
+	if unchanged != 2 {
+		t.Errorf("unchanged = %d, want 2", unchanged)
+	}
+}
+
 func TestImportFromRomsFolder_RomsFolderDoesNotExist_ReturnsError(t *testing.T) {
 	reg := &Registry{}
 
-	_, _, err := ImportFromRomsFolder(reg, filepath.Join(t.TempDir(), "does-not-exist"))
+	_, _, _, err := ImportFromRomsFolder(reg, filepath.Join(t.TempDir(), "does-not-exist"))
 
 	if err == nil {
 		t.Fatal("ImportFromRomsFolder() error = nil, want error for missing ROMs folder")

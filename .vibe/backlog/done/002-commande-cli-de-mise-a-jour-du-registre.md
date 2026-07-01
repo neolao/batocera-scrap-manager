@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 depends_on: [001]
 ---
 # Commande CLI de Mise à Jour du Registre

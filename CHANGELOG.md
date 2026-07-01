@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-01
+
 ### Added
 
 - Users can configure the registry folder and one or more Batocera ROMs folders to watch, via `batocera-scrap-manager config set-registry`, `config add-roms-folder`, and `config list`.
+
+[Unreleased]: https://github.com/neolao/batocera-scrap-manager/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/neolao/batocera-scrap-manager/releases/tag/v0.1.0

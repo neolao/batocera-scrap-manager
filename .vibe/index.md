@@ -5,7 +5,7 @@
 - [`modules/cli.md`](.vibe/modules/cli.md) — entry point and command-line interface
 - [`modules/config.md`](.vibe/modules/config.md) — persistence of the configured registry folder and ROMs folders
 - [`modules/gamelist.md`](.vibe/modules/gamelist.md) — parsing of EmulationStation/Batocera `gamelist.xml` files
-- [`modules/registry.md`](.vibe/modules/registry.md) — centralized game index and media, import, and update detection from ROMs folders
+- [`modules/registry.md`](.vibe/modules/registry.md) — centralized game index and media (one JSON file per game), import, and update detection from ROMs folders
 
 ## Observed patterns
 

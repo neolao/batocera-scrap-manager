@@ -35,5 +35,5 @@ Defined in: `internal/registry/registry.go`
 ## Registry
 | Field | Type | Notes |
 |---|---|---|
-| Entries | []Entry | centralized index, persisted as JSON at `<registryFolder>/registry.json`; media files referenced by each `Game` are copied under `<registryFolder>/<system>/...`, mirroring the Batocera ROMs layout |
+| Entries | []Entry | centralized index, reconstructed by scanning `<registryFolder>/<system>/*.json` (one file per game, no single index file); media files referenced by each `Game` are copied under `<registryFolder>/<system>/...`, mirroring the Batocera ROMs layout |
 Defined in: `internal/registry/registry.go`

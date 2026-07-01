@@ -28,7 +28,7 @@ The heart of the tool: a centralized index of all already-known games, along wit
 
 ## Registry layout
 
-The registry mirrors Batocera's own folder layout: each system gets its own subfolder at the top level of the registry, containing the same media subfolders (images, videos, etc.) found on the original ROMs folder. The game metadata itself is kept in a single index file at the root of the registry, separate from the media.
+The registry mirrors Batocera's own folder layout: each system gets its own subfolder at the top level of the registry, containing the same media subfolders (images, videos, etc.) found on the original ROMs folder. Each game's metadata is kept in its own file inside its system's subfolder, next to its media, rather than in one large file for the whole registry — so a single corrupted or damaged game entry cannot affect the rest of the collection.
 
 ## Principles followed
 

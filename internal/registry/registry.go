@@ -9,31 +9,28 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/neolao/batocera-scrap-manager/internal/gamelist"
 )
 
-// indexFileName is the name of the JSON file holding the registry index,
-// stored at the root of the registry folder alongside the per-system media
-// folders mirroring the Batocera ROMs arborescence.
-const indexFileName = "registry.json"
-
 // Entry associates a parsed game with the Batocera system it belongs to.
 type Entry struct {
-	System string        `json:"system"`
-	Game   gamelist.Game `json:"game"`
+	System string
+	Game   gamelist.Game
 }
 
 // Registry is the centralized index of games already known.
 type Registry struct {
-	Entries []Entry `json:"entries"`
+	Entries []Entry
 }
 
-// Load reads the registry index from the registry folder at path. If the
-// folder or its index file does not exist, it returns an empty Registry
-// with no error.
+// Load reconstructs the registry from the registry folder at path, by
+// scanning its per-system subfolders for the game JSON files written there
+// by Save. If the folder does not exist, it returns an empty Registry with
+// no error.
 func Load(path string) (*Registry, error) {
-	data, err := os.ReadFile(filepath.Join(path, indexFileName))
+	systemDirs, err := os.ReadDir(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return &Registry{}, nil
 	}
@@ -41,25 +38,67 @@ func Load(path string) (*Registry, error) {
 		return nil, err
 	}
 
-	var reg Registry
-	if err := json.Unmarshal(data, &reg); err != nil {
-		return nil, err
+	reg := &Registry{}
+	for _, systemDir := range systemDirs {
+		if !systemDir.IsDir() {
+			continue
+		}
+		system := systemDir.Name()
+
+		gameFiles, err := os.ReadDir(filepath.Join(path, system))
+		if err != nil {
+			return nil, err
+		}
+		for _, gameFile := range gameFiles {
+			if gameFile.IsDir() || filepath.Ext(gameFile.Name()) != ".json" {
+				continue
+			}
+
+			data, err := os.ReadFile(filepath.Join(path, system, gameFile.Name()))
+			if err != nil {
+				return nil, err
+			}
+			var g gamelist.Game
+			if err := json.Unmarshal(data, &g); err != nil {
+				return nil, err
+			}
+			reg.Entries = append(reg.Entries, Entry{System: system, Game: g})
+		}
 	}
-	return &reg, nil
+	return reg, nil
 }
 
-// Save writes reg as the registry index inside the registry folder at path,
-// creating the folder as needed.
+// Save writes reg to the registry folder at path, as one JSON file per game
+// inside its system's subfolder (named after the ROM's base name), creating
+// folders as needed.
 func Save(path string, reg *Registry) error {
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return err
 	}
 
-	data, err := json.MarshalIndent(reg, "", "  ")
-	if err != nil {
-		return err
+	for _, e := range reg.Entries {
+		systemDir := filepath.Join(path, e.System)
+		if err := os.MkdirAll(systemDir, 0o755); err != nil {
+			return err
+		}
+
+		data, err := json.MarshalIndent(e.Game, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(systemDir, gameFileName(e.Game)), data, 0o644); err != nil {
+			return err
+		}
 	}
-	return os.WriteFile(filepath.Join(path, indexFileName), data, 0o644)
+	return nil
+}
+
+// gameFileName derives the name of the JSON file storing g's metadata, from
+// the base name of its ROM path.
+func gameFileName(g gamelist.Game) string {
+	base := filepath.Base(g.Path)
+	ext := filepath.Ext(base)
+	return strings.TrimSuffix(base, ext) + ".json"
 }
 
 type importStatus int

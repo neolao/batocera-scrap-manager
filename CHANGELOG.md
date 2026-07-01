@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - The registry now also stores each game's cover art, video, marquee, and thumbnail, copied into a per-system folder mirroring Batocera's own ROMs layout, instead of keeping only text metadata.
+- Each game's information is now stored in its own file inside its system folder, instead of one large file for the whole registry, so a corrupted entry no longer affects the rest of the registry.
 
 ## [0.1.0] - 2026-07-01
 

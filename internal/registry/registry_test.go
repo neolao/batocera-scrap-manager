@@ -8,8 +8,8 @@ import (
 	"github.com/neolao/batocera-scrap-manager/internal/gamelist"
 )
 
-func TestLoad_FileDoesNotExist_ReturnsEmptyRegistry(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "registry.json")
+func TestLoad_FolderDoesNotExist_ReturnsEmptyRegistry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry")
 
 	reg, err := Load(path)
 
@@ -21,9 +21,13 @@ func TestLoad_FileDoesNotExist_ReturnsEmptyRegistry(t *testing.T) {
 	}
 }
 
-func TestLoad_MalformedJSON_ReturnsError(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "registry.json")
-	if err := os.WriteFile(path, []byte("{not valid json"), 0o644); err != nil {
+func TestLoad_MalformedGameJSON_ReturnsError(t *testing.T) {
+	path := t.TempDir()
+	megadrive := filepath.Join(path, "megadrive")
+	if err := os.MkdirAll(megadrive, 0o755); err != nil {
+		t.Fatalf("mkdir megadrive: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(megadrive, "Sonic.json"), []byte("{not valid json"), 0o644); err != nil {
 		t.Fatalf("failed to write fixture: %v", err)
 	}
 
@@ -35,7 +39,7 @@ func TestLoad_MalformedJSON_ReturnsError(t *testing.T) {
 }
 
 func TestSave_WritesRegistryThatCanBeReloaded(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "nested", "registry.json")
+	path := filepath.Join(t.TempDir(), "nested", "registry")
 	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}}}}
 
 	if err := Save(path, reg); err != nil {
@@ -48,6 +52,33 @@ func TestSave_WritesRegistryThatCanBeReloaded(t *testing.T) {
 	}
 	if len(got.Entries) != 1 || got.Entries[0].Game.Name != "Sonic" {
 		t.Errorf("Entries = %v, want 1 entry named Sonic", got.Entries)
+	}
+}
+
+func TestSave_WritesOneJSONFilePerGameInsideSystemFolder(t *testing.T) {
+	path := t.TempDir()
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}},
+		{System: "megadrive", Game: gamelist.Game{Path: "./Golden Axe.zip", Name: "Golden Axe"}},
+		{System: "mastersystem", Game: gamelist.Game{Path: "./Alex Kidd.zip", Name: "Alex Kidd"}},
+	}}
+
+	if err := Save(path, reg); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+
+	for _, want := range []string{
+		filepath.Join(path, "megadrive", "Sonic.json"),
+		filepath.Join(path, "megadrive", "Golden Axe.json"),
+		filepath.Join(path, "mastersystem", "Alex Kidd.json"),
+	} {
+		if _, err := os.Stat(want); err != nil {
+			t.Errorf("expected game file %s to exist: %v", want, err)
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(path, "registry.json")); err == nil {
+		t.Error("a single registry.json should not be created, want one JSON file per game instead")
 	}
 }
 

@@ -241,6 +241,10 @@ func ImportFromRomsFolder(reg *Registry, romsFolder, registryFolder string, onPr
 		}
 
 		for i, g := range games {
+			if !hasScrapedData(g) {
+				continue
+			}
+
 			if onProgress != nil {
 				onProgress(ProgressEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: g.Name})
 			}
@@ -263,6 +267,13 @@ func ImportFromRomsFolder(reg *Registry, romsFolder, registryFolder string, onPr
 	}
 
 	return added, updated, unchanged, nil
+}
+
+// hasScrapedData reports whether g carries any information worth keeping in
+// the registry (a description or a jaquette). A game with neither is
+// considered unscraped and is not added to the registry.
+func hasScrapedData(g gamelist.Game) bool {
+	return g.Desc != "" || g.Image != ""
 }
 
 // copyGameMedia copies every media file referenced by g (cover art, video,

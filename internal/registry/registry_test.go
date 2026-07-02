@@ -198,8 +198,8 @@ func writeFixtureRomsFolder(t *testing.T) string {
 	}
 	megadriveXML := `<?xml version="1.0"?>
 <gameList>
-  <game><path>./Sonic.zip</path><name>Sonic</name></game>
-  <game><path>./Golden Axe.zip</path><name>Golden Axe</name></game>
+  <game><path>./Sonic.zip</path><name>Sonic</name><desc>A blue hedgehog runs fast.</desc></game>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name><desc>A classic beat 'em up.</desc></game>
 </gameList>`
 	if err := os.WriteFile(filepath.Join(megadrive, "gamelist.xml"), []byte(megadriveXML), 0o644); err != nil {
 		t.Fatalf("write megadrive gamelist: %v", err)
@@ -211,7 +211,7 @@ func writeFixtureRomsFolder(t *testing.T) string {
 	}
 	mastersystemXML := `<?xml version="1.0"?>
 <gameList>
-  <game><path>./Alex Kidd.zip</path><name>Alex Kidd</name></game>
+  <game><path>./Alex Kidd.zip</path><name>Alex Kidd</name><desc>A kid with miracle powers.</desc></game>
 </gameList>`
 	if err := os.WriteFile(filepath.Join(mastersystem, "gamelist.xml"), []byte(mastersystemXML), 0o644); err != nil {
 		t.Fatalf("write mastersystem gamelist: %v", err)
@@ -298,7 +298,7 @@ func TestImportFromRomsFolder_ChangedGamelistMetadata_UpdatesEntry(t *testing.T)
 	changedXML := `<?xml version="1.0"?>
 <gameList>
   <game><path>./Sonic.zip</path><name>Sonic</name><desc>Updated description</desc></game>
-  <game><path>./Golden Axe.zip</path><name>Golden Axe</name></game>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name><desc>A classic beat 'em up.</desc></game>
 </gameList>`
 	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"), []byte(changedXML), 0o644); err != nil {
 		t.Fatalf("rewrite megadrive gamelist: %v", err)
@@ -379,6 +379,133 @@ func TestImportFromRomsFolder_RomsFolderDoesNotExist_ReturnsError(t *testing.T) 
 
 	if err == nil {
 		t.Fatal("ImportFromRomsFolder() error = nil, want error for missing ROMs folder")
+	}
+}
+
+func writeMixedDataRomsFolder(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+
+	megadrive := filepath.Join(root, "megadrive")
+	images := filepath.Join(megadrive, "images")
+	if err := os.MkdirAll(images, 0o755); err != nil {
+		t.Fatalf("mkdir images: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(images, "GoldenAxe.png"), []byte("fake-cover-art"), 0o644); err != nil {
+		t.Fatalf("write cover art: %v", err)
+	}
+
+	xml := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Sonic.zip</path><name>Sonic</name><desc>A blue hedgehog runs fast.</desc></game>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name><image>./images/GoldenAxe.png</image></game>
+  <game><path>./Unknown.zip</path><name>Unknown</name></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(megadrive, "gamelist.xml"), []byte(xml), 0o644); err != nil {
+		t.Fatalf("write megadrive gamelist: %v", err)
+	}
+
+	return root
+}
+
+func TestImportFromRomsFolder_GameWithNoDescriptionNorImage_NotAddedToRegistry(t *testing.T) {
+	romsFolder := writeMixedDataRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder, registryFolder, nil)
+
+	if err != nil {
+		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)
+	}
+	if added != 2 {
+		t.Errorf("added = %d, want 2 (the game with neither description nor image is skipped)", added)
+	}
+	if updated != 0 || unchanged != 0 {
+		t.Errorf("updated=%d unchanged=%d, want 0/0", updated, unchanged)
+	}
+	if len(reg.Entries) != 2 {
+		t.Fatalf("Entries = %v, want 2 (Unknown should not be in the registry)", reg.Entries)
+	}
+	for _, e := range reg.Entries {
+		if e.Game.Name == "Unknown" {
+			t.Errorf("Unknown game was added to the registry, want it skipped for having no description and no image")
+		}
+	}
+}
+
+func TestImportFromRomsFolder_GameWithOnlyImageOrOnlyDescription_StillAdded(t *testing.T) {
+	romsFolder := writeMixedDataRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	ImportFromRomsFolder(reg, romsFolder, registryFolder, nil)
+
+	var sonic, goldenAxe *Entry
+	for i := range reg.Entries {
+		e := &reg.Entries[i]
+		if e.Game.Name == "Sonic" {
+			sonic = e
+		}
+		if e.Game.Name == "Golden Axe" {
+			goldenAxe = e
+		}
+	}
+	if sonic == nil {
+		t.Error("Sonic (description only) was not added to the registry")
+	}
+	if goldenAxe == nil {
+		t.Error("Golden Axe (image only) was not added to the registry")
+	}
+}
+
+func TestImportFromRomsFolder_GameWithNoDescriptionNorImage_ProducesNoProgressEventAndNoMediaFolder(t *testing.T) {
+	romsFolder := writeMixedDataRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	var events []ProgressEvent
+	_, _, _, err := ImportFromRomsFolder(reg, romsFolder, registryFolder, func(e ProgressEvent) {
+		events = append(events, e)
+	})
+
+	if err != nil {
+		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)
+	}
+	for _, e := range events {
+		if e.GameName == "Unknown" {
+			t.Errorf("got a progress event for the skipped Unknown game: %+v", e)
+		}
+	}
+}
+
+func TestImportFromRomsFolder_OnlyGamesWithoutData_ReportsZeroSummary(t *testing.T) {
+	root := t.TempDir()
+	megadrive := filepath.Join(root, "megadrive")
+	if err := os.MkdirAll(megadrive, 0o755); err != nil {
+		t.Fatalf("mkdir megadrive: %v", err)
+	}
+	xml := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Unknown1.zip</path><name>Unknown1</name></game>
+  <game><path>./Unknown2.zip</path><name>Unknown2</name></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(megadrive, "gamelist.xml"), []byte(xml), 0o644); err != nil {
+		t.Fatalf("write megadrive gamelist: %v", err)
+	}
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	added, updated, unchanged, err := ImportFromRomsFolder(reg, root, registryFolder, nil)
+
+	if err != nil {
+		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)
+	}
+	if added != 0 || updated != 0 || unchanged != 0 {
+		t.Errorf("added=%d updated=%d unchanged=%d, want 0/0/0", added, updated, unchanged)
+	}
+	if len(reg.Entries) != 0 {
+		t.Errorf("Entries = %v, want empty", reg.Entries)
 	}
 }
 

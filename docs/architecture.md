@@ -26,7 +26,7 @@ Turns the registry's content into a static HTML site, so it can be browsed in a 
 1. The user specifies, via the configuration, where the registry lives and which ROMs folders to watch.
 2. On every update, the tool scans the configured ROMs folders: each subfolder corresponds to a Batocera system (e.g. `megadrive`, `mastersystem`).
 3. For each system, the `gamelist.xml` file (if it exists) is read and its games are compared against the content already present in the registry, with progress (the system name, then a counter for each game) displayed to the user as it happens.
-4. An unknown game is added to the registry, and its media files are copied into the registry; an already-known game whose metadata changed is refreshed and its media re-copied; an already-known, unchanged game is left untouched, with no unnecessary copying.
+4. An unknown game is added to the registry, and its media files are copied into the registry; an already-known game whose metadata changed is refreshed and its media re-copied; an already-known, unchanged game is left untouched, with no unnecessary copying. A game with neither a description nor a jaquette locally — meaning it has not actually been scraped yet — is skipped rather than added, so the registry only holds games with useful information.
 5. The updated registry is saved, and a summary (games added, updated, unchanged) is displayed to the user.
 6. The consultation site is (re)generated from the up-to-date registry, so it always reflects the latest update.
 

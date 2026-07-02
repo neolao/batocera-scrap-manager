@@ -18,8 +18,8 @@ func writeUpdateFixtureRomsFolder(t *testing.T) string {
 	}
 	xml := `<?xml version="1.0"?>
 <gameList>
-  <game><path>./Sonic.zip</path><name>Sonic</name></game>
-  <game><path>./Golden Axe.zip</path><name>Golden Axe</name></game>
+  <game><path>./Sonic.zip</path><name>Sonic</name><desc>A blue hedgehog runs fast.</desc></game>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name><desc>A classic beat 'em up.</desc></game>
 </gameList>`
 	if err := os.WriteFile(filepath.Join(megadrive, "gamelist.xml"), []byte(xml), 0o644); err != nil {
 		t.Fatalf("write megadrive gamelist: %v", err)
@@ -65,6 +65,36 @@ func TestExecute_Update_NominalFixture_AddsEntriesAndPrintsSummary(t *testing.T)
 	}
 }
 
+func TestExecute_Update_GameWithNoDescriptionNorImage_NotCountedAsAdded(t *testing.T) {
+	romsFolder := writeUpdateFixtureRomsFolder(t)
+	xml := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Sonic.zip</path><name>Sonic</name><desc>A blue hedgehog runs fast.</desc></game>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name><desc>A classic beat 'em up.</desc></game>
+  <game><path>./Unknown.zip</path><name>Unknown</name></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"), []byte(xml), 0o644); err != nil {
+		t.Fatalf("rewrite megadrive gamelist: %v", err)
+	}
+	registryPath := setUpdateConfig(t, romsFolder)
+	var out bytes.Buffer
+
+	code := Execute([]string{"update"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "2 added") {
+		t.Errorf("output = %q, want it to mention 2 added (Unknown, with no description or image, should not be counted)", out.String())
+	}
+	if strings.Contains(out.String(), "Unknown") {
+		t.Errorf("output = %q, want no mention of the skipped Unknown game", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(registryPath, "megadrive", "Unknown.json")); err == nil {
+		t.Error("Unknown.json was written to the registry, want it skipped for having no description and no image")
+	}
+}
+
 func TestExecute_Update_RerunWithoutChanges_ReportsUnchanged(t *testing.T) {
 	romsFolder := writeUpdateFixtureRomsFolder(t)
 	setUpdateConfig(t, romsFolder)
@@ -94,7 +124,7 @@ func TestExecute_Update_ChangedGamelistMetadata_ReportsUpdated(t *testing.T) {
 	changedXML := `<?xml version="1.0"?>
 <gameList>
   <game><path>./Sonic.zip</path><name>Sonic</name><desc>Updated description</desc></game>
-  <game><path>./Golden Axe.zip</path><name>Golden Axe</name></game>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name><desc>A classic beat 'em up.</desc></game>
 </gameList>`
 	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"), []byte(changedXML), 0o644); err != nil {
 		t.Fatalf("rewrite megadrive gamelist: %v", err)

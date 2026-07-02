@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Closing a game's detail view on the consultation site no longer scrolls the page away from where you were.
 - The consultation site's navigation bar now scrolls horizontally instead of wrapping onto several lines when many systems are configured, so it no longer takes up excessive vertical space.
 - The consultation site no longer links to a jaquette or video file that is missing from the registry folder, showing the usual placeholder instead of a broken image or an empty video player.
+- The consultation site no longer feels slow to load on large registries: jaquettes now load only as they scroll into view, and gameplay videos are no longer fetched until their game's detail view is actually opened.
 
 ## [0.2.0] - 2026-07-02
 

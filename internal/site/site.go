@@ -427,7 +427,7 @@ html:has(.modal:target) { overflow: hidden; }
 {{range $i, $g := .Games}}
 <a class="card" href="#modal-{{$sys}}-{{$i}}">
 <div class="card__art{{if not $g.ImagePath}} card__art--empty{{end}}">
-{{if $g.ImagePath}}<img src="{{$g.ImagePath}}" alt="{{$g.Name}}">{{end}}
+{{if $g.ImagePath}}<img src="{{$g.ImagePath}}" alt="{{$g.Name}}" loading="lazy">{{end}}
 </div>
 <div class="card__body">
 <h3 class="card__name">{{$g.Name}}</h3>
@@ -442,7 +442,7 @@ html:has(.modal:target) { overflow: hidden; }
 <div class="modal__panel">
 <a class="modal__close" href="#_modal-close" aria-label="Close">&times;</a>
 {{if $g.ImagePath}}<div class="modal__art"><img src="{{$g.ImagePath}}" alt="{{$g.Name}}"></div>{{end}}
-{{if $g.VideoPath}}<video class="modal__video" src="{{$g.VideoPath}}" controls muted loop playsinline></video>{{end}}
+{{if $g.VideoPath}}<video class="modal__video" src="{{$g.VideoPath}}" controls muted loop playsinline preload="none"></video>{{end}}
 <h3 class="modal__name">{{$g.Name}}</h3>
 <p class="modal__desc">{{$g.Desc}}</p>
 <ul class="modal__meta">

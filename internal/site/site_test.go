@@ -301,6 +301,51 @@ func TestGenerate_Modal_ShowsVideoPlayer_WhenVideoAvailable(t *testing.T) {
 	}
 }
 
+func TestGenerate_Modal_VideoPlayer_DoesNotPreloadUntilOpened(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog", Video: "videos/sonic.mp4"}},
+		},
+	}
+	writeMediaFile(t, registryFolder, "megadrive", "videos/sonic.mp4")
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+	modal := extractByID(t, html, "modal-megadrive-0")
+
+	if !strings.Contains(modal, `preload="none"`) {
+		t.Errorf("video player does not disable preloading, so the browser fetches every game's video on page load, got: %s", modal)
+	}
+}
+
+func TestGenerate_CardImage_LoadsLazily(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{
+				Path:  "Sonic.zip",
+				Name:  "Sonic the Hedgehog",
+				Image: "images/sonic.png",
+			}},
+		},
+	}
+	writeMediaFile(t, registryFolder, "megadrive", "images/sonic.png")
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if !strings.Contains(html, `<img src="megadrive/images/sonic.png" alt="Sonic the Hedgehog" loading="lazy">`) {
+		t.Errorf("card image does not load lazily, so the browser fetches every game's jaquette on page load, got: %s", html)
+	}
+}
+
 func TestGenerate_Modal_OmitsVideoPlayer_WhenNoVideo(t *testing.T) {
 	registryFolder := t.TempDir()
 	reg := &registry.Registry{

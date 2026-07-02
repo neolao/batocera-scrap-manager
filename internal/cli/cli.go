@@ -40,7 +40,7 @@ func Execute(args []string, out io.Writer) int {
 	case "config":
 		return runConfig(args[1:], out)
 	case "update":
-		return runUpdate(out)
+		return runUpdate(args[1:], out)
 	case "scrape":
 		return runScrape(args[1:], out)
 	case "remove":

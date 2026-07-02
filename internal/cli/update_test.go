@@ -237,6 +237,107 @@ func TestExecute_Update_NoRomsFoldersConfigured_StillGeneratesSite(t *testing.T)
 	}
 }
 
+func TestExecute_Update_TargetedPath_AddsOnlyThatGame(t *testing.T) {
+	romsFolder := writeUpdateFixtureRomsFolder(t)
+	registryPath := setUpdateConfig(t, romsFolder)
+	gamePath := filepath.Join(romsFolder, "megadrive", "Sonic.zip")
+	var out bytes.Buffer
+
+	code := Execute([]string{"update", gamePath}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "1 added") || !strings.Contains(out.String(), "0 updated") || !strings.Contains(out.String(), "0 unchanged") {
+		t.Errorf("output = %q, want a summary mentioning 1 added, 0 updated, 0 unchanged", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(registryPath, "megadrive", "Sonic.json")); err != nil {
+		t.Errorf("Sonic.json not written to the registry: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(registryPath, "megadrive", "Golden Axe.json")); err == nil {
+		t.Error("Golden Axe.json was written to the registry, want it left untouched (not the targeted game)")
+	}
+}
+
+func TestExecute_Update_TargetedPath_AlreadyKnownUnchanged_PrintsUnchangedSummary(t *testing.T) {
+	romsFolder := writeUpdateFixtureRomsFolder(t)
+	setUpdateConfig(t, romsFolder)
+	var firstOut bytes.Buffer
+	Execute([]string{"update"}, &firstOut)
+
+	gamePath := filepath.Join(romsFolder, "megadrive", "Sonic.zip")
+	var out bytes.Buffer
+
+	code := Execute([]string{"update", gamePath}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "0 added") || !strings.Contains(out.String(), "0 updated") || !strings.Contains(out.String(), "1 unchanged") {
+		t.Errorf("output = %q, want a summary mentioning 0 added, 0 updated, 1 unchanged", out.String())
+	}
+}
+
+func TestExecute_Update_TargetedPath_NoScrapedData_NotAddedNoError(t *testing.T) {
+	romsFolder := writeUpdateFixtureRomsFolder(t)
+	xml := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Sonic.zip</path><name>Sonic</name><desc>A blue hedgehog runs fast.</desc></game>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name><desc>A classic beat 'em up.</desc></game>
+  <game><path>./Unknown.zip</path><name>Unknown</name></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"), []byte(xml), 0o644); err != nil {
+		t.Fatalf("rewrite megadrive gamelist: %v", err)
+	}
+	registryPath := setUpdateConfig(t, romsFolder)
+	gamePath := filepath.Join(romsFolder, "megadrive", "Unknown.zip")
+	var out bytes.Buffer
+
+	code := Execute([]string{"update", gamePath}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "0 added") || !strings.Contains(out.String(), "0 updated") || !strings.Contains(out.String(), "0 unchanged") {
+		t.Errorf("output = %q, want a zero summary (no scraped data, not an error)", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(registryPath, "megadrive", "Unknown.json")); err == nil {
+		t.Error("Unknown.json was written to the registry, want it skipped for having no description and no image")
+	}
+}
+
+func TestExecute_Update_TargetedPath_OutsideConfiguredRomsFolders_ReturnsErrorCode(t *testing.T) {
+	romsFolder := writeUpdateFixtureRomsFolder(t)
+	setUpdateConfig(t, romsFolder)
+	outsidePath := filepath.Join(t.TempDir(), "megadrive", "Sonic.zip")
+	var out bytes.Buffer
+
+	code := Execute([]string{"update", outsidePath}, &out)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), "error") {
+		t.Errorf("output = %q, want it to mention an error", out.String())
+	}
+}
+
+func TestExecute_Update_TargetedPath_NotInLocalGamelist_ReturnsErrorCode(t *testing.T) {
+	romsFolder := writeUpdateFixtureRomsFolder(t)
+	setUpdateConfig(t, romsFolder)
+	gamePath := filepath.Join(romsFolder, "megadrive", "Ghost.zip")
+	var out bytes.Buffer
+
+	code := Execute([]string{"update", gamePath}, &out)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), "error") {
+		t.Errorf("output = %q, want it to mention an error", out.String())
+	}
+}
+
 func TestExecute_Update_RegistryNotConfigured_ReturnsErrorCode(t *testing.T) {
 	withTempConfig(t)
 	var out bytes.Buffer

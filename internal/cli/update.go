@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -9,7 +10,7 @@ import (
 	"github.com/neolao/batocera-scrap-manager/internal/site"
 )
 
-func runUpdate(out io.Writer) int {
+func runUpdate(args []string, out io.Writer) int {
 	configPath, err := config.DefaultPath()
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
@@ -32,6 +33,10 @@ func runUpdate(out io.Writer) int {
 		return 1
 	}
 
+	if len(args) > 0 {
+		return runUpdateTargeted(reg, cfg, args[0], out)
+	}
+
 	onProgress := func(e registry.ProgressEvent) {
 		if e.GameIndex == 1 {
 			fmt.Fprintf(out, "%s: %d game(s)\n", e.System, e.GameCount)
@@ -49,6 +54,46 @@ func runUpdate(out io.Writer) int {
 		added += a
 		updated += u
 		unchanged += unc
+	}
+
+	if err := registry.Save(cfg.RegistryFolder, reg); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 1
+	}
+
+	if err := site.Generate(reg, cfg.RegistryFolder); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 1
+	}
+
+	fmt.Fprintf(out, "%d added, %d updated, %d unchanged\n", added, updated, unchanged)
+	return 0
+}
+
+// runUpdateTargeted imports a single game, identified by its real path on
+// disk, instead of every game in every configured ROMs folder. It reuses
+// resolveGamePath (see scrape.go), the same path-resolution convention
+// established for scrape's targeted mode — see decisions/013.
+func runUpdateTargeted(reg *registry.Registry, cfg config.Config, path string, out io.Writer) int {
+	romsFolder, system, romFilename, err := resolveGamePath(cfg, path)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 1
+	}
+
+	onProgress := func(e registry.ProgressEvent) {
+		fmt.Fprintf(out, "%s: %d game(s)\n", e.System, e.GameCount)
+		fmt.Fprintf(out, "  [%d/%d] %s\n", e.GameIndex, e.GameCount, e.GameName)
+	}
+
+	added, updated, unchanged, err := registry.ImportGame(reg, romsFolder, cfg.RegistryFolder, system, romFilename, onProgress)
+	if err != nil {
+		if errors.Is(err, registry.ErrGameNotFound) {
+			fmt.Fprintf(out, "error: no game found in the local gamelist for %q (system: %s)\n", path, system)
+			return 1
+		}
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 1
 	}
 
 	if err := registry.Save(cfg.RegistryFolder, reg); err != nil {

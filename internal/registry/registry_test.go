@@ -1082,3 +1082,168 @@ func TestCompleteGame_MediaCopyFails_ReturnsFailedButStillFillsGamelist(t *testi
 		}
 	}
 }
+
+func TestImportGame_NewGame_AddsEntryAndCopiesMedia(t *testing.T) {
+	romsFolder := writeFixtureRomsFolderWithMedia(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	added, updated, unchanged, err := ImportGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	if err != nil {
+		t.Fatalf("ImportGame() error = %v, want nil", err)
+	}
+	if added != 1 || updated != 0 || unchanged != 0 {
+		t.Fatalf("added=%d updated=%d unchanged=%d, want 1/0/0", added, updated, unchanged)
+	}
+	if len(reg.Entries) != 1 || reg.Entries[0].Game.Name != "Sonic" {
+		t.Errorf("Entries = %v, want 1 entry named Sonic", reg.Entries)
+	}
+
+	copiedImage := filepath.Join(registryFolder, "megadrive", "images", "Sonic.png")
+	if _, err := os.Stat(copiedImage); err != nil {
+		t.Errorf("cover art not copied to %s: %v", copiedImage, err)
+	}
+}
+
+func TestImportGame_OtherGameInSameSystem_NotImported(t *testing.T) {
+	romsFolder := writeFixtureRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	_, _, _, err := ImportGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	if err != nil {
+		t.Fatalf("ImportGame() error = %v, want nil", err)
+	}
+	for _, e := range reg.Entries {
+		if e.Game.Name == "Golden Axe" {
+			t.Errorf("Entries = %v, want Golden Axe left untouched (not the targeted game)", reg.Entries)
+		}
+	}
+}
+
+func TestImportGame_ReimportUnchangedGame_ReturnsUnchanged(t *testing.T) {
+	romsFolder := writeFixtureRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+	ImportGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	added, updated, unchanged, err := ImportGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	if err != nil {
+		t.Fatalf("ImportGame() error = %v, want nil", err)
+	}
+	if added != 0 || updated != 0 || unchanged != 1 {
+		t.Fatalf("added=%d updated=%d unchanged=%d, want 0/0/1", added, updated, unchanged)
+	}
+	if len(reg.Entries) != 1 {
+		t.Errorf("Entries = %v, want still 1 (no duplicate)", reg.Entries)
+	}
+}
+
+func TestImportGame_ChangedLocalMetadata_ReturnsUpdated(t *testing.T) {
+	romsFolder := writeFixtureRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+	ImportGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	changedXML := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Sonic.zip</path><name>Sonic</name><desc>Updated description</desc></game>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name><desc>A classic beat 'em up.</desc></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"), []byte(changedXML), 0o644); err != nil {
+		t.Fatalf("rewrite megadrive gamelist: %v", err)
+	}
+
+	added, updated, unchanged, err := ImportGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	if err != nil {
+		t.Fatalf("ImportGame() error = %v, want nil", err)
+	}
+	if added != 0 || updated != 1 || unchanged != 0 {
+		t.Fatalf("added=%d updated=%d unchanged=%d, want 0/1/0", added, updated, unchanged)
+	}
+}
+
+func TestImportGame_NoScrapedData_SkippedNotAddedNoError(t *testing.T) {
+	romsFolder := writeMixedDataRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	added, updated, unchanged, err := ImportGame(reg, romsFolder, registryFolder, "megadrive", "Unknown.zip", nil)
+
+	if err != nil {
+		t.Fatalf("ImportGame() error = %v, want nil", err)
+	}
+	if added != 0 || updated != 0 || unchanged != 0 {
+		t.Fatalf("added=%d updated=%d unchanged=%d, want 0/0/0 (no scraped data, skipped)", added, updated, unchanged)
+	}
+	if len(reg.Entries) != 0 {
+		t.Errorf("Entries = %v, want empty (Unknown has no scraped data)", reg.Entries)
+	}
+}
+
+func TestImportGame_RomNotInLocalGamelist_ReturnsErrGameNotFound(t *testing.T) {
+	romsFolder := writeFixtureRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	_, _, _, err := ImportGame(reg, romsFolder, registryFolder, "megadrive", "Ghost.zip", nil)
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Errorf("ImportGame() error = %v, want ErrGameNotFound (Ghost.zip is not in the local gamelist.xml)", err)
+	}
+}
+
+func TestImportGame_SystemHasNoLocalGamelist_ReturnsErrGameNotFound(t *testing.T) {
+	romsFolder := writeFixtureRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	_, _, _, err := ImportGame(reg, romsFolder, registryFolder, "nes", "Anything.zip", nil)
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Errorf("ImportGame() error = %v, want ErrGameNotFound (nes has no local gamelist.xml)", err)
+	}
+}
+
+func TestImportGame_ProgressCallback_FiresWithTheGamesLocalPosition(t *testing.T) {
+	romsFolder := writeFixtureRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	var events []ProgressEvent
+	_, _, _, err := ImportGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", func(e ProgressEvent) {
+		events = append(events, e)
+	})
+
+	if err != nil {
+		t.Fatalf("ImportGame() error = %v, want nil", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d progress events, want 1", len(events))
+	}
+	if events[0].System != "megadrive" || events[0].GameName != "Golden Axe" || events[0].GameIndex != 2 || events[0].GameCount != 2 {
+		t.Errorf("events[0] = %+v, want System=megadrive GameName=%q GameIndex=2 GameCount=2", events[0], "Golden Axe")
+	}
+}
+
+func TestImportGame_MediaCopyFails_ReturnsError(t *testing.T) {
+	romsFolder := writeFixtureRomsFolderWithMedia(t)
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+	if err := os.MkdirAll(filepath.Join(registryFolder, "megadrive"), 0o755); err != nil {
+		t.Fatalf("mkdir registry system dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(registryFolder, "megadrive", "images"), []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write blocking file: %v", err)
+	}
+
+	_, _, _, err := ImportGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	if err == nil {
+		t.Fatal("ImportGame() error = nil, want error when the media copy fails")
+	}
+}

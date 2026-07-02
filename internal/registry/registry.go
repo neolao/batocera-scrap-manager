@@ -311,6 +311,60 @@ func copyMediaFile(srcRoot, dstRoot, system, relPath string) error {
 	return os.WriteFile(dst, data, 0o644)
 }
 
+// ImportGame imports a single local game entry, identified by system and
+// romFilename (matched by ROM base name, ignoring any directory prefix, like
+// the rest of the registry — see decisions/005), from romsFolder's local
+// gamelist.xml into reg, then copies its referenced media into
+// registryFolder if it was newly added or changed. It returns
+// ErrGameNotFound if the game has no entry in the system's local
+// gamelist.xml. A game with neither a description nor an image is silently
+// skipped, exactly like ImportFromRomsFolder — not imported, not counted, no
+// progress event, no error (see decisions/007). If onProgress is non-nil, it
+// is called once, only if the game was actually imported (added, updated,
+// or unchanged).
+func ImportGame(reg *Registry, romsFolder, registryFolder, system, romFilename string, onProgress func(ProgressEvent)) (added, updated, unchanged int, err error) {
+	gamelistPath := filepath.Join(romsFolder, system, "gamelist.xml")
+	games, parseErr := gamelist.ParseFile(gamelistPath)
+	if parseErr != nil {
+		return 0, 0, 0, ErrGameNotFound
+	}
+
+	name := filepath.Base(romFilename)
+	i := -1
+	for idx, g := range games {
+		if filepath.Base(g.Path) == name {
+			i = idx
+			break
+		}
+	}
+	if i == -1 {
+		return 0, 0, 0, ErrGameNotFound
+	}
+
+	g := games[i]
+	if !hasScrapedData(g) {
+		return 0, 0, 0, nil
+	}
+
+	if onProgress != nil {
+		onProgress(ProgressEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: g.Name})
+	}
+
+	switch reg.importGame(system, g) {
+	case statusAdded:
+		added = 1
+	case statusUpdated:
+		updated = 1
+	default:
+		return 0, 0, 1, nil
+	}
+
+	if copyErr := copyGameMedia(romsFolder, registryFolder, system, g); copyErr != nil {
+		return added, updated, unchanged, copyErr
+	}
+	return added, updated, unchanged, nil
+}
+
 // CompletionEvent describes one game being examined by CompleteRomsFolder,
 // for callers that want to report progress to the user as it runs.
 type CompletionEvent struct {

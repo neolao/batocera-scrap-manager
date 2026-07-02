@@ -7,7 +7,7 @@ A command-line tool for managing game scraping data (metadata, box art, etc.) on
 
 - Configure the registry location and one or more Batocera ROMs folders to watch.
 - Browse the configured registry and the list of watched ROMs folders at any time.
-- Update the registry in one step from the configured ROMs folders: new games are added, games whose metadata changed are refreshed, and a summary (added / updated / unchanged) is displayed. Games with no scraped data (no description and no jaquette) are skipped, so the registry only holds games worth keeping.
+- Update the registry in one step from the configured ROMs folders: new games are added, games whose metadata changed are refreshed, and a summary (added / updated / unchanged) is displayed. Games with no scraped data (no description and no jaquette) are skipped, so the registry only holds games worth keeping. A single game can also be targeted by its path, to import or update just that one.
 - See live progress (current system and a per-game counter) while the registry is being updated, instead of waiting silently for the final summary.
 - The registry keeps a copy of each game's cover art, video, marquee, and thumbnail alongside its metadata, organized by system just like on Batocera itself.
 - Complete a ROMs folder's missing metadata and media (description, jaquette, rating, genre, etc.) using the registry as the source of already-known information, with a summary of processed / completed / failed entries. A single game can also be targeted by its path, to complete just that one.
@@ -58,6 +58,12 @@ Update the registry from the configured ROMs folders (this also (re)generates a 
 
 ```sh
 batocera-scrap-manager update
+```
+
+Update a single game instead, by giving its path in a configured ROMs folder:
+
+```sh
+batocera-scrap-manager update /userdata/roms/megadrive/Sonic.zip
 ```
 
 Complete a ROMs folder's missing metadata and media from the registry:

@@ -4,7 +4,7 @@
 **Exports:** `cli.Execute(args []string, out io.Writer) int`
 **Depends on:** [`modules/config.md`](config.md), [`modules/registry.md`](registry.md), [`modules/site.md`](site.md)
 
-`internal/cli/common.go` factors out logic shared by `update`, `scrape`, and `remove`: `loadConfigAndRegistry` (load the config, verify `RegistryFolder` is set, load the registry — writing the same error message and returning `ok=false` on any failure), `saveAndGenerateSite` (save the registry then regenerate the HTML site), and `newCompletionProgressReporter` (the `registry.CompletionEvent` line-printing closure shared by `scrape`'s batch and targeted modes).
+`internal/cli/common.go` factors out logic shared by `update`, `scrape`, and `remove`: `loadConfigAndRegistry` (load the config, verify `RegistryFolder` is set, load the registry — writing the same error message and returning `ok=false` on any failure), `saveAndGenerateSite` (save the registry then regenerate the HTML site), `newCompletionProgressReporter` (the `registry.CompletionEvent` line-printing closure shared by `scrape`'s batch and targeted modes), and `newImportProgressReporter` (the `registry.ProgressEvent` line-printing closure used by `update`'s batch mode — its targeted mode keeps its own inline closure, since it always prints the header regardless of the event's `GameIndex`, unlike the batch closure which only prints on `GameIndex == 1`).
 
 ## `config` subcommand
 `internal/cli/config.go` implements `runConfig(args []string, out io.Writer) int`, dispatched by `Execute` on `args[0] == "config"`, which itself dispatches to `runConfigSetRegistry`, `runConfigAddRomsFolder`, or `runConfigList`.

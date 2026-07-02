@@ -245,6 +245,34 @@ func TestExecute_Scrape_TargetedPath_CompletesOnlyThatGame(t *testing.T) {
 	}
 }
 
+func TestExecute_Scrape_TargetedPath_RomInSubfolder_ResolvesSystemAndFilename(t *testing.T) {
+	romsFolder := writeScrapeFixtureRomsFolder(t)
+	sub := filepath.Join(romsFolder, "megadrive", "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("mkdir sub: %v", err)
+	}
+	xml := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./sub/Sonic.zip</path><name>Sonic</name></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"), []byte(xml), 0o644); err != nil {
+		t.Fatalf("rewrite megadrive gamelist: %v", err)
+	}
+	registryFolder := setScrapeConfig(t, romsFolder)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./sub/Sonic.zip", "Sonic", "A classic platformer.")
+	gamePath := filepath.Join(sub, "Sonic.zip")
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape", gamePath}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "1 processed") || !strings.Contains(out.String(), "1 completed") {
+		t.Errorf("output = %q, want a summary mentioning 1 processed, 1 completed", out.String())
+	}
+}
+
 func TestExecute_Scrape_TargetedPath_AlreadyComplete_PrintsZeroCompletedSummary(t *testing.T) {
 	romsFolder := writeScrapeFixtureRomsFolder(t)
 	registryFolder := setScrapeConfig(t, romsFolder)
@@ -332,7 +360,7 @@ func TestExecute_Scrape_RomsFolderMissingOnDisk_ReturnsErrorCode(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(out.String(), "error") {
-		t.Errorf("output = %q, want it to mention an error", out.String())
+	if !strings.Contains(out.String(), missingFolder) {
+		t.Errorf("output = %q, want it to mention the missing folder %q", out.String(), missingFolder)
 	}
 }

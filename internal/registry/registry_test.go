@@ -95,6 +95,27 @@ func TestSave_WritesOneJSONFilePerGameInsideSystemFolder(t *testing.T) {
 	}
 }
 
+func TestImport_SameBaseNameDifferentExtension_SecondGameUpdatesFirstEntry(t *testing.T) {
+	// Both ROMs would be stored under the same "Sonic.json" file (gameFileName
+	// strips the extension), so they must be deduplicated as the same entry
+	// by Import/indexOf too, or the second Save() would silently overwrite
+	// the first game's file without either being reported as lost.
+	reg := &Registry{}
+	games := []gamelist.Game{
+		{Path: "./Sonic.zip", Name: "Sonic (Cart)"},
+		{Path: "./Sonic.iso", Name: "Sonic (Disc)"},
+	}
+
+	added, updated, unchanged := reg.Import("megadrive", games)
+
+	if added != 1 || updated != 1 || unchanged != 0 {
+		t.Errorf("added=%d updated=%d unchanged=%d, want 1,1,0", added, updated, unchanged)
+	}
+	if len(reg.Entries) != 1 {
+		t.Fatalf("Entries = %v, want exactly 1 entry (avoiding a silent Save() file collision)", reg.Entries)
+	}
+}
+
 func TestImport_NewGames_AddsAllAndReturnsCount(t *testing.T) {
 	reg := &Registry{}
 	games := []gamelist.Game{{Path: "./a.zip", Name: "A"}, {Path: "./b.zip", Name: "B"}}
@@ -394,6 +415,24 @@ func TestImportFromRomsFolder_RomsFolderDoesNotExist_ReturnsError(t *testing.T) 
 	}
 }
 
+func TestImportFromRomsFolder_MalformedGamelistXML_ReturnsError(t *testing.T) {
+	romsFolder := t.TempDir()
+	megadrive := filepath.Join(romsFolder, "megadrive")
+	if err := os.MkdirAll(megadrive, 0o755); err != nil {
+		t.Fatalf("mkdir megadrive: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(megadrive, "gamelist.xml"), []byte("<gameList><game><name>oops</game></gameList>"), 0o644); err != nil {
+		t.Fatalf("write malformed gamelist: %v", err)
+	}
+	reg := &Registry{}
+
+	_, _, _, err := ImportFromRomsFolder(reg, romsFolder, t.TempDir(), nil)
+
+	if err == nil {
+		t.Fatal("ImportFromRomsFolder() error = nil, want error for malformed gamelist.xml")
+	}
+}
+
 func writeMixedDataRomsFolder(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -468,6 +507,37 @@ func TestImportFromRomsFolder_GameWithOnlyImageOrOnlyDescription_StillAdded(t *t
 	}
 	if goldenAxe == nil {
 		t.Error("Golden Axe (image only) was not added to the registry")
+	}
+}
+
+func TestImportFromRomsFolder_GameWithOnlyVideo_StillSkipped(t *testing.T) {
+	// hasScrapedData deliberately only checks Desc and Image — a game with
+	// only a video reference (no description, no image) carries no data
+	// worth keeping in the registry either, and must still be skipped.
+	romsFolder := t.TempDir()
+	megadrive := filepath.Join(romsFolder, "megadrive")
+	if err := os.MkdirAll(megadrive, 0o755); err != nil {
+		t.Fatalf("mkdir megadrive: %v", err)
+	}
+	xml := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Sonic.zip</path><name>Sonic</name><video>./videos/Sonic.mp4</video></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(megadrive, "gamelist.xml"), []byte(xml), 0o644); err != nil {
+		t.Fatalf("write megadrive gamelist: %v", err)
+	}
+	reg := &Registry{}
+
+	added, updated, unchanged, err := ImportFromRomsFolder(reg, romsFolder, t.TempDir(), nil)
+
+	if err != nil {
+		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)
+	}
+	if added != 0 || updated != 0 || unchanged != 0 {
+		t.Errorf("added=%d updated=%d unchanged=%d, want 0/0/0 (video-only game should be skipped)", added, updated, unchanged)
+	}
+	if len(reg.Entries) != 0 {
+		t.Errorf("Entries = %v, want empty", reg.Entries)
 	}
 }
 
@@ -791,6 +861,41 @@ func TestCompleteRomsFolder_RomsFolderDoesNotExist_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestCompleteRomsFolder_MalformedGamelistXML_ReturnsError(t *testing.T) {
+	romsFolder := t.TempDir()
+	megadrive := filepath.Join(romsFolder, "megadrive")
+	if err := os.MkdirAll(megadrive, 0o755); err != nil {
+		t.Fatalf("mkdir megadrive: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(megadrive, "gamelist.xml"), []byte("<gameList><game><name>oops</game></gameList>"), 0o644); err != nil {
+		t.Fatalf("write malformed gamelist: %v", err)
+	}
+	reg := &Registry{}
+
+	_, _, _, err := CompleteRomsFolder(reg, romsFolder, t.TempDir(), nil)
+
+	if err == nil {
+		t.Fatal("CompleteRomsFolder() error = nil, want error for malformed gamelist.xml")
+	}
+}
+
+func TestCompleteRomsFolder_LocalGamelistWriteFails_ReturnsError(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	gamelistPath := filepath.Join(romsFolder, "megadrive", "gamelist.xml")
+	if err := os.Chmod(gamelistPath, 0o444); err != nil {
+		t.Fatalf("failed to make gamelist.xml read-only: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(gamelistPath, 0o644) })
+
+	_, _, _, err := CompleteRomsFolder(reg, romsFolder, registryFolder, nil)
+
+	if err == nil {
+		t.Fatal("CompleteRomsFolder() error = nil, want error when the local gamelist.xml cannot be rewritten")
+	}
+}
+
 func TestCompleteRomsFolder_MediaDestinationBlockedByFile_CountsGameAsFailedAndContinues(t *testing.T) {
 	romsFolder := writeIncompleteRomsFolder(t)
 	registryFolder := t.TempDir()
@@ -1092,6 +1197,23 @@ func TestCompleteGame_MediaCopyFails_ReturnsFailedButStillFillsGamelist(t *testi
 		if g.Name == "Sonic" && g.Desc != "A classic platformer." {
 			t.Errorf("Sonic.Desc = %q, want filled from registry despite the media copy failure", g.Desc)
 		}
+	}
+}
+
+func TestCompleteGame_LocalGamelistWriteFails_ReturnsError(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	gamelistPath := filepath.Join(romsFolder, "megadrive", "gamelist.xml")
+	if err := os.Chmod(gamelistPath, 0o444); err != nil {
+		t.Fatalf("failed to make gamelist.xml read-only: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(gamelistPath, 0o644) })
+
+	_, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	if err == nil {
+		t.Fatal("CompleteGame() error = nil, want error when the local gamelist.xml cannot be rewritten")
 	}
 }
 

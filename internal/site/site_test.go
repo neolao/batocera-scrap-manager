@@ -63,6 +63,32 @@ func TestGenerate_GamesGroupedBySystem_ListsNameDescriptionAndJaquette(t *testin
 	}
 }
 
+func TestGenerate_DotPrefixedMediaPath_StillFoundAndLinked(t *testing.T) {
+	// gamelist.xml (as written by EmulationStation/Batocera) encodes media
+	// paths with a leading "./", not the bare "images/..." form used by most
+	// fixtures in this file — make sure that realistic shape still resolves.
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{
+				Path:  "Sonic.zip",
+				Name:  "Sonic the Hedgehog",
+				Image: "./images/sonic.png",
+			}},
+		},
+	}
+	writeMediaFile(t, registryFolder, "megadrive", "images/sonic.png")
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+	if !strings.Contains(html, "megadrive/./images/sonic.png") {
+		t.Errorf("index.html does not link to the dot-prefixed media path, got: %s", html)
+	}
+}
+
 func TestGenerate_MultipleSystems_NavigationBarLinksToEachSystemAnchor(t *testing.T) {
 	registryFolder := t.TempDir()
 	reg := &registry.Registry{
@@ -294,6 +320,46 @@ func TestGenerate_Modal_OutOfRangeRating_ClampsToFullStars(t *testing.T) {
 
 	if !strings.Contains(modal, "★★★★★") {
 		t.Errorf("modal does not show a full 5-star rating for an out-of-range rating, got: %s", modal)
+	}
+}
+
+func TestGenerate_Modal_NegativeRating_ClampsToNoStarsWithoutPanicking(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog", Rating: "-0.5"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+	modal := extractByID(t, html, "modal-megadrive-0")
+
+	if !strings.Contains(modal, "☆☆☆☆☆") {
+		t.Errorf("modal does not show an empty 5-star rating for a negative rating, got: %s", modal)
+	}
+}
+
+func TestGenerate_Modal_ShortReleaseDate_OmitsYear(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog", ReleaseDate: "99"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+	modal := extractByID(t, html, "modal-megadrive-0")
+
+	if strings.Contains(modal, "Year") {
+		t.Errorf("modal shows a year for a too-short release date, got: %s", modal)
 	}
 }
 

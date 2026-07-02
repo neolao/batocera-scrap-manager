@@ -148,3 +148,42 @@ func TestExecute_ConfigAddRomsFolderMissingPath_ReturnsErrorCode(t *testing.T) {
 		t.Errorf("exit code = %d, want 1", code)
 	}
 }
+
+// withUnwritableConfigPath points BATOCERA_SCRAP_MANAGER_CONFIG at a path
+// whose parent directory is a plain file, so any config.Save() call fails.
+func withUnwritableConfigPath(t *testing.T) {
+	t.Helper()
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("failed to write test fixture: %v", err)
+	}
+	t.Setenv("BATOCERA_SCRAP_MANAGER_CONFIG", filepath.Join(blocker, "config.json"))
+}
+
+func TestExecute_ConfigSetRegistry_SaveFails_ReturnsErrorCode(t *testing.T) {
+	withUnwritableConfigPath(t)
+	var out bytes.Buffer
+
+	code := Execute([]string{"config", "set-registry", "/registry"}, &out)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), "error") {
+		t.Errorf("output = %q, want it to mention an error", out.String())
+	}
+}
+
+func TestExecute_ConfigAddRomsFolder_SaveFails_ReturnsErrorCode(t *testing.T) {
+	withUnwritableConfigPath(t)
+	var out bytes.Buffer
+
+	code := Execute([]string{"config", "add-roms-folder", "/roms"}, &out)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), "error") {
+		t.Errorf("output = %q, want it to mention an error", out.String())
+	}
+}

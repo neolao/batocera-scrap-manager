@@ -66,3 +66,16 @@ func newCompletionProgressReporter(out io.Writer, romsFolder string) func(regist
 		fmt.Fprintf(out, "  [%d/%d] %s: %s\n", e.GameIndex, e.GameCount, romsFolder, e.GameName)
 	}
 }
+
+// newImportProgressReporter builds a registry.ProgressEvent handler that
+// prints a system header line before that system's first game, then one
+// line per game — used by update's batch mode, where every event for a
+// system is guaranteed to arrive in order starting at GameIndex 1.
+func newImportProgressReporter(out io.Writer) func(registry.ProgressEvent) {
+	return func(e registry.ProgressEvent) {
+		if e.GameIndex == 1 {
+			fmt.Fprintf(out, "%s: %d game(s)\n", e.System, e.GameCount)
+		}
+		fmt.Fprintf(out, "  [%d/%d] %s\n", e.GameIndex, e.GameCount, e.GameName)
+	}
+}

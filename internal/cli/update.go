@@ -35,12 +35,7 @@ func runUpdate(args []string, out io.Writer) int {
 		return runUpdateTargeted(reg, cfg, args[0], out)
 	}
 
-	onProgress := func(e registry.ProgressEvent) {
-		if e.GameIndex == 1 {
-			fmt.Fprintf(out, "%s: %d game(s)\n", e.System, e.GameCount)
-		}
-		fmt.Fprintf(out, "  [%d/%d] %s\n", e.GameIndex, e.GameCount, e.GameName)
-	}
+	onProgress := newImportProgressReporter(out)
 
 	var added, updated, unchanged int
 	for _, romsFolder := range cfg.RomsFolders {

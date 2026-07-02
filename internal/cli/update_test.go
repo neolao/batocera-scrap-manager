@@ -31,19 +31,19 @@ func writeUpdateFixtureRomsFolder(t *testing.T) string {
 func setUpdateConfig(t *testing.T, romsFolder string) string {
 	t.Helper()
 	withTempConfig(t)
-	registryPath := filepath.Join(t.TempDir(), "registry.json")
+	registryFolder := t.TempDir()
 
 	var out bytes.Buffer
-	Execute([]string{"config", "set-registry", registryPath}, &out)
+	Execute([]string{"config", "set-registry", registryFolder}, &out)
 	if romsFolder != "" {
 		Execute([]string{"config", "add-roms-folder", romsFolder}, &out)
 	}
-	return registryPath
+	return registryFolder
 }
 
 func TestExecute_Update_NominalFixture_AddsEntriesAndPrintsSummary(t *testing.T) {
 	romsFolder := writeUpdateFixtureRomsFolder(t)
-	registryPath := setUpdateConfig(t, romsFolder)
+	registryFolder := setUpdateConfig(t, romsFolder)
 	var out bytes.Buffer
 
 	code := Execute([]string{"update"}, &out)
@@ -60,8 +60,8 @@ func TestExecute_Update_NominalFixture_AddsEntriesAndPrintsSummary(t *testing.T)
 	if !strings.Contains(out.String(), "0 unchanged") {
 		t.Errorf("output = %q, want it to mention 0 unchanged", out.String())
 	}
-	if _, err := os.Stat(registryPath); err != nil {
-		t.Errorf("registry file not created: %v", err)
+	if _, err := os.Stat(registryFolder); err != nil {
+		t.Errorf("registry folder not created: %v", err)
 	}
 }
 
@@ -76,7 +76,7 @@ func TestExecute_Update_GameWithNoDescriptionNorImage_NotCountedAsAdded(t *testi
 	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"), []byte(xml), 0o644); err != nil {
 		t.Fatalf("rewrite megadrive gamelist: %v", err)
 	}
-	registryPath := setUpdateConfig(t, romsFolder)
+	registryFolder := setUpdateConfig(t, romsFolder)
 	var out bytes.Buffer
 
 	code := Execute([]string{"update"}, &out)
@@ -90,7 +90,7 @@ func TestExecute_Update_GameWithNoDescriptionNorImage_NotCountedAsAdded(t *testi
 	if strings.Contains(out.String(), "Unknown") {
 		t.Errorf("output = %q, want no mention of the skipped Unknown game", out.String())
 	}
-	if _, err := os.Stat(filepath.Join(registryPath, "megadrive", "Unknown.json")); err == nil {
+	if _, err := os.Stat(filepath.Join(registryFolder, "megadrive", "Unknown.json")); err == nil {
 		t.Error("Unknown.json was written to the registry, want it skipped for having no description and no image")
 	}
 }
@@ -202,7 +202,7 @@ func TestExecute_Update_NoRomsFoldersConfigured_PrintsZeroSummary(t *testing.T) 
 
 func TestExecute_Update_NominalFixture_GeneratesSiteWithGames(t *testing.T) {
 	romsFolder := writeUpdateFixtureRomsFolder(t)
-	registryPath := setUpdateConfig(t, romsFolder)
+	registryFolder := setUpdateConfig(t, romsFolder)
 	var out bytes.Buffer
 
 	code := Execute([]string{"update"}, &out)
@@ -210,7 +210,7 @@ func TestExecute_Update_NominalFixture_GeneratesSiteWithGames(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
 	}
-	html, err := os.ReadFile(filepath.Join(registryPath, "index.html"))
+	html, err := os.ReadFile(filepath.Join(registryFolder, "index.html"))
 	if err != nil {
 		t.Fatalf("site not generated: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestExecute_Update_NominalFixture_GeneratesSiteWithGames(t *testing.T) {
 }
 
 func TestExecute_Update_NoRomsFoldersConfigured_StillGeneratesSite(t *testing.T) {
-	registryPath := setUpdateConfig(t, "")
+	registryFolder := setUpdateConfig(t, "")
 	var out bytes.Buffer
 
 	code := Execute([]string{"update"}, &out)
@@ -228,7 +228,7 @@ func TestExecute_Update_NoRomsFoldersConfigured_StillGeneratesSite(t *testing.T)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
 	}
-	html, err := os.ReadFile(filepath.Join(registryPath, "index.html"))
+	html, err := os.ReadFile(filepath.Join(registryFolder, "index.html"))
 	if err != nil {
 		t.Fatalf("site not generated: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestExecute_Update_NoRomsFoldersConfigured_StillGeneratesSite(t *testing.T)
 
 func TestExecute_Update_TargetedPath_AddsOnlyThatGame(t *testing.T) {
 	romsFolder := writeUpdateFixtureRomsFolder(t)
-	registryPath := setUpdateConfig(t, romsFolder)
+	registryFolder := setUpdateConfig(t, romsFolder)
 	gamePath := filepath.Join(romsFolder, "megadrive", "Sonic.zip")
 	var out bytes.Buffer
 
@@ -251,11 +251,41 @@ func TestExecute_Update_TargetedPath_AddsOnlyThatGame(t *testing.T) {
 	if !strings.Contains(out.String(), "1 added") || !strings.Contains(out.String(), "0 updated") || !strings.Contains(out.String(), "0 unchanged") {
 		t.Errorf("output = %q, want a summary mentioning 1 added, 0 updated, 0 unchanged", out.String())
 	}
-	if _, err := os.Stat(filepath.Join(registryPath, "megadrive", "Sonic.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); err != nil {
 		t.Errorf("Sonic.json not written to the registry: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(registryPath, "megadrive", "Golden Axe.json")); err == nil {
+	if _, err := os.Stat(filepath.Join(registryFolder, "megadrive", "Golden Axe.json")); err == nil {
 		t.Error("Golden Axe.json was written to the registry, want it left untouched (not the targeted game)")
+	}
+}
+
+func TestExecute_Update_TargetedPath_RomInSubfolder_ResolvesSystemAndFilename(t *testing.T) {
+	romsFolder := writeUpdateFixtureRomsFolder(t)
+	sub := filepath.Join(romsFolder, "megadrive", "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("mkdir sub: %v", err)
+	}
+	xml := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./sub/Sonic.zip</path><name>Sonic</name><desc>A blue hedgehog runs fast.</desc></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"), []byte(xml), 0o644); err != nil {
+		t.Fatalf("rewrite megadrive gamelist: %v", err)
+	}
+	registryFolder := setUpdateConfig(t, romsFolder)
+	gamePath := filepath.Join(sub, "Sonic.zip")
+	var out bytes.Buffer
+
+	code := Execute([]string{"update", gamePath}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "1 added") {
+		t.Errorf("output = %q, want a summary mentioning 1 added", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); err != nil {
+		t.Errorf("Sonic.json not written to the registry: %v", err)
 	}
 }
 
@@ -289,7 +319,7 @@ func TestExecute_Update_TargetedPath_NoScrapedData_NotAddedNoError(t *testing.T)
 	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"), []byte(xml), 0o644); err != nil {
 		t.Fatalf("rewrite megadrive gamelist: %v", err)
 	}
-	registryPath := setUpdateConfig(t, romsFolder)
+	registryFolder := setUpdateConfig(t, romsFolder)
 	gamePath := filepath.Join(romsFolder, "megadrive", "Unknown.zip")
 	var out bytes.Buffer
 
@@ -301,7 +331,7 @@ func TestExecute_Update_TargetedPath_NoScrapedData_NotAddedNoError(t *testing.T)
 	if !strings.Contains(out.String(), "0 added") || !strings.Contains(out.String(), "0 updated") || !strings.Contains(out.String(), "0 unchanged") {
 		t.Errorf("output = %q, want a zero summary (no scraped data, not an error)", out.String())
 	}
-	if _, err := os.Stat(filepath.Join(registryPath, "megadrive", "Unknown.json")); err == nil {
+	if _, err := os.Stat(filepath.Join(registryFolder, "megadrive", "Unknown.json")); err == nil {
 		t.Error("Unknown.json was written to the registry, want it skipped for having no description and no image")
 	}
 }
@@ -390,7 +420,7 @@ func TestExecute_Update_RomsFolderMissingOnDisk_ReturnsErrorCode(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(out.String(), "error") {
-		t.Errorf("output = %q, want it to mention an error", out.String())
+	if !strings.Contains(out.String(), missingFolder) {
+		t.Errorf("output = %q, want it to mention the missing folder %q", out.String(), missingFolder)
 	}
 }

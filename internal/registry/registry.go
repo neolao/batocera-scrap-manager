@@ -106,12 +106,34 @@ func Save(path string, reg *Registry) error {
 	return nil
 }
 
+// gameID returns the identifier used to both deduplicate registry entries
+// (see indexOf) and name their JSON file on disk (see gameFileName): a ROM
+// path's base name, without its directory prefix or file extension. Two
+// ROMs that would collide on that on-disk file — e.g. differing only by
+// extension, or nested in different subfolders of the same system — must
+// therefore also be treated as the same registry entry, or a later Save()
+// would silently overwrite one with the other (see decisions/005, which
+// established the same principle for the subfolder case).
+func gameID(path string) string {
+	base := filepath.Base(path)
+	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
 // gameFileName derives the name of the JSON file storing g's metadata, from
 // the base name of its ROM path.
 func gameFileName(g gamelist.Game) string {
-	base := filepath.Base(g.Path)
-	ext := filepath.Ext(base)
-	return strings.TrimSuffix(base, ext) + ".json"
+	return gameID(g.Path) + ".json"
+}
+
+// mediaFields lists accessors for a game's four media references (cover
+// art, video, marquee, thumbnail), letting Remove, copyGameMedia, and
+// copyFilledMedia iterate a single list instead of separately hardcoding
+// these same four fields.
+var mediaFields = []func(*gamelist.Game) *string{
+	func(g *gamelist.Game) *string { return &g.Image },
+	func(g *gamelist.Game) *string { return &g.Video },
+	func(g *gamelist.Game) *string { return &g.Marquee },
+	func(g *gamelist.Game) *string { return &g.Thumbnail },
 }
 
 // ErrGameNotFound is returned by Remove when no entry matches the given
@@ -134,7 +156,8 @@ func Remove(reg *Registry, registryFolder, system, romFilename string) error {
 	if err := removeIfExists(filepath.Join(registryFolder, system, gameFileName(g))); err != nil {
 		return err
 	}
-	for _, relPath := range []string{g.Image, g.Video, g.Marquee, g.Thumbnail} {
+	for _, field := range mediaFields {
+		relPath := *field(&g)
 		if relPath == "" {
 			continue
 		}
@@ -164,10 +187,10 @@ const (
 	statusUpdated
 )
 
-// importGame merges g (belonging to system) into the registry, reporting
+// mergeGameEntry merges g (belonging to system) into the registry, reporting
 // whether it was newly added, replaced an existing entry with different
 // metadata, or left unchanged.
-func (r *Registry) importGame(system string, g gamelist.Game) importStatus {
+func (r *Registry) mergeGameEntry(system string, g gamelist.Game) importStatus {
 	if i := r.indexOf(system, g.Path); i != -1 {
 		if r.Entries[i].Game == g {
 			return statusUnchanged
@@ -187,7 +210,7 @@ func (r *Registry) importGame(system string, g gamelist.Game) importStatus {
 // counted as unchanged.
 func (r *Registry) Import(system string, games []gamelist.Game) (added, updated, unchanged int) {
 	for _, g := range games {
-		switch r.importGame(system, g) {
+		switch r.mergeGameEntry(system, g) {
 		case statusAdded:
 			added++
 		case statusUpdated:
@@ -199,14 +222,14 @@ func (r *Registry) Import(system string, games []gamelist.Game) (added, updated,
 	return added, updated, unchanged
 }
 
-// indexOf finds the entry matching system and the ROM's filename (the
-// base name of path, ignoring any directory prefix) — the registry is
-// stored flat per system on disk, so two ROMs sharing a filename in
-// different subfolders of the same system are the same entry.
+// indexOf finds the entry matching system and path's gameID — the registry
+// is stored flat per system on disk, one JSON file per gameID, so two ROMs
+// that share a gameID (e.g. differing only by subfolder or extension) are
+// the same entry.
 func (r *Registry) indexOf(system, path string) int {
-	name := filepath.Base(path)
+	id := gameID(path)
 	for i, e := range r.Entries {
-		if e.System == system && filepath.Base(e.Game.Path) == name {
+		if e.System == system && gameID(e.Game.Path) == id {
 			return i
 		}
 	}
@@ -253,38 +276,51 @@ func ImportFromRomsFolder(reg *Registry, romsFolder, registryFolder string, onPr
 			return added, updated, unchanged, parseErr
 		}
 
-		for i, g := range games {
-			if !hasScrapedData(g) {
-				continue
-			}
-
-			if onProgress != nil {
-				onProgress(ProgressEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: g.Name})
-			}
-
-			status, copyErr := importOneGame(reg, romsFolder, registryFolder, system, g)
-			switch status {
-			case statusAdded:
-				added++
-			case statusUpdated:
-				updated++
-			default:
-				unchanged++
-				continue
-			}
-			if copyErr != nil {
-				return added, updated, unchanged, copyErr
-			}
+		systemAdded, systemUpdated, systemUnchanged, systemErr := importSystemGames(reg, games, romsFolder, registryFolder, system, onProgress)
+		added += systemAdded
+		updated += systemUpdated
+		unchanged += systemUnchanged
+		if systemErr != nil {
+			return added, updated, unchanged, systemErr
 		}
 	}
 
 	return added, updated, unchanged, nil
 }
 
+// importSystemGames imports every game of one system's already-parsed local
+// gamelist into reg, copying media for each newly added or changed game.
+func importSystemGames(reg *Registry, games []gamelist.Game, romsFolder, registryFolder, system string, onProgress func(ProgressEvent)) (added, updated, unchanged int, err error) {
+	for i, g := range games {
+		if !hasScrapedData(g) {
+			continue
+		}
+
+		if onProgress != nil {
+			onProgress(ProgressEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: g.Name})
+		}
+
+		status, copyErr := importOneGame(reg, romsFolder, registryFolder, system, g)
+		switch status {
+		case statusAdded:
+			added++
+		case statusUpdated:
+			updated++
+		default:
+			unchanged++
+			continue
+		}
+		if copyErr != nil {
+			return added, updated, unchanged, copyErr
+		}
+	}
+	return added, updated, unchanged, nil
+}
+
 // importOneGame merges g into reg and, if it was newly added or its metadata
 // changed, copies its referenced media from romsFolder into registryFolder.
 func importOneGame(reg *Registry, romsFolder, registryFolder, system string, g gamelist.Game) (status importStatus, copyErr error) {
-	status = reg.importGame(system, g)
+	status = reg.mergeGameEntry(system, g)
 	if status == statusUnchanged {
 		return status, nil
 	}
@@ -301,9 +337,9 @@ func hasScrapedData(g gamelist.Game) bool {
 // copyGameMedia copies every media file referenced by g (cover art, video,
 // marquee, thumbnail) from its system folder under romsFolder into the same
 // relative location under registryFolder.
-func copyGameMedia(romsFolder, registryFolder, system string, g gamelist.Game) error {
-	for _, relPath := range []string{g.Image, g.Video, g.Marquee, g.Thumbnail} {
-		if err := copyMediaFile(romsFolder, registryFolder, system, relPath); err != nil {
+func copyGameMedia(srcRoot, dstRoot, system string, g gamelist.Game) error {
+	for _, field := range mediaFields {
+		if err := copyMediaFile(srcRoot, dstRoot, system, *field(&g)); err != nil {
 			return err
 		}
 	}
@@ -390,13 +426,11 @@ func findGameByFilename(games []gamelist.Game, romFilename string) int {
 }
 
 // CompletionEvent describes one game being examined by CompleteRomsFolder,
-// for callers that want to report progress to the user as it runs.
-type CompletionEvent struct {
-	System    string
-	GameIndex int // 1-based index of this game within System's local game list
-	GameCount int // total number of games found for System
-	GameName  string
-}
+// for callers that want to report progress to the user as it runs. It has
+// the same shape as ProgressEvent (both describe a game's position within
+// its system's local game list) but is kept as a distinct name to match the
+// vocabulary of the completion flow it belongs to.
+type CompletionEvent = ProgressEvent
 
 // CompleteRomsFolder scans the immediate subdirectories of romsFolder (each
 // one a Batocera system) for a gamelist.xml file, and for every local game
@@ -433,28 +467,12 @@ func CompleteRomsFolder(reg *Registry, romsFolder, registryFolder string, onProg
 			return processed, completed, failed, parseErr
 		}
 
-		dirty := false
-		for i := range games {
-			processed++
+		systemProcessed, systemCompleted, systemFailed, needsRewrite := completeSystemGames(reg, games, romsFolder, registryFolder, system, onProgress)
+		processed += systemProcessed
+		completed += systemCompleted
+		failed += systemFailed
 
-			found, changed, before := completeOneGame(reg, games, i, system)
-			if !found || !changed {
-				continue
-			}
-			dirty = true
-
-			if onProgress != nil {
-				onProgress(CompletionEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: games[i].Name})
-			}
-
-			if copyErr := copyFilledMedia(before, games[i], registryFolder, romsFolder, system); copyErr != nil {
-				failed++
-				continue
-			}
-			completed++
-		}
-
-		if dirty {
+		if needsRewrite {
 			if writeErr := gamelist.WriteFile(gamelistPath, games); writeErr != nil {
 				return processed, completed, failed, writeErr
 			}
@@ -462,6 +480,33 @@ func CompleteRomsFolder(reg *Registry, romsFolder, registryFolder string, onProg
 	}
 
 	return processed, completed, failed, nil
+}
+
+// completeSystemGames fills the gaps of one system's already-parsed local
+// games from reg, copying any newly referenced media for each game changed.
+// needsRewrite reports whether any game was changed, so the caller knows
+// whether games must be written back to the local gamelist.xml.
+func completeSystemGames(reg *Registry, games []gamelist.Game, romsFolder, registryFolder, system string, onProgress func(CompletionEvent)) (processed, completed, failed int, needsRewrite bool) {
+	for i := range games {
+		processed++
+
+		found, changed, before := fillGameFromRegistry(reg, games, i, system)
+		if !found || !changed {
+			continue
+		}
+		needsRewrite = true
+
+		if onProgress != nil {
+			onProgress(CompletionEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: games[i].Name})
+		}
+
+		if copyErr := copyFilledMedia(before, games[i], registryFolder, romsFolder, system); copyErr != nil {
+			failed++
+			continue
+		}
+		completed++
+	}
+	return processed, completed, failed, needsRewrite
 }
 
 // mergeGame fills any empty field of dst with the corresponding non-empty
@@ -489,12 +534,12 @@ func mergeGame(dst *gamelist.Game, src gamelist.Game) bool {
 	return changed
 }
 
-// completeOneGame merges the registry's known metadata for games[i] (matched
+// fillGameFromRegistry merges the registry's known metadata for games[i] (matched
 // by system and ROM path) into it, filling only empty fields. It reports
 // whether a matching registry entry was found and whether anything was
 // filled; before holds games[i]'s value prior to merging, for callers that
 // need to detect which media files were newly referenced.
-func completeOneGame(reg *Registry, games []gamelist.Game, i int, system string) (found, changed bool, before gamelist.Game) {
+func fillGameFromRegistry(reg *Registry, games []gamelist.Game, i int, system string) (found, changed bool, before gamelist.Game) {
 	before = games[i]
 	j := reg.indexOf(system, games[i].Path)
 	if j == -1 {
@@ -527,7 +572,7 @@ func CompleteGame(reg *Registry, romsFolder, registryFolder, system, romFilename
 		return false, false, ErrGameNotFound
 	}
 
-	found, changed, before := completeOneGame(reg, games, i, system)
+	found, changed, before := fillGameFromRegistry(reg, games, i, system)
 	if !found {
 		return false, false, ErrGameNotFound
 	}
@@ -555,14 +600,10 @@ func CompleteGame(reg *Registry, romsFolder, registryFolder, system, romFilename
 // reference was newly filled between before and after (i.e. empty in
 // before, non-empty in after).
 func copyFilledMedia(before, after gamelist.Game, srcRoot, dstRoot, system string) error {
-	for _, pair := range [][2]string{
-		{before.Image, after.Image},
-		{before.Video, after.Video},
-		{before.Marquee, after.Marquee},
-		{before.Thumbnail, after.Thumbnail},
-	} {
-		if pair[0] == "" && pair[1] != "" {
-			if err := copyMediaFile(srcRoot, dstRoot, system, pair[1]); err != nil {
+	for _, field := range mediaFields {
+		b, a := *field(&before), *field(&after)
+		if b == "" && a != "" {
+			if err := copyMediaFile(srcRoot, dstRoot, system, a); err != nil {
 				return err
 			}
 		}

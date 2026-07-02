@@ -101,6 +101,47 @@ func gameFileName(g gamelist.Game) string {
 	return strings.TrimSuffix(base, ext) + ".json"
 }
 
+// ErrGameNotFound is returned by Remove when no entry matches the given
+// system and ROM path.
+var ErrGameNotFound = errors.New("registry: game not found")
+
+// Remove deletes, from the registry folder at registryFolder, the metadata
+// file and every media file (cover art, video, marquee, thumbnail)
+// belonging to the entry matching system and romPath, then removes that
+// entry from reg. It returns ErrGameNotFound, without modifying anything, if
+// no entry matches.
+func Remove(reg *Registry, registryFolder, system, romPath string) error {
+	i := reg.indexOf(system, romPath)
+	if i == -1 {
+		return ErrGameNotFound
+	}
+	g := reg.Entries[i].Game
+
+	if err := removeIfExists(filepath.Join(registryFolder, system, gameFileName(g))); err != nil {
+		return err
+	}
+	for _, relPath := range []string{g.Image, g.Video, g.Marquee, g.Thumbnail} {
+		if relPath == "" {
+			continue
+		}
+		if err := removeIfExists(filepath.Join(registryFolder, system, relPath)); err != nil {
+			return err
+		}
+	}
+
+	reg.Entries = append(reg.Entries[:i], reg.Entries[i+1:]...)
+	return nil
+}
+
+// removeIfExists deletes the file at path, silently ignoring the case where
+// it does not exist.
+func removeIfExists(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
 type importStatus int
 
 const (

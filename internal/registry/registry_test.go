@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -656,5 +657,102 @@ func TestCompleteRomsFolder_MediaDestinationBlockedByFile_CountsGameAsFailedAndC
 	}
 	if completed != 0 {
 		t.Errorf("completed = %d, want 0", completed)
+	}
+}
+
+func writeRegistryWithSonicAndMedia(t *testing.T) (registryFolder string, reg *Registry) {
+	t.Helper()
+	registryFolder = t.TempDir()
+	images := filepath.Join(registryFolder, "megadrive", "images")
+	if err := os.MkdirAll(images, 0o755); err != nil {
+		t.Fatalf("mkdir registry images: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(images, "Sonic.png"), []byte("fake-cover-art"), 0o644); err != nil {
+		t.Fatalf("write registry cover art: %v", err)
+	}
+
+	sonic := gamelist.Game{Path: "./Sonic.zip", Name: "Sonic", Desc: "A classic platformer.", Image: "./images/Sonic.png"}
+	goldenAxe := gamelist.Game{Path: "./Golden Axe.zip", Name: "Golden Axe"}
+	reg = &Registry{Entries: []Entry{
+		{System: "megadrive", Game: sonic},
+		{System: "megadrive", Game: goldenAxe},
+	}}
+	if err := Save(registryFolder, reg); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+	return registryFolder, reg
+}
+
+func TestRemove_ExistingGameWithMedia_DeletesJSONAndMediaAndEntry(t *testing.T) {
+	registryFolder, reg := writeRegistryWithSonicAndMedia(t)
+
+	err := Remove(reg, registryFolder, "megadrive", "./Sonic.zip")
+
+	if err != nil {
+		t.Fatalf("Remove() error = %v, want nil", err)
+	}
+	if len(reg.Entries) != 1 || reg.Entries[0].Game.Name != "Golden Axe" {
+		t.Errorf("Entries = %v, want only Golden Axe left", reg.Entries)
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); statErr == nil {
+		t.Error("Sonic.json still exists, want it deleted")
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", "images", "Sonic.png")); statErr == nil {
+		t.Error("Sonic.png still exists, want it deleted")
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", "Golden Axe.json")); statErr != nil {
+		t.Errorf("Golden Axe.json should still exist: %v", statErr)
+	}
+}
+
+func TestRemove_GameWithoutMedia_DeletesJSONWithoutError(t *testing.T) {
+	registryFolder, reg := writeRegistryWithSonicAndMedia(t)
+
+	err := Remove(reg, registryFolder, "megadrive", "./Golden Axe.zip")
+
+	if err != nil {
+		t.Fatalf("Remove() error = %v, want nil", err)
+	}
+	if len(reg.Entries) != 1 || reg.Entries[0].Game.Name != "Sonic" {
+		t.Errorf("Entries = %v, want only Sonic left", reg.Entries)
+	}
+}
+
+func TestRemove_GameNotFound_ReturnsErrGameNotFoundWithoutModifyingRegistry(t *testing.T) {
+	registryFolder, reg := writeRegistryWithSonicAndMedia(t)
+
+	err := Remove(reg, registryFolder, "megadrive", "./Does Not Exist.zip")
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Fatalf("Remove() error = %v, want ErrGameNotFound", err)
+	}
+	if len(reg.Entries) != 2 {
+		t.Errorf("Entries = %v, want unchanged (still 2)", reg.Entries)
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); statErr != nil {
+		t.Errorf("Sonic.json should be untouched: %v", statErr)
+	}
+}
+
+func TestRemove_SameRomPathDifferentSystem_OnlyRemovesMatchingSystem(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./a.zip", Name: "A"}},
+		{System: "mastersystem", Game: gamelist.Game{Path: "./a.zip", Name: "A"}},
+	}}
+	if err := Save(registryFolder, reg); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+
+	err := Remove(reg, registryFolder, "megadrive", "./a.zip")
+
+	if err != nil {
+		t.Fatalf("Remove() error = %v, want nil", err)
+	}
+	if len(reg.Entries) != 1 || reg.Entries[0].System != "mastersystem" {
+		t.Errorf("Entries = %v, want only the mastersystem entry left", reg.Entries)
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "mastersystem", "a.json")); statErr != nil {
+		t.Errorf("mastersystem/a.json should still exist: %v", statErr)
 	}
 }

@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # Site HTML Généré à la Racine du Registre
 

@@ -128,6 +128,70 @@ func TestExecute_Scrape_AlreadyCompleteEntry_NotOverwrittenAndNotCounted(t *test
 	}
 }
 
+func TestExecute_Scrape_SingleRomsFolder_LiveOutputMentionsItsPath(t *testing.T) {
+	romsFolder := writeScrapeFixtureRomsFolder(t)
+	registryFolder := setScrapeConfig(t, romsFolder)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic", "A classic platformer.")
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), romsFolder) {
+		t.Errorf("output = %q, want it to mention the roms folder %q", out.String(), romsFolder)
+	}
+}
+
+func TestExecute_Scrape_MultipleRomsFolders_EachGameLineIdentifiesItsOwnFolder(t *testing.T) {
+	romsFolder1 := writeScrapeFixtureRomsFolder(t)
+	romsFolder2 := writeScrapeFixtureRomsFolder(t)
+	registryFolder := setScrapeConfig(t, romsFolder1)
+	var setup bytes.Buffer
+	if code := Execute([]string{"config", "add-roms-folder", romsFolder2}, &setup); code != 0 {
+		t.Fatalf("failed to add second roms folder: %s", setup.String())
+	}
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic", "A classic platformer.")
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+
+	sawFolder1, sawFolder2 := false, false
+	for _, line := range strings.Split(out.String(), "\n") {
+		if !strings.Contains(line, "Sonic") {
+			continue
+		}
+		if strings.Contains(line, romsFolder1) {
+			sawFolder1 = true
+		}
+		if strings.Contains(line, romsFolder2) {
+			sawFolder2 = true
+		}
+	}
+	if !sawFolder1 || !sawFolder2 {
+		t.Errorf("output = %q, want a Sonic line naming each roms folder (%q and %q)", out.String(), romsFolder1, romsFolder2)
+	}
+}
+
+func TestExecute_Scrape_NoRomsFoldersConfigured_PrintsNoFolderLine(t *testing.T) {
+	setScrapeConfig(t, "")
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if strings.TrimSpace(out.String()) != "0 processed, 0 completed, 0 failed" {
+		t.Errorf("output = %q, want only the zero summary, no folder line", out.String())
+	}
+}
+
 func TestExecute_Scrape_NoRomsFoldersConfigured_PrintsZeroSummary(t *testing.T) {
 	setScrapeConfig(t, "")
 	var out bytes.Buffer

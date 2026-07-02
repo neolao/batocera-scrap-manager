@@ -39,7 +39,7 @@ func runScrape(out io.Writer) int {
 				fmt.Fprintf(out, "%s: %d game(s)\n", e.System, e.GameCount)
 				lastSystem = e.System
 			}
-			fmt.Fprintf(out, "  [%d/%d] %s\n", e.GameIndex, e.GameCount, e.GameName)
+			fmt.Fprintf(out, "  [%d/%d] %s: %s\n", e.GameIndex, e.GameCount, romsFolder, e.GameName)
 		}
 
 		p, c, f, err := registry.CompleteRomsFolder(reg, romsFolder, cfg.RegistryFolder, onProgress)

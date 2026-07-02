@@ -193,6 +193,7 @@ main { max-width: 72rem; margin: 0 auto; padding: 0 1.25rem 2rem; }
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(77, 240, 255, 0.2); }
+.card { color: inherit; text-decoration: none; cursor: pointer; }
 .card__art {
   aspect-ratio: 4 / 3;
   background: var(--bg-card);
@@ -215,7 +216,64 @@ main { max-width: 72rem; margin: 0 auto; padding: 0 1.25rem 2rem; }
   line-height: 1.4;
   color: var(--ink-dim);
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
+html:has(.modal:target) { overflow: hidden; }
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.modal:target { opacity: 1; pointer-events: auto; }
+.modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 6, 10, 0.85);
+  backdrop-filter: blur(2px);
+}
+.modal__panel {
+  position: relative;
+  max-width: 32rem;
+  margin: 6vh auto;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: 0 0 30px rgba(77, 240, 255, 0.35);
+}
+.modal__close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.75rem;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--ink-dim);
+  text-decoration: none;
+}
+.modal__close:hover, .modal__close:focus-visible { color: var(--magenta); }
+.modal__art {
+  margin: 0 0 1rem;
+  aspect-ratio: 4 / 3;
+  border-radius: calc(var(--radius) - 4px);
+  overflow: hidden;
+}
+.modal__art img { width: 100%; height: 100%; object-fit: cover; }
+.modal__name {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-display);
+  letter-spacing: 0.05em;
+  color: var(--cyan);
+}
+.modal__desc { margin: 0; line-height: 1.5; color: var(--ink); }
 .back-to-top {
   display: inline-block;
   margin-top: 1.25rem;
@@ -233,6 +291,7 @@ main { max-width: 72rem; margin: 0 auto; padding: 0 1.25rem 2rem; }
   .console { padding: 0.6rem 0.75rem; }
   main { padding: 0 0.85rem 1.5rem; }
   .grid { grid-template-columns: 1fr; gap: 1rem; }
+  .modal__panel { margin: 0; max-height: 100vh; width: 100%; border-radius: 0; }
 }
 </style>
 </head>
@@ -256,18 +315,29 @@ main { max-width: 72rem; margin: 0 auto; padding: 0 1.25rem 2rem; }
 <section id="{{$sys}}" class="system">
 <h2 class="system__title">{{$sys}}</h2>
 <div class="grid">
-{{range .Games}}
-<article class="card">
-<div class="card__art{{if not .Image}} card__art--empty{{end}}">
-{{if .Image}}<img src="{{printf "%s/%s" $sys .Image}}" alt="{{.Name}}">{{end}}
+{{range $i, $g := .Games}}
+<a class="card" href="#modal-{{$sys}}-{{$i}}">
+<div class="card__art{{if not $g.Image}} card__art--empty{{end}}">
+{{if $g.Image}}<img src="{{printf "%s/%s" $sys $g.Image}}" alt="{{$g.Name}}">{{end}}
 </div>
 <div class="card__body">
-<h3 class="card__name">{{.Name}}</h3>
-<p class="card__desc">{{.Desc}}</p>
+<h3 class="card__name">{{$g.Name}}</h3>
+<p class="card__desc">{{$g.Desc}}</p>
 </div>
-</article>
+</a>
 {{end}}
 </div>
+{{range $i, $g := .Games}}
+<div class="modal" id="modal-{{$sys}}-{{$i}}" role="dialog" aria-modal="true">
+<a class="modal__backdrop" href="#{{$sys}}" aria-label="Close"></a>
+<div class="modal__panel">
+<a class="modal__close" href="#{{$sys}}" aria-label="Close">&times;</a>
+{{if $g.Image}}<div class="modal__art"><img src="{{printf "%s/%s" $sys $g.Image}}" alt="{{$g.Name}}"></div>{{end}}
+<h3 class="modal__name">{{$g.Name}}</h3>
+<p class="modal__desc">{{$g.Desc}}</p>
+</div>
+</div>
+{{end}}
 <a class="back-to-top" href="#top">&#9650; Back to top</a>
 </section>
 {{end}}

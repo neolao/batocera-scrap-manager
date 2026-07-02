@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `batocera-scrap-manager update` now (re)generates a static HTML site (`index.html` at the root of the registry folder) listing every game grouped by system, with its name, description, and jaquette when available, so the registry's content can be browsed in a web browser.
 - `batocera-scrap-manager update` no longer adds a game to the registry if it has neither a description nor a jaquette, avoiding registry entries with no useful scraped data.
 - The generated consultation site now has a styled, retro-arcade look with a sticky navigation bar linking to each system, games presented as consistent cards, a "back to top" link in every system section, and a layout that stays readable on small screens.
+- On the consultation site, each game card now shows a truncated description and opens a detail view with the full description when clicked, instead of stretching the card to fit all the text.
 
 ### Fixed
 

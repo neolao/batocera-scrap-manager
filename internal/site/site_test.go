@@ -138,6 +138,58 @@ func TestGenerate_EachSystemSection_HasBackToTopLink(t *testing.T) {
 	}
 }
 
+func TestGenerate_CardDescription_IsClampedInTheGrid(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if !strings.Contains(html, "-webkit-line-clamp") {
+		t.Error("card description is not clamped, so it can grow to take all the card space")
+	}
+}
+
+func TestGenerate_GameCard_LinksToADetailModalWithTheFullDescription(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{
+				Path: "Sonic.zip",
+				Name: "Sonic the Hedgehog",
+				Desc: "A blue hedgehog runs very fast through Green Hill Zone, collecting rings along the way.",
+			}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if !strings.Contains(html, `href="#modal-megadrive-0"`) {
+		t.Errorf("game card does not link to its detail modal, got: %s", html)
+	}
+	if !strings.Contains(html, `id="modal-megadrive-0"`) {
+		t.Errorf("no modal found for the game, got: %s", html)
+	}
+	modal := extractByID(t, html, "modal-megadrive-0")
+	if !strings.Contains(modal, "A blue hedgehog runs very fast through Green Hill Zone, collecting rings along the way.") {
+		t.Errorf("modal does not contain the game's full description, got: %s", modal)
+	}
+	if !strings.Contains(modal, `href="#megadrive"`) {
+		t.Errorf("modal does not contain a link back to the system section to close it, got: %s", modal)
+	}
+}
+
 func TestGenerate_CardArtwork_UsesFourByThreeAspectRatio(t *testing.T) {
 	registryFolder := t.TempDir()
 	reg := &registry.Registry{
@@ -270,6 +322,18 @@ func extractTag(t *testing.T, html, tagName string) string {
 	match := re.FindString(html)
 	if match == "" {
 		t.Fatalf("index.html does not contain a <%s> element, got: %s", tagName, html)
+	}
+	return match
+}
+
+// extractByID returns the content of the element with the given id
+// attribute, up to its matching closing div tag.
+func extractByID(t *testing.T, html, id string) string {
+	t.Helper()
+	re := regexp.MustCompile(`(?s)<div[^>]*id="` + regexp.QuoteMeta(id) + `"[^>]*>.*?</div>\s*</div>`)
+	match := re.FindString(html)
+	if match == "" {
+		t.Fatalf("index.html does not contain an element with id=%q, got: %s", id, html)
 	}
 	return match
 }

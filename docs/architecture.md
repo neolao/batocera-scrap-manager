@@ -32,7 +32,7 @@ Turns the registry's content into a static HTML site, so it can be browsed in a 
 
 ## Browsing the registry as a website
 
-Every time the registry is updated, a small static website is (re)generated inside the registry folder (`site/index.html`). It lists every known game grouped by system, showing its name, description, and jaquette when one is available. A system with no games, or a game without a jaquette, is displayed cleanly rather than showing a broken image. Opening this file in a browser gives a quick, readable overview of the registry's content without needing to inspect individual metadata files.
+Every time the registry is updated, a small static website is (re)generated directly at the root of the registry folder (`index.html`), for easy discovery. It lists every known game grouped by system, showing its name, description, and jaquette when one is available. A system with no games, or a game without a jaquette, is displayed cleanly rather than showing a broken image. Opening this file in a browser gives a quick, readable overview of the registry's content without needing to inspect individual metadata files.
 
 ## Completing a ROMs folder from the registry
 

@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Users can now complete a ROMs folder's missing metadata (description, jaquette, rating, genre, etc.) and media files with `batocera-scrap-manager scrape`, using the registry as the source of already-known information; only games that actually get new information appear in the live output, and a summary of processed/completed/failed entries is printed at the end.
 - Users can now remove a specific game's entry (metadata and media) from the registry with `batocera-scrap-manager remove <system> <rom-filename>`.
-- `batocera-scrap-manager update` now (re)generates a static HTML site (`site/index.html` in the registry folder) listing every game grouped by system, with its name, description, and jaquette when available, so the registry's content can be browsed in a web browser.
+- `batocera-scrap-manager update` now (re)generates a static HTML site (`index.html` at the root of the registry folder) listing every game grouped by system, with its name, description, and jaquette when available, so the registry's content can be browsed in a web browser.
 - `batocera-scrap-manager update` no longer adds a game to the registry if it has neither a description nor a jaquette, avoiding registry entries with no useful scraped data.
 
 ### Fixed

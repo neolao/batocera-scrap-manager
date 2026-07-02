@@ -20,13 +20,13 @@ type systemView struct {
 	Games []gamelist.Game
 }
 
-// Generate writes a static HTML site under registryFolder/site listing every
-// entry of reg, grouped by system, with each game's name, description, and
-// jaquette (when available). An empty registry still produces a valid site,
-// with a message indicating there is nothing to show yet.
+// Generate writes a static HTML site directly at registryFolder/index.html
+// listing every entry of reg, grouped by system, with each game's name,
+// description, and jaquette (when available). An empty registry still
+// produces a valid site, with a message indicating there is nothing to show
+// yet.
 func Generate(reg *registry.Registry, registryFolder string) error {
-	siteFolder := filepath.Join(registryFolder, "site")
-	if err := os.MkdirAll(siteFolder, 0o755); err != nil {
+	if err := os.MkdirAll(registryFolder, 0o755); err != nil {
 		return err
 	}
 
@@ -35,7 +35,7 @@ func Generate(reg *registry.Registry, registryFolder string) error {
 		return err
 	}
 
-	return os.WriteFile(filepath.Join(siteFolder, "index.html"), buf.Bytes(), 0o644)
+	return os.WriteFile(filepath.Join(registryFolder, "index.html"), buf.Bytes(), 0o644)
 }
 
 // groupBySystem groups entries by system, sorted by system name and then by
@@ -80,7 +80,7 @@ var indexTemplate = template.Must(template.New("index").Parse(`<!DOCTYPE html>
 <li>
 <h3>{{.Name}}</h3>
 <p>{{.Desc}}</p>
-{{if .Image}}<img src="{{printf "../%s/%s" $sys .Image}}" alt="{{.Name}}">{{end}}
+{{if .Image}}<img src="{{printf "%s/%s" $sys .Image}}" alt="{{.Name}}">{{end}}
 </li>
 {{end}}
 </ul>

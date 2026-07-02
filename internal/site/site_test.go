@@ -37,8 +37,8 @@ func TestGenerate_GamesGroupedBySystem_ListsNameDescriptionAndJaquette(t *testin
 
 	for _, want := range []string{
 		"megadrive", "mastersystem",
-		"Sonic the Hedgehog", "A blue hedgehog runs fast.", "../megadrive/images/sonic.png",
-		"Alex Kidd", "A kid with miracle powers.", "../mastersystem/images/alex.png",
+		"Sonic the Hedgehog", "A blue hedgehog runs fast.", "megadrive/images/sonic.png",
+		"Alex Kidd", "A kid with miracle powers.", "mastersystem/images/alex.png",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("index.html does not contain %q", want)
@@ -68,7 +68,7 @@ func TestGenerate_GameWithoutJaquette_RendersWithoutBrokenImage(t *testing.T) {
 	if !strings.Contains(html, "Streets of Rage") {
 		t.Errorf("index.html does not contain the game name")
 	}
-	if strings.Contains(html, `src=""`) || strings.Contains(html, `<img src="../megadrive/">`) {
+	if strings.Contains(html, `src=""`) || strings.Contains(html, `<img src="megadrive/">`) {
 		t.Errorf("index.html contains a broken image reference: %s", html)
 	}
 }
@@ -88,10 +88,51 @@ func TestGenerate_EmptyRegistry_ProducesValidSiteWithNoGamesMessage(t *testing.T
 	}
 }
 
-func TestGenerate_SiteFolderBlockedByExistingFile_ReturnsError(t *testing.T) {
+func TestGenerate_WritesIndexHTMLDirectlyAtRegistryRoot(t *testing.T) {
 	registryFolder := t.TempDir()
-	// Create a plain file where the "site" folder needs to go, so MkdirAll fails.
-	if err := os.WriteFile(filepath.Join(registryFolder, "site"), []byte("not a folder"), 0o644); err != nil {
+	reg := &registry.Registry{}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(registryFolder, "index.html")); err != nil {
+		t.Errorf("index.html not found at the registry root: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(registryFolder, "site", "index.html")); err == nil {
+		t.Error("index.html was written under a site/ subfolder, want it directly at the registry root")
+	}
+}
+
+func TestGenerate_LeftoverSiteSubfolder_IsLeftUntouched(t *testing.T) {
+	registryFolder := t.TempDir()
+	staleSiteFolder := filepath.Join(registryFolder, "site")
+	if err := os.MkdirAll(staleSiteFolder, 0o755); err != nil {
+		t.Fatalf("failed to set up test: %v", err)
+	}
+	stalePath := filepath.Join(staleSiteFolder, "index.html")
+	if err := os.WriteFile(stalePath, []byte("stale content from a previous version"), 0o644); err != nil {
+		t.Fatalf("failed to set up test: %v", err)
+	}
+
+	reg := &registry.Registry{}
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	data, err := os.ReadFile(stalePath)
+	if err != nil {
+		t.Fatalf("leftover site/index.html was removed, want it left untouched: %v", err)
+	}
+	if string(data) != "stale content from a previous version" {
+		t.Errorf("leftover site/index.html content changed, want it left untouched")
+	}
+}
+
+func TestGenerate_IndexHTMLBlockedByExistingDirectory_ReturnsError(t *testing.T) {
+	registryFolder := t.TempDir()
+	// Create a directory where the index.html file needs to go, so writing fails.
+	if err := os.MkdirAll(filepath.Join(registryFolder, "index.html"), 0o755); err != nil {
 		t.Fatalf("failed to set up test: %v", err)
 	}
 
@@ -103,7 +144,7 @@ func TestGenerate_SiteFolderBlockedByExistingFile_ReturnsError(t *testing.T) {
 
 func readIndex(t *testing.T, registryFolder string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(registryFolder, "site", "index.html"))
+	data, err := os.ReadFile(filepath.Join(registryFolder, "index.html"))
 	if err != nil {
 		t.Fatalf("failed to read generated index.html: %v", err)
 	}

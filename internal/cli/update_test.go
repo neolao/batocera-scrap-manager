@@ -210,7 +210,7 @@ func TestExecute_Update_NominalFixture_GeneratesSiteWithGames(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
 	}
-	html, err := os.ReadFile(filepath.Join(registryPath, "site", "index.html"))
+	html, err := os.ReadFile(filepath.Join(registryPath, "index.html"))
 	if err != nil {
 		t.Fatalf("site not generated: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestExecute_Update_NoRomsFoldersConfigured_StillGeneratesSite(t *testing.T)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
 	}
-	html, err := os.ReadFile(filepath.Join(registryPath, "site", "index.html"))
+	html, err := os.ReadFile(filepath.Join(registryPath, "index.html"))
 	if err != nil {
 		t.Fatalf("site not generated: %v", err)
 	}

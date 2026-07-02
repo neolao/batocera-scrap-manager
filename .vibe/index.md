@@ -22,6 +22,7 @@
 - A reverse data flow (e.g. completing ROMs folders from the registry, mirroring the ROMs-folder-to-registry import) reuses the same low-level helpers (media file copy) by swapping which folder is the source and which is the destination, rather than duplicating the copy logic.
 - Rendering user-editable content (game names/descriptions from `gamelist.xml`) as HTML uses `html/template`, not `text/template`, for automatic contextual escaping.
 - A business rule specific to one entry point (e.g. skipping empty games, only relevant to `ImportFromRomsFolder`) is applied at that entry point's loop, not inside the lower-level generic method it partly overlaps with (`(*Registry).Import`), so the generic method's semantics stay unaffected for other callers/tests.
+- Generated artifacts never auto-delete leftovers from a previous version of the tool (e.g. a stale `site/` subfolder after the consultation site moved to the registry root) — cleanup of old artifacts is left to the user.
 
 ## Other context files
 - [`models.md`](.vibe/models.md) — data models

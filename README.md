@@ -53,7 +53,7 @@ batocera-scrap-manager config add-roms-folder /userdata/roms
 batocera-scrap-manager config list
 ```
 
-Update the registry from the configured ROMs folders (this also (re)generates a browsable HTML site inside the registry folder, at `site/index.html`):
+Update the registry from the configured ROMs folders (this also (re)generates a browsable HTML site at the root of the registry folder, at `index.html`):
 
 ```sh
 batocera-scrap-manager update

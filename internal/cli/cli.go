@@ -42,7 +42,7 @@ func Execute(args []string, out io.Writer) int {
 	case "update":
 		return runUpdate(out)
 	case "scrape":
-		return runScrape(out)
+		return runScrape(args[1:], out)
 	case "remove":
 		return runRemove(args[1:], out)
 	default:

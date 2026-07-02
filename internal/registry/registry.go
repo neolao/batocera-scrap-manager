@@ -416,6 +416,63 @@ func mergeGame(dst *gamelist.Game, src gamelist.Game) bool {
 	return changed
 }
 
+// CompleteGame fills the gaps of a single local game entry, identified by
+// system and romFilename (matched by ROM base name, ignoring any directory
+// prefix, like the rest of the registry — see decisions/005), from the
+// matching entry already known in reg, then copies any newly referenced
+// media file from registryFolder into romsFolder. It returns
+// ErrGameNotFound if the game has no entry in the system's local
+// gamelist.xml, or no matching entry exists in reg. completed reports
+// whether any field was actually filled; failed reports whether copying the
+// newly filled media then failed — the local gamelist.xml is still
+// rewritten with the filled fields in that case, mirroring
+// CompleteRomsFolder's per-game failure handling. If onProgress is
+// non-nil, it is called once, only when a field was actually filled.
+func CompleteGame(reg *Registry, romsFolder, registryFolder, system, romFilename string, onProgress func(CompletionEvent)) (completed, failed bool, err error) {
+	gamelistPath := filepath.Join(romsFolder, system, "gamelist.xml")
+	games, parseErr := gamelist.ParseFile(gamelistPath)
+	if parseErr != nil {
+		return false, false, ErrGameNotFound
+	}
+
+	name := filepath.Base(romFilename)
+	i := -1
+	for idx, g := range games {
+		if filepath.Base(g.Path) == name {
+			i = idx
+			break
+		}
+	}
+	if i == -1 {
+		return false, false, ErrGameNotFound
+	}
+
+	j := reg.indexOf(system, games[i].Path)
+	if j == -1 {
+		return false, false, ErrGameNotFound
+	}
+
+	before := games[i]
+	if !mergeGame(&games[i], reg.Entries[j].Game) {
+		return false, false, nil
+	}
+
+	if onProgress != nil {
+		onProgress(CompletionEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: games[i].Name})
+	}
+
+	copyErr := copyFilledMedia(before, games[i], registryFolder, romsFolder, system)
+
+	if writeErr := gamelist.WriteFile(gamelistPath, games); writeErr != nil {
+		return false, false, writeErr
+	}
+
+	if copyErr != nil {
+		return false, true, nil
+	}
+	return true, false, nil
+}
+
 // copyFilledMedia copies, from srcRoot into dstRoot, every media file whose
 // reference was newly filled between before and after (i.e. empty in
 // before, non-empty in after).

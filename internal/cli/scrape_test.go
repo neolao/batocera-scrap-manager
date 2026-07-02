@@ -220,6 +220,80 @@ func TestExecute_Scrape_RegistryNotConfigured_ReturnsErrorCode(t *testing.T) {
 	}
 }
 
+func TestExecute_Scrape_TargetedPath_CompletesOnlyThatGame(t *testing.T) {
+	romsFolder := writeScrapeFixtureRomsFolder(t)
+	registryFolder := setScrapeConfig(t, romsFolder)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic", "A classic platformer.")
+	gamePath := filepath.Join(romsFolder, "megadrive", "Sonic.zip")
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape", gamePath}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if strings.TrimSpace(out.String()) == "" || !strings.Contains(out.String(), "1 processed") || !strings.Contains(out.String(), "1 completed") {
+		t.Errorf("output = %q, want a summary mentioning 1 processed, 1 completed", out.String())
+	}
+
+	games, err := os.ReadFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"))
+	if err != nil {
+		t.Fatalf("read gamelist.xml: %v", err)
+	}
+	if !strings.Contains(string(games), "A classic platformer.") {
+		t.Errorf("gamelist.xml = %q, want Sonic's description filled in", games)
+	}
+}
+
+func TestExecute_Scrape_TargetedPath_AlreadyComplete_PrintsZeroCompletedSummary(t *testing.T) {
+	romsFolder := writeScrapeFixtureRomsFolder(t)
+	registryFolder := setScrapeConfig(t, romsFolder)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Golden Axe.zip", "Golden Axe", "A different desc")
+	gamePath := filepath.Join(romsFolder, "megadrive", "Golden Axe.zip")
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape", gamePath}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "1 processed") || !strings.Contains(out.String(), "0 completed") {
+		t.Errorf("output = %q, want a summary mentioning 1 processed, 0 completed", out.String())
+	}
+}
+
+func TestExecute_Scrape_TargetedPath_OutsideConfiguredRomsFolders_ReturnsErrorCode(t *testing.T) {
+	romsFolder := writeScrapeFixtureRomsFolder(t)
+	setScrapeConfig(t, romsFolder)
+	outsidePath := filepath.Join(t.TempDir(), "megadrive", "Sonic.zip")
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape", outsidePath}, &out)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), "error") {
+		t.Errorf("output = %q, want it to mention an error", out.String())
+	}
+}
+
+func TestExecute_Scrape_TargetedPath_NoMatchingRegistryEntry_ReturnsErrorCode(t *testing.T) {
+	romsFolder := writeScrapeFixtureRomsFolder(t)
+	setScrapeConfig(t, romsFolder)
+	gamePath := filepath.Join(romsFolder, "megadrive", "Sonic.zip")
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape", gamePath}, &out)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), "error") {
+		t.Errorf("output = %q, want it to mention an error", out.String())
+	}
+}
+
 func TestExecute_Scrape_RomsFolderMissingOnDisk_ReturnsErrorCode(t *testing.T) {
 	missingFolder := filepath.Join(t.TempDir(), "does-not-exist")
 	setScrapeConfig(t, missingFolder)

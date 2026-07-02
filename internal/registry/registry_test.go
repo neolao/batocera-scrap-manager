@@ -922,3 +922,163 @@ func TestRemove_GameInSubfolder_FoundByFilenameAlone(t *testing.T) {
 		t.Errorf("Entries = %v, want empty", reg.Entries)
 	}
 }
+
+func TestCompleteGame_IncompleteLocalEntry_FillsFromRegistryAndCopiesMedia(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	completed, failed, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	if err != nil {
+		t.Fatalf("CompleteGame() error = %v, want nil", err)
+	}
+	if !completed {
+		t.Error("completed = false, want true (Sonic had gaps filled)")
+	}
+	if failed {
+		t.Error("failed = true, want false")
+	}
+
+	games, err := gamelist.ParseFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"))
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v, want nil", err)
+	}
+	var sonic, goldenAxe gamelist.Game
+	for _, g := range games {
+		switch g.Name {
+		case "Sonic":
+			sonic = g
+		case "Golden Axe":
+			goldenAxe = g
+		}
+	}
+	if sonic.Desc != "A classic platformer." {
+		t.Errorf("Sonic.Desc = %q, want filled from registry", sonic.Desc)
+	}
+	if goldenAxe.Desc != "Already complete" {
+		t.Errorf("Golden Axe.Desc = %q, want left untouched (not the targeted game)", goldenAxe.Desc)
+	}
+
+	copiedImage := filepath.Join(romsFolder, "megadrive", "images", "Sonic.png")
+	if _, err := os.Stat(copiedImage); err != nil {
+		t.Errorf("cover art not copied to %s: %v", copiedImage, err)
+	}
+}
+
+func TestCompleteGame_AlreadyCompleteLocalEntry_ReturnsNotCompletedNoError(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	completed, failed, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", nil)
+
+	if err != nil {
+		t.Fatalf("CompleteGame() error = %v, want nil", err)
+	}
+	if completed {
+		t.Error("completed = true, want false (Golden Axe already complete)")
+	}
+	if failed {
+		t.Error("failed = true, want false")
+	}
+
+	games, err := gamelist.ParseFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"))
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v, want nil", err)
+	}
+	for _, g := range games {
+		if g.Name == "Golden Axe" && g.Desc != "Already complete" {
+			t.Errorf("Golden Axe.Desc = %q, want local value preserved", g.Desc)
+		}
+	}
+}
+
+func TestCompleteGame_NoMatchingRegistryEntry_ReturnsErrGameNotFound(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	_, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Unknown.zip", nil)
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Errorf("CompleteGame() error = %v, want ErrGameNotFound (Unknown.zip has no registry entry)", err)
+	}
+}
+
+func TestCompleteGame_RomNotInLocalGamelist_ReturnsErrGameNotFound(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	_, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Ghost.zip", nil)
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Errorf("CompleteGame() error = %v, want ErrGameNotFound (Ghost.zip is not in the local gamelist.xml)", err)
+	}
+}
+
+func TestCompleteGame_SystemHasNoLocalGamelist_ReturnsErrGameNotFound(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	_, _, err := CompleteGame(reg, romsFolder, registryFolder, "mastersystem", "Alex Kidd.zip", nil)
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Errorf("CompleteGame() error = %v, want ErrGameNotFound (mastersystem has no local gamelist.xml)", err)
+	}
+}
+
+func TestCompleteGame_ProgressCallback_FiresWithTheGamesLocalPosition(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	var events []CompletionEvent
+	_, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", func(e CompletionEvent) {
+		events = append(events, e)
+	})
+
+	if err != nil {
+		t.Fatalf("CompleteGame() error = %v, want nil", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d progress events, want 1", len(events))
+	}
+	if events[0].System != "megadrive" || events[0].GameName != "Sonic" || events[0].GameIndex != 1 || events[0].GameCount != 3 {
+		t.Errorf("events[0] = %+v, want System=megadrive GameName=Sonic GameIndex=1 GameCount=3", events[0])
+	}
+}
+
+func TestCompleteGame_MediaCopyFails_ReturnsFailedButStillFillsGamelist(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	megadrive := filepath.Join(romsFolder, "megadrive")
+	if err := os.WriteFile(filepath.Join(megadrive, "images"), []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write blocking file: %v", err)
+	}
+
+	completed, failed, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	if err != nil {
+		t.Fatalf("CompleteGame() error = %v, want nil (per-game failure, not fatal)", err)
+	}
+	if completed {
+		t.Error("completed = true, want false (media copy failed)")
+	}
+	if !failed {
+		t.Error("failed = false, want true")
+	}
+
+	games, err := gamelist.ParseFile(filepath.Join(megadrive, "gamelist.xml"))
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v, want nil", err)
+	}
+	for _, g := range games {
+		if g.Name == "Sonic" && g.Desc != "A classic platformer." {
+			t.Errorf("Sonic.Desc = %q, want filled from registry despite the media copy failure", g.Desc)
+		}
+	}
+}

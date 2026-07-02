@@ -10,7 +10,7 @@ A command-line tool for managing game scraping data (metadata, box art, etc.) on
 - Update the registry in one step from the configured ROMs folders: new games are added, games whose metadata changed are refreshed, and a summary (added / updated / unchanged) is displayed. Games with no scraped data (no description and no jaquette) are skipped, so the registry only holds games worth keeping.
 - See live progress (current system and a per-game counter) while the registry is being updated, instead of waiting silently for the final summary.
 - The registry keeps a copy of each game's cover art, video, marquee, and thumbnail alongside its metadata, organized by system just like on Batocera itself.
-- Complete a ROMs folder's missing metadata and media (description, jaquette, rating, genre, etc.) using the registry as the source of already-known information, with a summary of processed / completed / failed entries.
+- Complete a ROMs folder's missing metadata and media (description, jaquette, rating, genre, etc.) using the registry as the source of already-known information, with a summary of processed / completed / failed entries. A single game can also be targeted by its path, to complete just that one.
 - Remove a specific game's entry (metadata and media) from the registry.
 - Browse the registry's content in a web browser: updating the registry generates a styled static HTML site listing every game grouped by system, with its name, a short description, and jaquette, a navigation bar (scrollable when many systems are configured) to jump between systems, and a layout that stays readable on small screens.
 - Each game on the consultation site opens a detail view showing its full description, rating, release year, developer, publisher, genre, number of players, and gameplay video when available.
@@ -64,6 +64,12 @@ Complete a ROMs folder's missing metadata and media from the registry:
 
 ```sh
 batocera-scrap-manager scrape
+```
+
+Complete a single game instead, by giving its path in a configured ROMs folder:
+
+```sh
+batocera-scrap-manager scrape /userdata/roms/megadrive/Sonic.zip
 ```
 
 Remove a game's entry from the registry:

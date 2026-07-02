@@ -1,14 +1,17 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 
 	"github.com/neolao/batocera-scrap-manager/internal/config"
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
 )
 
-func runScrape(out io.Writer) int {
+func runScrape(args []string, out io.Writer) int {
 	configPath, err := config.DefaultPath()
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
@@ -29,6 +32,10 @@ func runScrape(out io.Writer) int {
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 1
+	}
+
+	if len(args) > 0 {
+		return runScrapeTargeted(reg, cfg, args[0], out)
 	}
 
 	var processed, completed, failed int
@@ -54,4 +61,71 @@ func runScrape(out io.Writer) int {
 
 	fmt.Fprintf(out, "%d processed, %d completed, %d failed\n", processed, completed, failed)
 	return 0
+}
+
+// runScrapeTargeted completes a single game, identified by its real path on
+// disk, instead of every game in every configured ROMs folder. See
+// decisions/013 for why the path is a real disk path rather than one
+// relative to a configured ROMs folder.
+func runScrapeTargeted(reg *registry.Registry, cfg config.Config, path string, out io.Writer) int {
+	romsFolder, system, romFilename, err := resolveGamePath(cfg, path)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 1
+	}
+
+	lastSystem := ""
+	onProgress := func(e registry.CompletionEvent) {
+		if e.System != lastSystem {
+			fmt.Fprintf(out, "%s: %d game(s)\n", e.System, e.GameCount)
+			lastSystem = e.System
+		}
+		fmt.Fprintf(out, "  [%d/%d] %s: %s\n", e.GameIndex, e.GameCount, romsFolder, e.GameName)
+	}
+
+	completedGame, failedGame, err := registry.CompleteGame(reg, romsFolder, cfg.RegistryFolder, system, romFilename, onProgress)
+	if err != nil {
+		if errors.Is(err, registry.ErrGameNotFound) {
+			fmt.Fprintf(out, "error: no game found in the registry for %q (system: %s)\n", path, system)
+			return 1
+		}
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 1
+	}
+
+	completed, failed := 0, 0
+	if completedGame {
+		completed = 1
+	}
+	if failedGame {
+		failed = 1
+	}
+	fmt.Fprintf(out, "%d processed, %d completed, %d failed\n", 1, completed, failed)
+	return 0
+}
+
+// resolveGamePath finds which configured ROMs folder path falls under, and
+// derives the Batocera system (the ROMs folder's immediate subfolder) and
+// the ROM filename from it.
+func resolveGamePath(cfg config.Config, path string) (romsFolder, system, romFilename string, err error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	for _, folder := range cfg.RomsFolders {
+		rel, err := filepath.Rel(folder, absPath)
+		if err != nil || rel == "." || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+			continue
+		}
+
+		parts := strings.Split(rel, string(filepath.Separator))
+		if len(parts) < 2 {
+			continue
+		}
+
+		return folder, parts[0], filepath.Base(absPath), nil
+	}
+
+	return "", "", "", fmt.Errorf("%q is not inside any configured ROMs folder", path)
 }

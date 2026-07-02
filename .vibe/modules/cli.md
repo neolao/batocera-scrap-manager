@@ -28,6 +28,6 @@ The config file path is resolved via `config.DefaultPath()`: the `BATOCERA_SCRAP
 
 - Loads the config, fails with exit code 1 if `RegistryFolder` is not set (same message as `update`).
 - Loads the registry (read-only — never saved back), then calls `registry.CompleteRomsFolder` (passing the ROMs folder and the registry folder) for each configured ROMs folder; stops and returns exit code 1 as soon as a folder is not found.
-- The progress callback follows the same format as `update`'s: one line per system when its first game starts, one line per game examined.
-- Prints a summary `"%d processed, %d completed, %d failed"`.
+- The progress callback follows the same line format as `update`'s (`"<system>: <N> game(s)"` header, `"  [<index>/<count>] <name>"` per game), but unlike `update` it only fires — and only prints — for games that actually had a field completed from the registry; a game already fully complete, or unknown to the registry, produces no line, so identical metadata is silently skipped. The per-system header is triggered by the first event carrying a new system name, not by a fixed game index, since that first event does not always fall on that system's first game.
+- Prints a summary `"%d processed, %d completed, %d failed"`, still counting every game examined regardless of whether it produced a progress line.
 - No configured ROMs folder is a valid case (not an error): it prints a zero summary, with no progress lines.

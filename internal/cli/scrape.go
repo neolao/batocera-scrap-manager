@@ -31,15 +31,17 @@ func runScrape(out io.Writer) int {
 		return 1
 	}
 
-	onProgress := func(e registry.CompletionEvent) {
-		if e.GameIndex == 1 {
-			fmt.Fprintf(out, "%s: %d game(s)\n", e.System, e.GameCount)
-		}
-		fmt.Fprintf(out, "  [%d/%d] %s\n", e.GameIndex, e.GameCount, e.GameName)
-	}
-
 	var processed, completed, failed int
 	for _, romsFolder := range cfg.RomsFolders {
+		lastSystem := ""
+		onProgress := func(e registry.CompletionEvent) {
+			if e.System != lastSystem {
+				fmt.Fprintf(out, "%s: %d game(s)\n", e.System, e.GameCount)
+				lastSystem = e.System
+			}
+			fmt.Fprintf(out, "  [%d/%d] %s\n", e.GameIndex, e.GameCount, e.GameName)
+		}
+
 		p, c, f, err := registry.CompleteRomsFolder(reg, romsFolder, cfg.RegistryFolder, onProgress)
 		if err != nil {
 			fmt.Fprintf(out, "error: %v\n", err)

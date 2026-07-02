@@ -269,8 +269,10 @@ type CompletionEvent struct {
 // arborescence. Games with no matching registry entry, or already complete,
 // are left untouched. Systems without a local gamelist.xml are silently
 // skipped, since the registry only ever completes games already known
-// locally. If onProgress is non-nil, it is called once per local game as it
-// is examined.
+// locally. If onProgress is non-nil, it is called once per game that
+// actually had a field filled from the registry (whether or not copying its
+// media then succeeded) — games left untouched because they were already
+// complete, or unknown to the registry, produce no event.
 func CompleteRomsFolder(reg *Registry, romsFolder, registryFolder string, onProgress func(CompletionEvent)) (processed, completed, failed int, err error) {
 	dirEntries, err := os.ReadDir(romsFolder)
 	if err != nil {
@@ -295,9 +297,6 @@ func CompleteRomsFolder(reg *Registry, romsFolder, registryFolder string, onProg
 
 		dirty := false
 		for i := range games {
-			if onProgress != nil {
-				onProgress(CompletionEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: games[i].Name})
-			}
 			processed++
 
 			j := reg.indexOf(system, games[i].Path)
@@ -310,6 +309,10 @@ func CompleteRomsFolder(reg *Registry, romsFolder, registryFolder string, onProg
 				continue
 			}
 			dirty = true
+
+			if onProgress != nil {
+				onProgress(CompletionEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: games[i].Name})
+			}
 
 			if copyErr := copyFilledMedia(before, games[i], registryFolder, romsFolder, system); copyErr != nil {
 				failed++

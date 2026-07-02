@@ -578,7 +578,7 @@ func TestCompleteRomsFolder_NoMatchingRegistryEntry_LeavesGameUnchanged(t *testi
 	}
 }
 
-func TestCompleteRomsFolder_ProgressCallback_ReportsPerGame(t *testing.T) {
+func TestCompleteRomsFolder_ProgressCallback_OnlyReportsGamesActuallyChanged(t *testing.T) {
 	romsFolder := writeIncompleteRomsFolder(t)
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
@@ -591,11 +591,33 @@ func TestCompleteRomsFolder_ProgressCallback_ReportsPerGame(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompleteRomsFolder() error = %v, want nil", err)
 	}
-	if len(events) != 3 {
-		t.Fatalf("got %d progress events, want 3 (one per local game)", len(events))
+	if len(events) != 1 {
+		t.Fatalf("got %d progress events, want 1 (only Sonic had metadata filled; Golden Axe already complete and Unknown has no registry match are not events)", len(events))
 	}
-	if events[0].System != "megadrive" || events[0].GameCount != 3 {
-		t.Errorf("events[0] = %+v, want System=megadrive GameCount=3", events[0])
+	if events[0].System != "megadrive" || events[0].GameName != "Sonic" {
+		t.Errorf("events[0] = %+v, want System=megadrive GameName=Sonic", events[0])
+	}
+}
+
+func TestCompleteRomsFolder_MediaCopyFails_StillReportsProgressForTheAttemptedChange(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	megadrive := filepath.Join(romsFolder, "megadrive")
+	if err := os.WriteFile(filepath.Join(megadrive, "images"), []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write blocking file: %v", err)
+	}
+
+	var events []CompletionEvent
+	_, _, _, err := CompleteRomsFolder(reg, romsFolder, registryFolder, func(e CompletionEvent) {
+		events = append(events, e)
+	})
+
+	if err != nil {
+		t.Fatalf("CompleteRomsFolder() error = %v, want nil", err)
+	}
+	if len(events) != 1 || events[0].GameName != "Sonic" {
+		t.Fatalf("events = %+v, want 1 event for Sonic even though its media copy failed", events)
 	}
 }
 

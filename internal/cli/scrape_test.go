@@ -84,6 +84,26 @@ func TestExecute_Scrape_NominalFixture_CompletesGameAndPrintsSummary(t *testing.
 	}
 }
 
+func TestExecute_Scrape_NominalFixture_LiveOutputOnlyMentionsChangedGame(t *testing.T) {
+	romsFolder := writeScrapeFixtureRomsFolder(t)
+	registryFolder := setScrapeConfig(t, romsFolder)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic", "A classic platformer.")
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Golden Axe.zip", "Golden Axe", "A different desc, should not be shown")
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "Sonic") {
+		t.Errorf("output = %q, want it to mention Sonic (actually changed)", out.String())
+	}
+	if strings.Contains(out.String(), "Golden Axe") {
+		t.Errorf("output = %q, want it to NOT mention Golden Axe (already complete, no change)", out.String())
+	}
+}
+
 func TestExecute_Scrape_AlreadyCompleteEntry_NotOverwrittenAndNotCounted(t *testing.T) {
 	romsFolder := writeScrapeFixtureRomsFolder(t)
 	registryFolder := setScrapeConfig(t, romsFolder)

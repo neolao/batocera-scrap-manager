@@ -10,7 +10,7 @@ Defined in: `internal/config/config.go`
 ## Game
 | Field | Type | Notes |
 |---|---|---|
-| Path | string | ROM path relative to the system folder, deduplication key |
+| Path | string | ROM path relative to the system folder, as found in `gamelist.xml`; the registry matches entries by its filename alone (`filepath.Base`), ignoring any subfolder prefix |
 | Name | string | |
 | Desc | string | |
 | Image | string | |

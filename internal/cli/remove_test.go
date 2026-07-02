@@ -23,7 +23,7 @@ func TestExecute_Remove_ExistingGame_DeletesEntryAndConfirms(t *testing.T) {
 	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic", "A classic platformer.")
 	var out bytes.Buffer
 
-	code := Execute([]string{"remove", "megadrive", "./Sonic.zip"}, &out)
+	code := Execute([]string{"remove", "megadrive", "Sonic.zip"}, &out)
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
@@ -41,7 +41,7 @@ func TestExecute_Remove_GameNotFound_ReturnsErrorCode(t *testing.T) {
 	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic", "A classic platformer.")
 	var out bytes.Buffer
 
-	code := Execute([]string{"remove", "megadrive", "./Does Not Exist.zip"}, &out)
+	code := Execute([]string{"remove", "megadrive", "Does Not Exist.zip"}, &out)
 
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
@@ -54,11 +54,26 @@ func TestExecute_Remove_GameNotFound_ReturnsErrorCode(t *testing.T) {
 	}
 }
 
+func TestExecute_Remove_GameInSubfolder_FoundByFilenameAlone(t *testing.T) {
+	registryFolder := setRemoveConfig(t)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./sub/Sonic.zip", "Sonic", "A classic platformer.")
+	var out bytes.Buffer
+
+	code := Execute([]string{"remove", "megadrive", "Sonic.zip"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if _, err := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); err == nil {
+		t.Error("Sonic.json still exists, want it deleted even though the original ROM was in a subfolder")
+	}
+}
+
 func TestExecute_Remove_RegistryNotConfigured_ReturnsErrorCode(t *testing.T) {
 	withTempConfig(t)
 	var out bytes.Buffer
 
-	code := Execute([]string{"remove", "megadrive", "./Sonic.zip"}, &out)
+	code := Execute([]string{"remove", "megadrive", "Sonic.zip"}, &out)
 
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)

@@ -102,16 +102,17 @@ func gameFileName(g gamelist.Game) string {
 }
 
 // ErrGameNotFound is returned by Remove when no entry matches the given
-// system and ROM path.
+// system and ROM filename.
 var ErrGameNotFound = errors.New("registry: game not found")
 
 // Remove deletes, from the registry folder at registryFolder, the metadata
 // file and every media file (cover art, video, marquee, thumbnail)
-// belonging to the entry matching system and romPath, then removes that
-// entry from reg. It returns ErrGameNotFound, without modifying anything, if
-// no entry matches.
-func Remove(reg *Registry, registryFolder, system, romPath string) error {
-	i := reg.indexOf(system, romPath)
+// belonging to the entry matching system and romFilename (e.g. "Sonic.zip"
+// — any directory prefix is ignored, since the registry does not reproduce
+// the ROM's original subfolder), then removes that entry from reg. It
+// returns ErrGameNotFound, without modifying anything, if no entry matches.
+func Remove(reg *Registry, registryFolder, system, romFilename string) error {
+	i := reg.indexOf(system, romFilename)
 	if i == -1 {
 		return ErrGameNotFound
 	}
@@ -167,8 +168,10 @@ func (r *Registry) importGame(system string, g gamelist.Game) importStatus {
 
 // Import merges games (belonging to system) into the registry. An entry is
 // considered already known when an existing entry has the same system and
-// the same game path; if its metadata differs from the imported game it is
-// replaced and counted as updated, otherwise it is counted as unchanged.
+// the same ROM filename (ignoring any directory prefix, since the registry
+// stores entries flat per system); if its metadata differs from the
+// imported game it is replaced and counted as updated, otherwise it is
+// counted as unchanged.
 func (r *Registry) Import(system string, games []gamelist.Game) (added, updated, unchanged int) {
 	for _, g := range games {
 		switch r.importGame(system, g) {
@@ -183,9 +186,14 @@ func (r *Registry) Import(system string, games []gamelist.Game) (added, updated,
 	return added, updated, unchanged
 }
 
+// indexOf finds the entry matching system and the ROM's filename (the
+// base name of path, ignoring any directory prefix) — the registry is
+// stored flat per system on disk, so two ROMs sharing a filename in
+// different subfolders of the same system are the same entry.
 func (r *Registry) indexOf(system, path string) int {
+	name := filepath.Base(path)
 	for i, e := range r.Entries {
-		if e.System == system && e.Game.Path == path {
+		if e.System == system && filepath.Base(e.Game.Path) == name {
 			return i
 		}
 	}

@@ -32,7 +32,7 @@ The registry can also flow back the other way: once it holds richer information 
 
 ## Removing an entry from the registry
 
-A game's entry — its metadata sheet and every media file it owns in the registry — can also be removed on demand, by designating it through its system and its exact ROM path (the same identifying pair used everywhere else in the registry). Removal deletes the matching files from disk and drops the entry, without touching any other game; asking to remove a game that is not in the registry is reported as an error rather than silently doing nothing.
+A game's entry — its metadata sheet and every media file it owns in the registry — can also be removed on demand, by designating it through its system and its ROM filename (e.g. `Sonic.zip`); no need to know or reconstruct its original subfolder, since the registry itself never reproduces one. Removal deletes the matching files from disk and drops the entry, without touching any other game; asking to remove a game that is not in the registry is reported as an error rather than silently doing nothing.
 
 ## Registry layout
 

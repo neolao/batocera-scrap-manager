@@ -145,6 +145,26 @@ func TestImport_SamePathDifferentSystem_TreatedAsDistinctEntries(t *testing.T) {
 	}
 }
 
+func TestImport_SameFilenameDifferentSubfolder_TreatedAsSameEntry(t *testing.T) {
+	reg := &Registry{}
+	reg.Import("megadrive", []gamelist.Game{{Path: "./sub1/Sonic.zip", Name: "Sonic"}})
+
+	added, updated, unchanged := reg.Import("megadrive", []gamelist.Game{{Path: "./sub2/Sonic.zip", Name: "Sonic"}})
+
+	if added != 0 {
+		t.Errorf("added = %d, want 0 (same filename in a different subfolder matches the existing entry)", added)
+	}
+	if updated != 1 {
+		t.Errorf("updated = %d, want 1 (the stored path changed)", updated)
+	}
+	if unchanged != 0 {
+		t.Errorf("unchanged = %d, want 0", unchanged)
+	}
+	if len(reg.Entries) != 1 {
+		t.Fatalf("Entries = %v, want 1 (deduplicated by filename, not full path)", reg.Entries)
+	}
+}
+
 func TestImport_ExistingGameWithChangedMetadata_UpdatesEntryAndReturnsCount(t *testing.T) {
 	reg := &Registry{}
 	reg.Import("megadrive", []gamelist.Game{{Path: "./a.zip", Name: "A", Desc: "old desc"}})
@@ -686,7 +706,7 @@ func writeRegistryWithSonicAndMedia(t *testing.T) (registryFolder string, reg *R
 func TestRemove_ExistingGameWithMedia_DeletesJSONAndMediaAndEntry(t *testing.T) {
 	registryFolder, reg := writeRegistryWithSonicAndMedia(t)
 
-	err := Remove(reg, registryFolder, "megadrive", "./Sonic.zip")
+	err := Remove(reg, registryFolder, "megadrive", "Sonic.zip")
 
 	if err != nil {
 		t.Fatalf("Remove() error = %v, want nil", err)
@@ -708,7 +728,7 @@ func TestRemove_ExistingGameWithMedia_DeletesJSONAndMediaAndEntry(t *testing.T) 
 func TestRemove_GameWithoutMedia_DeletesJSONWithoutError(t *testing.T) {
 	registryFolder, reg := writeRegistryWithSonicAndMedia(t)
 
-	err := Remove(reg, registryFolder, "megadrive", "./Golden Axe.zip")
+	err := Remove(reg, registryFolder, "megadrive", "Golden Axe.zip")
 
 	if err != nil {
 		t.Fatalf("Remove() error = %v, want nil", err)
@@ -721,7 +741,7 @@ func TestRemove_GameWithoutMedia_DeletesJSONWithoutError(t *testing.T) {
 func TestRemove_GameNotFound_ReturnsErrGameNotFoundWithoutModifyingRegistry(t *testing.T) {
 	registryFolder, reg := writeRegistryWithSonicAndMedia(t)
 
-	err := Remove(reg, registryFolder, "megadrive", "./Does Not Exist.zip")
+	err := Remove(reg, registryFolder, "megadrive", "Does Not Exist.zip")
 
 	if !errors.Is(err, ErrGameNotFound) {
 		t.Fatalf("Remove() error = %v, want ErrGameNotFound", err)
@@ -744,7 +764,7 @@ func TestRemove_SameRomPathDifferentSystem_OnlyRemovesMatchingSystem(t *testing.
 		t.Fatalf("Save() error = %v, want nil", err)
 	}
 
-	err := Remove(reg, registryFolder, "megadrive", "./a.zip")
+	err := Remove(reg, registryFolder, "megadrive", "a.zip")
 
 	if err != nil {
 		t.Fatalf("Remove() error = %v, want nil", err)
@@ -754,5 +774,24 @@ func TestRemove_SameRomPathDifferentSystem_OnlyRemovesMatchingSystem(t *testing.
 	}
 	if _, statErr := os.Stat(filepath.Join(registryFolder, "mastersystem", "a.json")); statErr != nil {
 		t.Errorf("mastersystem/a.json should still exist: %v", statErr)
+	}
+}
+
+func TestRemove_GameInSubfolder_FoundByFilenameAlone(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./sub/Sonic.zip", Name: "Sonic"}},
+	}}
+	if err := Save(registryFolder, reg); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+
+	err := Remove(reg, registryFolder, "megadrive", "Sonic.zip")
+
+	if err != nil {
+		t.Fatalf("Remove() error = %v, want nil (should be found by filename alone, regardless of its original subfolder)", err)
+	}
+	if len(reg.Entries) != 0 {
+		t.Errorf("Entries = %v, want empty", reg.Entries)
 	}
 }

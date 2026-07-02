@@ -67,6 +67,6 @@ batocera-scrap-manager scrape
 Remove a game's entry from the registry:
 
 ```sh
-batocera-scrap-manager remove megadrive ./Sonic.zip
+batocera-scrap-manager remove megadrive Sonic.zip
 ```
 <!-- vibe:end:usage -->

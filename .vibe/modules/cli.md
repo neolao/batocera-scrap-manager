@@ -26,10 +26,10 @@ The config file path is resolved via `config.DefaultPath()`: the `BATOCERA_SCRAP
 ## `remove` subcommand
 `internal/cli/remove.go` implements `runRemove(args []string, out io.Writer) int`, dispatched by `Execute` on `args[0] == "remove"`.
 
-- Expects two positional arguments, `<system> <rom-path>`; prints a usage message and returns exit code 1 if either is missing.
+- Expects two positional arguments, `<system> <rom-filename>` (e.g. `Sonic.zip` — no need for the original subfolder, if any); prints a usage message and returns exit code 1 if either is missing.
 - Loads the config, fails with exit code 1 if `RegistryFolder` is not set (same message as `update`/`scrape`).
-- Loads the registry, then calls `registry.Remove`. On `registry.ErrGameNotFound`, prints an error naming the system and path and returns exit code 1; on any other error, prints it and returns exit code 1.
-- On success, prints a one-line confirmation (`"removed <rom-path> (system: <system>)"`) and returns exit code 0.
+- Loads the registry, then calls `registry.Remove`. On `registry.ErrGameNotFound`, prints an error naming the system and filename and returns exit code 1; on any other error, prints it and returns exit code 1.
+- On success, prints a one-line confirmation (`"removed <rom-filename> (system: <system>)"`) and returns exit code 0.
 
 ## `scrape` subcommand
 `internal/cli/scrape.go` implements `runScrape(out io.Writer) int`, dispatched by `Execute` on `args[0] == "scrape"`.

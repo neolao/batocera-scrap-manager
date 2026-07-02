@@ -9,7 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - Users can now complete a ROMs folder's missing metadata (description, jaquette, rating, genre, etc.) and media files with `batocera-scrap-manager scrape`, using the registry as the source of already-known information; only games that actually get new information appear in the live output, and a summary of processed/completed/failed entries is printed at the end.
-- Users can now remove a specific game's entry (metadata and media) from the registry with `batocera-scrap-manager remove <system> <rom-path>`.
+- Users can now remove a specific game's entry (metadata and media) from the registry with `batocera-scrap-manager remove <system> <rom-filename>`.
+
+### Fixed
+
+- The registry now recognizes a game by its ROM filename alone, instead of its full path: two ROMs with the same filename in different subfolders of the same system are correctly treated as the same game, instead of silently colliding on disk.
 
 ## [0.2.0] - 2026-07-02
 

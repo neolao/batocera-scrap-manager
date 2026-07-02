@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # Génération d'un Site HTML de Consultation du Registre
 

@@ -10,6 +10,7 @@ A command-line tool for managing game scraping data (metadata, box art, etc.) on
 - Update the registry in one step from the configured ROMs folders: new games are added, games whose metadata changed are refreshed, and a summary (added / updated / unchanged) is displayed.
 - See live progress (current system and a per-game counter) while the registry is being updated, instead of waiting silently for the final summary.
 - The registry keeps a copy of each game's cover art, video, marquee, and thumbnail alongside its metadata, organized by system just like on Batocera itself.
+- Complete a ROMs folder's missing metadata and media (description, jaquette, rating, genre, etc.) using the registry as the source of already-known information, with a summary of processed / completed / failed entries.
 <!-- vibe:end:features -->
 
 <!-- vibe:begin:install -->
@@ -54,5 +55,11 @@ Update the registry from the configured ROMs folders:
 
 ```sh
 batocera-scrap-manager update
+```
+
+Complete a ROMs folder's missing metadata and media from the registry:
+
+```sh
+batocera-scrap-manager scrape
 ```
 <!-- vibe:end:usage -->

@@ -229,15 +229,14 @@ func copyGameMedia(romsFolder, registryFolder, system string, g gamelist.Game) e
 }
 
 // copyMediaFile copies the media file at relPath (relative to the system
-// folder, as referenced in gamelist.xml) from romsFolder to registryFolder.
-// An empty relPath, or a referenced file missing on disk, is silently
-// ignored.
-func copyMediaFile(romsFolder, registryFolder, system, relPath string) error {
+// folder, as referenced in gamelist.xml) from srcRoot to dstRoot. An empty
+// relPath, or a referenced file missing on disk, is silently ignored.
+func copyMediaFile(srcRoot, dstRoot, system, relPath string) error {
 	if relPath == "" {
 		return nil
 	}
 
-	data, err := os.ReadFile(filepath.Join(romsFolder, system, relPath))
+	data, err := os.ReadFile(filepath.Join(srcRoot, system, relPath))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -245,9 +244,130 @@ func copyMediaFile(romsFolder, registryFolder, system, relPath string) error {
 		return err
 	}
 
-	dst := filepath.Join(registryFolder, system, relPath)
+	dst := filepath.Join(dstRoot, system, relPath)
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
 	return os.WriteFile(dst, data, 0o644)
+}
+
+// CompletionEvent describes one game being examined by CompleteRomsFolder,
+// for callers that want to report progress to the user as it runs.
+type CompletionEvent struct {
+	System    string
+	GameIndex int // 1-based index of this game within System's local game list
+	GameCount int // total number of games found for System
+	GameName  string
+}
+
+// CompleteRomsFolder scans the immediate subdirectories of romsFolder (each
+// one a Batocera system) for a gamelist.xml file, and for every local game
+// entry missing metadata fields (name, description, image, ...), fills the
+// gaps from the matching entry already known in reg (matched by system and
+// ROM path), then copies any newly referenced media file from
+// registryFolder into romsFolder, mirroring the Batocera per-system
+// arborescence. Games with no matching registry entry, or already complete,
+// are left untouched. Systems without a local gamelist.xml are silently
+// skipped, since the registry only ever completes games already known
+// locally. If onProgress is non-nil, it is called once per local game as it
+// is examined.
+func CompleteRomsFolder(reg *Registry, romsFolder, registryFolder string, onProgress func(CompletionEvent)) (processed, completed, failed int, err error) {
+	dirEntries, err := os.ReadDir(romsFolder)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	for _, dirEntry := range dirEntries {
+		if !dirEntry.IsDir() {
+			continue
+		}
+
+		system := dirEntry.Name()
+		gamelistPath := filepath.Join(romsFolder, system, "gamelist.xml")
+		if _, statErr := os.Stat(gamelistPath); statErr != nil {
+			continue
+		}
+
+		games, parseErr := gamelist.ParseFile(gamelistPath)
+		if parseErr != nil {
+			return processed, completed, failed, parseErr
+		}
+
+		dirty := false
+		for i := range games {
+			if onProgress != nil {
+				onProgress(CompletionEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: games[i].Name})
+			}
+			processed++
+
+			j := reg.indexOf(system, games[i].Path)
+			if j == -1 {
+				continue
+			}
+
+			before := games[i]
+			if !mergeGame(&games[i], reg.Entries[j].Game) {
+				continue
+			}
+			dirty = true
+
+			if copyErr := copyFilledMedia(before, games[i], registryFolder, romsFolder, system); copyErr != nil {
+				failed++
+				continue
+			}
+			completed++
+		}
+
+		if dirty {
+			if writeErr := gamelist.WriteFile(gamelistPath, games); writeErr != nil {
+				return processed, completed, failed, writeErr
+			}
+		}
+	}
+
+	return processed, completed, failed, nil
+}
+
+// mergeGame fills any empty field of dst with the corresponding non-empty
+// field of src, reporting whether anything was filled.
+func mergeGame(dst *gamelist.Game, src gamelist.Game) bool {
+	changed := false
+	fill := func(d *string, s string) {
+		if *d == "" && s != "" {
+			*d = s
+			changed = true
+		}
+	}
+	fill(&dst.Name, src.Name)
+	fill(&dst.Desc, src.Desc)
+	fill(&dst.Image, src.Image)
+	fill(&dst.Video, src.Video)
+	fill(&dst.Marquee, src.Marquee)
+	fill(&dst.Thumbnail, src.Thumbnail)
+	fill(&dst.Rating, src.Rating)
+	fill(&dst.ReleaseDate, src.ReleaseDate)
+	fill(&dst.Developer, src.Developer)
+	fill(&dst.Publisher, src.Publisher)
+	fill(&dst.Genre, src.Genre)
+	fill(&dst.Players, src.Players)
+	return changed
+}
+
+// copyFilledMedia copies, from srcRoot into dstRoot, every media file whose
+// reference was newly filled between before and after (i.e. empty in
+// before, non-empty in after).
+func copyFilledMedia(before, after gamelist.Game, srcRoot, dstRoot, system string) error {
+	for _, pair := range [][2]string{
+		{before.Image, after.Image},
+		{before.Video, after.Video},
+		{before.Marquee, after.Marquee},
+		{before.Thumbnail, after.Thumbnail},
+	} {
+		if pair[0] == "" && pair[1] != "" {
+			if err := copyMediaFile(srcRoot, dstRoot, system, pair[1]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

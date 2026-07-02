@@ -1,6 +1,7 @@
 package gamelist
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -110,5 +111,102 @@ func TestParseFile_FileDoesNotExist_ReturnsError(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("ParseFile() error = nil, want error for missing file")
+	}
+}
+
+func TestWrite_ThenParse_RoundTripsAllFields(t *testing.T) {
+	games := []Game{
+		{
+			Path: "./Sonic.zip", Name: "Sonic the Hedgehog", Desc: "A classic platformer.",
+			Image: "./media/images/Sonic.png", Video: "./media/videos/Sonic.mp4",
+			Marquee: "./media/marquees/Sonic.png", Thumbnail: "./media/thumbnails/Sonic.png",
+			Rating: "0.8", ReleaseDate: "19910101T000000", Developer: "Sonic Team",
+			Publisher: "Sega", Genre: "Platform", Players: "1",
+		},
+		{Path: "./Streets of Rage.zip", Name: "Streets of Rage", Genre: "Beat 'em up"},
+	}
+	var buf strings.Builder
+
+	err := Write(&buf, games)
+	if err != nil {
+		t.Fatalf("Write() error = %v, want nil", err)
+	}
+
+	got, err := Parse(strings.NewReader(buf.String()))
+	if err != nil {
+		t.Fatalf("Parse(Write() output) error = %v, want nil", err)
+	}
+	if len(got) != len(games) {
+		t.Fatalf("len(got) = %d, want %d", len(got), len(games))
+	}
+	if got[0] != games[0] {
+		t.Errorf("got[0] = %+v, want %+v", got[0], games[0])
+	}
+	if got[1] != games[1] {
+		t.Errorf("got[1] = %+v, want %+v", got[1], games[1])
+	}
+}
+
+func TestWrite_EmptyGameList_ProducesParsableEmptyList(t *testing.T) {
+	var buf strings.Builder
+
+	err := Write(&buf, nil)
+	if err != nil {
+		t.Fatalf("Write() error = %v, want nil", err)
+	}
+
+	got, err := Parse(strings.NewReader(buf.String()))
+	if err != nil {
+		t.Fatalf("Parse(Write() output) error = %v, want nil", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("len(got) = %d, want 0", len(got))
+	}
+}
+
+func TestWrite_NameWithSpecialXMLCharacters_EscapesAndRoundTrips(t *testing.T) {
+	games := []Game{{Path: "./game.zip", Name: `Tom & Jerry: "Cat" <Mouse>`}}
+	var buf strings.Builder
+
+	if err := Write(&buf, games); err != nil {
+		t.Fatalf("Write() error = %v, want nil", err)
+	}
+
+	got, err := Parse(strings.NewReader(buf.String()))
+	if err != nil {
+		t.Fatalf("Parse(Write() output) error = %v, want nil", err)
+	}
+	if len(got) != 1 || got[0].Name != games[0].Name {
+		t.Fatalf("got = %+v, want Name %q preserved", got, games[0].Name)
+	}
+}
+
+func TestWriteFile_ThenParseFile_RoundTrips(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gamelist.xml")
+	games := []Game{{Path: "./Sonic.zip", Name: "Sonic"}}
+
+	if err := WriteFile(path, games); err != nil {
+		t.Fatalf("WriteFile() error = %v, want nil", err)
+	}
+
+	got, err := ParseFile(path)
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v, want nil", err)
+	}
+	if len(got) != 1 || got[0] != games[0] {
+		t.Errorf("got = %+v, want %+v", got, games)
+	}
+}
+
+func TestWriteFile_DirectoryDoesNotExist_ReturnsError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing-dir", "gamelist.xml")
+
+	err := WriteFile(path, []Game{{Path: "./Sonic.zip"}})
+
+	if err == nil {
+		t.Fatal("WriteFile() error = nil, want error when parent directory does not exist")
+	}
+	if _, statErr := os.Stat(path); statErr == nil {
+		t.Errorf("file %q should not have been created", path)
 	}
 }

@@ -1,6 +1,6 @@
 # Module: cli
 **Role:** Entry point and command-line interface of batocera-scrap-manager — parses arguments and dispatches to commands.
-**Files:** `main.go`, `internal/cli/cli.go`, `internal/cli/config.go`, `internal/cli/update.go`
+**Files:** `main.go`, `internal/cli/cli.go`, `internal/cli/config.go`, `internal/cli/update.go`, `internal/cli/scrape.go`
 **Exports:** `cli.Execute(args []string, out io.Writer) int`
 **Depends on:** [`modules/config.md`](config.md), [`modules/registry.md`](registry.md)
 
@@ -21,4 +21,13 @@ The config file path is resolved via `config.DefaultPath()`: the `BATOCERA_SCRAP
 - Loads the registry, then calls `registry.ImportFromRomsFolder` (passing the ROMs folder, the registry folder, and a progress callback) for each configured ROMs folder; stops and returns exit code 1 as soon as a folder is not found.
 - The progress callback prints one line per system when its first game starts (`"<system>: <N> game(s)"`) and one line per game processed (`"  [<index>/<count>] <name>"`), as plain sequential output (no carriage-return overwrites or ANSI codes), so it stays readable when redirected to a file.
 - Saves the updated registry, then prints a summary `"%d added, %d updated, %d unchanged"`.
+- No configured ROMs folder is a valid case (not an error): it prints a zero summary, with no progress lines.
+
+## `scrape` subcommand
+`internal/cli/scrape.go` implements `runScrape(out io.Writer) int`, dispatched by `Execute` on `args[0] == "scrape"`.
+
+- Loads the config, fails with exit code 1 if `RegistryFolder` is not set (same message as `update`).
+- Loads the registry (read-only — never saved back), then calls `registry.CompleteRomsFolder` (passing the ROMs folder and the registry folder) for each configured ROMs folder; stops and returns exit code 1 as soon as a folder is not found.
+- The progress callback follows the same format as `update`'s: one line per system when its first game starts, one line per game examined.
+- Prints a summary `"%d processed, %d completed, %d failed"`.
 - No configured ROMs folder is a valid case (not an error): it prints a zero summary, with no progress lines.

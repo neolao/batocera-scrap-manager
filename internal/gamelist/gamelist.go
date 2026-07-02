@@ -1,4 +1,5 @@
-// Package gamelist parses EmulationStation/Batocera gamelist.xml files.
+// Package gamelist parses and writes EmulationStation/Batocera gamelist.xml
+// files.
 package gamelist
 
 import (
@@ -10,18 +11,18 @@ import (
 // Game is a single entry of a gamelist.xml file.
 type Game struct {
 	Path        string `xml:"path" json:"path"`
-	Name        string `xml:"name" json:"name"`
-	Desc        string `xml:"desc" json:"desc"`
-	Image       string `xml:"image" json:"image"`
-	Video       string `xml:"video" json:"video"`
-	Marquee     string `xml:"marquee" json:"marquee"`
-	Thumbnail   string `xml:"thumbnail" json:"thumbnail"`
-	Rating      string `xml:"rating" json:"rating"`
-	ReleaseDate string `xml:"releasedate" json:"release_date"`
-	Developer   string `xml:"developer" json:"developer"`
-	Publisher   string `xml:"publisher" json:"publisher"`
-	Genre       string `xml:"genre" json:"genre"`
-	Players     string `xml:"players" json:"players"`
+	Name        string `xml:"name,omitempty" json:"name"`
+	Desc        string `xml:"desc,omitempty" json:"desc"`
+	Image       string `xml:"image,omitempty" json:"image"`
+	Video       string `xml:"video,omitempty" json:"video"`
+	Marquee     string `xml:"marquee,omitempty" json:"marquee"`
+	Thumbnail   string `xml:"thumbnail,omitempty" json:"thumbnail"`
+	Rating      string `xml:"rating,omitempty" json:"rating"`
+	ReleaseDate string `xml:"releasedate,omitempty" json:"release_date"`
+	Developer   string `xml:"developer,omitempty" json:"developer"`
+	Publisher   string `xml:"publisher,omitempty" json:"publisher"`
+	Genre       string `xml:"genre,omitempty" json:"genre"`
+	Players     string `xml:"players,omitempty" json:"players"`
 }
 
 type gameListXML struct {
@@ -47,4 +48,30 @@ func ParseFile(path string) ([]Game, error) {
 	defer f.Close()
 
 	return Parse(f)
+}
+
+// Write encodes games as a gamelist.xml document to w.
+func Write(w io.Writer, games []Game) error {
+	if _, err := io.WriteString(w, xml.Header); err != nil {
+		return err
+	}
+	enc := xml.NewEncoder(w)
+	enc.Indent("", "  ")
+	if err := enc.Encode(gameListXML{Games: games}); err != nil {
+		return err
+	}
+	_, err := io.WriteString(w, "\n")
+	return err
+}
+
+// WriteFile writes games as a gamelist.xml document to the file at path,
+// creating it if needed or truncating it if it already exists.
+func WriteFile(path string, games []Game) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return Write(f, games)
 }

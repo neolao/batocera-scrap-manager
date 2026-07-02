@@ -4,8 +4,8 @@
 ## Modules
 - [`modules/cli.md`](.vibe/modules/cli.md) — entry point and command-line interface
 - [`modules/config.md`](.vibe/modules/config.md) — persistence of the configured registry folder and ROMs folders
-- [`modules/gamelist.md`](.vibe/modules/gamelist.md) — parsing of EmulationStation/Batocera `gamelist.xml` files
-- [`modules/registry.md`](.vibe/modules/registry.md) — centralized game index and media (one JSON file per game), import, and update detection from ROMs folders
+- [`modules/gamelist.md`](.vibe/modules/gamelist.md) — parsing and writing of EmulationStation/Batocera `gamelist.xml` files
+- [`modules/registry.md`](.vibe/modules/registry.md) — centralized game index and media (one JSON file per game); imports from ROMs folders into the registry, and completes ROMs folders back from the registry
 
 ## Observed patterns
 
@@ -18,6 +18,7 @@
 - Single-word CLI commands without subcommands (e.g. `update`) are also dispatched from a dedicated file (`update.go`), with a single `run<Command>(out io.Writer) int` function (without the `args` parameter when there is no subcommand to parse).
 - Media files referenced by a relative path (as found in `gamelist.xml`) are copied preserving that same relative path under the destination system folder, so the stored path string stays valid without rewriting it.
 - Long-running operations report progress via a nil-safe callback parameter (e.g. `onProgress func(ProgressEvent)`) rather than writing output directly, keeping the reporting/printing concern in the CLI layer and out of the domain package.
+- A reverse data flow (e.g. completing ROMs folders from the registry, mirroring the ROMs-folder-to-registry import) reuses the same low-level helpers (media file copy) by swapping which folder is the source and which is the destination, rather than duplicating the copy logic.
 
 ## Other context files
 - [`models.md`](.vibe/models.md) — data models

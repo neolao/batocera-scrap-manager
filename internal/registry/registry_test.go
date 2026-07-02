@@ -441,3 +441,198 @@ func TestImportFromRomsFolder_ReimportUnchangedGame_DoesNotRecopyMedia(t *testin
 		t.Error("copied image was recreated for an unchanged game, want no recopy")
 	}
 }
+
+func writeIncompleteRomsFolder(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+
+	megadrive := filepath.Join(root, "megadrive")
+	if err := os.MkdirAll(megadrive, 0o755); err != nil {
+		t.Fatalf("mkdir megadrive: %v", err)
+	}
+	xml := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Sonic.zip</path><name>Sonic</name></game>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name><desc>Already complete</desc><genre>Beat 'em up</genre></game>
+  <game><path>./Unknown.zip</path><name>Unknown</name></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(megadrive, "gamelist.xml"), []byte(xml), 0o644); err != nil {
+		t.Fatalf("write megadrive gamelist: %v", err)
+	}
+
+	return root
+}
+
+func registryWithSonicAndGoldenAxe(t *testing.T, registryFolder string) *Registry {
+	t.Helper()
+	images := filepath.Join(registryFolder, "megadrive", "images")
+	if err := os.MkdirAll(images, 0o755); err != nil {
+		t.Fatalf("mkdir registry images: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(images, "Sonic.png"), []byte("fake-cover-art"), 0o644); err != nil {
+		t.Fatalf("write registry cover art: %v", err)
+	}
+
+	return &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{
+			Path: "./Sonic.zip", Name: "Sonic", Desc: "A classic platformer.",
+			Image: "./images/Sonic.png", Genre: "Platform",
+		}},
+		{System: "megadrive", Game: gamelist.Game{
+			Path: "./Golden Axe.zip", Name: "Golden Axe", Desc: "A different desc, should not overwrite.",
+		}},
+	}}
+}
+
+func TestCompleteRomsFolder_IncompleteLocalEntry_FillsFromRegistryAndCopiesMedia(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	processed, completed, failed, err := CompleteRomsFolder(reg, romsFolder, registryFolder, nil)
+
+	if err != nil {
+		t.Fatalf("CompleteRomsFolder() error = %v, want nil", err)
+	}
+	if processed != 3 {
+		t.Errorf("processed = %d, want 3", processed)
+	}
+	if completed != 1 {
+		t.Errorf("completed = %d, want 1 (only Sonic had gaps filled)", completed)
+	}
+	if failed != 0 {
+		t.Errorf("failed = %d, want 0", failed)
+	}
+
+	games, err := gamelist.ParseFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"))
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v, want nil", err)
+	}
+	var sonic gamelist.Game
+	for _, g := range games {
+		if g.Name == "Sonic" {
+			sonic = g
+		}
+	}
+	if sonic.Desc != "A classic platformer." {
+		t.Errorf("Sonic.Desc = %q, want filled from registry", sonic.Desc)
+	}
+	if sonic.Image != "./images/Sonic.png" {
+		t.Errorf("Sonic.Image = %q, want filled from registry", sonic.Image)
+	}
+
+	copiedImage := filepath.Join(romsFolder, "megadrive", "images", "Sonic.png")
+	data, err := os.ReadFile(copiedImage)
+	if err != nil {
+		t.Fatalf("cover art not copied to %s: %v", copiedImage, err)
+	}
+	if string(data) != "fake-cover-art" {
+		t.Errorf("copied cover art content = %q, want %q", data, "fake-cover-art")
+	}
+}
+
+func TestCompleteRomsFolder_AlreadyCompleteLocalField_NotOverwrittenByRegistry(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	_, completed, _, err := CompleteRomsFolder(reg, romsFolder, registryFolder, nil)
+
+	if err != nil {
+		t.Fatalf("CompleteRomsFolder() error = %v, want nil", err)
+	}
+	if completed != 1 {
+		t.Fatalf("completed = %d, want 1 (Golden Axe already complete, should not count)", completed)
+	}
+
+	games, err := gamelist.ParseFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"))
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v, want nil", err)
+	}
+	for _, g := range games {
+		if g.Name == "Golden Axe" && g.Desc != "Already complete" {
+			t.Errorf("Golden Axe.Desc = %q, want local value preserved (not overwritten by registry)", g.Desc)
+		}
+	}
+}
+
+func TestCompleteRomsFolder_NoMatchingRegistryEntry_LeavesGameUnchanged(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	_, _, _, err := CompleteRomsFolder(reg, romsFolder, registryFolder, nil)
+
+	if err != nil {
+		t.Fatalf("CompleteRomsFolder() error = %v, want nil", err)
+	}
+
+	games, err := gamelist.ParseFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"))
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v, want nil", err)
+	}
+	for _, g := range games {
+		if g.Name == "Unknown" && g.Desc != "" {
+			t.Errorf("Unknown.Desc = %q, want left empty (no registry match)", g.Desc)
+		}
+	}
+}
+
+func TestCompleteRomsFolder_ProgressCallback_ReportsPerGame(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	var events []CompletionEvent
+	_, _, _, err := CompleteRomsFolder(reg, romsFolder, registryFolder, func(e CompletionEvent) {
+		events = append(events, e)
+	})
+
+	if err != nil {
+		t.Fatalf("CompleteRomsFolder() error = %v, want nil", err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("got %d progress events, want 3 (one per local game)", len(events))
+	}
+	if events[0].System != "megadrive" || events[0].GameCount != 3 {
+		t.Errorf("events[0] = %+v, want System=megadrive GameCount=3", events[0])
+	}
+}
+
+func TestCompleteRomsFolder_RomsFolderDoesNotExist_ReturnsError(t *testing.T) {
+	reg := &Registry{}
+
+	_, _, _, err := CompleteRomsFolder(reg, filepath.Join(t.TempDir(), "does-not-exist"), t.TempDir(), nil)
+
+	if err == nil {
+		t.Fatal("CompleteRomsFolder() error = nil, want error for missing ROMs folder")
+	}
+}
+
+func TestCompleteRomsFolder_MediaDestinationBlockedByFile_CountsGameAsFailedAndContinues(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	// Block the destination "images" folder in the ROMs folder with a plain
+	// file, so copying Sonic's cover art there fails.
+	megadrive := filepath.Join(romsFolder, "megadrive")
+	if err := os.WriteFile(filepath.Join(megadrive, "images"), []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write blocking file: %v", err)
+	}
+
+	processed, completed, failed, err := CompleteRomsFolder(reg, romsFolder, registryFolder, nil)
+
+	if err != nil {
+		t.Fatalf("CompleteRomsFolder() error = %v, want nil (per-game failure, not fatal)", err)
+	}
+	if processed != 3 {
+		t.Errorf("processed = %d, want 3", processed)
+	}
+	if failed != 1 {
+		t.Errorf("failed = %d, want 1 (Sonic's media copy blocked)", failed)
+	}
+	if completed != 0 {
+		t.Errorf("completed = %d, want 0", completed)
+	}
+}

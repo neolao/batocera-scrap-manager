@@ -46,3 +46,12 @@ Defined in: `internal/registry/registry.go`
 | GameCount | int | total number of games found for System |
 | GameName | string | |
 Defined in: `internal/registry/registry.go` (passed to the optional `onProgress` callback of `ImportFromRomsFolder`)
+
+## CompletionEvent
+| Field | Type | Notes |
+|---|---|---|
+| System | string | Batocera system name of the game being examined |
+| GameIndex | int | 1-based index of this game within System's local game list |
+| GameCount | int | total number of local games found for System |
+| GameName | string | |
+Defined in: `internal/registry/registry.go` (passed to the optional `onProgress` callback of `CompleteRomsFolder`)

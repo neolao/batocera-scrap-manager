@@ -7,7 +7,7 @@ batocera-scrap-manager is organized around three main areas that work together t
 ## The main parts
 
 **Command-line interface**
-The tool's entry point. It interprets the commands typed by the user (`config`, `update`, `--version`, `--help`) and displays results and error messages.
+The tool's entry point. It interprets the commands typed by the user (`config`, `update`, `scrape`, `--version`, `--help`) and displays results and error messages.
 
 **Configuration**
 Keeps track of two essential pieces of information between runs: where the registry lives, and which Batocera ROMs folders should be watched. This configuration is saved to disk and read back on every command.
@@ -25,6 +25,10 @@ The heart of the tool: a centralized index of all already-known games, along wit
 3. For each system, the `gamelist.xml` file (if it exists) is read and its games are compared against the content already present in the registry, with progress (the system name, then a counter for each game) displayed to the user as it happens.
 4. An unknown game is added to the registry, and its media files are copied into the registry; an already-known game whose metadata changed is refreshed and its media re-copied; an already-known, unchanged game is left untouched, with no unnecessary copying.
 5. The updated registry is saved, and a summary (games added, updated, unchanged) is displayed to the user.
+
+## Completing a ROMs folder from the registry
+
+The registry can also flow back the other way: once it holds richer information about a game (for instance because it was already fully scraped from another ROMs folder), that information can be used to complete a ROMs folder where the same game's local sheet is missing fields. For each system, the local `gamelist.xml` is compared against the matching registry entry; any field left empty locally (description, jaquette, rating, genre, release date...) is filled in from the registry, and any newly referenced media file is copied into the ROMs folder, mirroring its layout. Fields already present locally are always kept as-is — the registry only ever fills gaps, never overwrites existing data. A game with no matching registry entry, or already fully complete, is left untouched. A summary (games processed, completed, failed) is displayed to the user.
 
 ## Registry layout
 

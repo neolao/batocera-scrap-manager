@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # Aide --help pour Chaque Commande CLI
 

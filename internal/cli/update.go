@@ -6,6 +6,7 @@ import (
 
 	"github.com/neolao/batocera-scrap-manager/internal/config"
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
+	"github.com/neolao/batocera-scrap-manager/internal/site"
 )
 
 func runUpdate(out io.Writer) int {
@@ -51,6 +52,11 @@ func runUpdate(out io.Writer) int {
 	}
 
 	if err := registry.Save(cfg.RegistryFolder, reg); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 1
+	}
+
+	if err := site.Generate(reg, cfg.RegistryFolder); err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 1
 	}

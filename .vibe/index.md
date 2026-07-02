@@ -6,6 +6,7 @@
 - [`modules/config.md`](.vibe/modules/config.md) — persistence of the configured registry folder and ROMs folders
 - [`modules/gamelist.md`](.vibe/modules/gamelist.md) — parsing and writing of EmulationStation/Batocera `gamelist.xml` files
 - [`modules/registry.md`](.vibe/modules/registry.md) — centralized game index and media (one JSON file per game); imports from ROMs folders into the registry, completes ROMs folders back from the registry, and removes a game's entry on demand
+- [`modules/site.md`](.vibe/modules/site.md) — generates a static HTML site to browse the registry's content in a web browser
 
 ## Observed patterns
 
@@ -19,6 +20,7 @@
 - Media files referenced by a relative path (as found in `gamelist.xml`) are copied preserving that same relative path under the destination system folder, so the stored path string stays valid without rewriting it.
 - Long-running operations report progress via a nil-safe callback parameter (e.g. `onProgress func(ProgressEvent)`) rather than writing output directly, keeping the reporting/printing concern in the CLI layer and out of the domain package.
 - A reverse data flow (e.g. completing ROMs folders from the registry, mirroring the ROMs-folder-to-registry import) reuses the same low-level helpers (media file copy) by swapping which folder is the source and which is the destination, rather than duplicating the copy logic.
+- Rendering user-editable content (game names/descriptions from `gamelist.xml`) as HTML uses `html/template`, not `text/template`, for automatic contextual escaping.
 
 ## Other context files
 - [`models.md`](.vibe/models.md) — data models

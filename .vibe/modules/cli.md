@@ -2,7 +2,7 @@
 **Role:** Entry point and command-line interface of batocera-scrap-manager — parses arguments and dispatches to commands.
 **Files:** `main.go`, `internal/cli/cli.go`, `internal/cli/config.go`, `internal/cli/update.go`, `internal/cli/scrape.go`, `internal/cli/remove.go`
 **Exports:** `cli.Execute(args []string, out io.Writer) int`
-**Depends on:** [`modules/config.md`](config.md), [`modules/registry.md`](registry.md)
+**Depends on:** [`modules/config.md`](config.md), [`modules/registry.md`](registry.md), [`modules/site.md`](site.md)
 
 ## `config` subcommand
 `internal/cli/config.go` implements `runConfig(args []string, out io.Writer) int`, dispatched by `Execute` on `args[0] == "config"`.
@@ -20,8 +20,8 @@ The config file path is resolved via `config.DefaultPath()`: the `BATOCERA_SCRAP
 - Loads the config, fails with exit code 1 if `RegistryFolder` is not set (explicit error message).
 - Loads the registry, then calls `registry.ImportFromRomsFolder` (passing the ROMs folder, the registry folder, and a progress callback) for each configured ROMs folder; stops and returns exit code 1 as soon as a folder is not found.
 - The progress callback prints one line per system when its first game starts (`"<system>: <N> game(s)"`) and one line per game processed (`"  [<index>/<count>] <name>"`), as plain sequential output (no carriage-return overwrites or ANSI codes), so it stays readable when redirected to a file.
-- Saves the updated registry, then prints a summary `"%d added, %d updated, %d unchanged"`.
-- No configured ROMs folder is a valid case (not an error): it prints a zero summary, with no progress lines.
+- Saves the updated registry, then calls `site.Generate` to (re)generate the HTML consultation site inside the registry folder — see [`modules/site.md`](site.md) and [`decisions/006`](../decisions/006-auto-regenerate-html-site-on-update.md) — failing with exit code 1 if that fails, then prints a summary `"%d added, %d updated, %d unchanged"`.
+- No configured ROMs folder is a valid case (not an error): it prints a zero summary (and still (re)generates the site, e.g. showing "No games in the registry yet." on a first run), with no progress lines.
 
 ## `remove` subcommand
 `internal/cli/remove.go` implements `runRemove(args []string, out io.Writer) int`, dispatched by `Execute` on `args[0] == "remove"`.

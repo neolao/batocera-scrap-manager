@@ -26,3 +26,8 @@
 **Definition:** The reverse of Import: filling gaps left in a ROMs folder's own `gamelist.xml` (missing name, description, media, rating, genre, etc.) using the matching entry already known in the registry, without ever overwriting metadata already present locally. The registry is read-only in this flow; the ROMs folder is what gets written to.
 **Code:** `registry.CompleteRomsFolder` in `internal/registry/registry.go`
 **Do not confuse with:** Import, which flows in the opposite direction (ROMs folder → registry); or the `scrape` command (`internal/cli/scrape.go`), which is the CLI command exposing this completion mechanism to the user.
+
+## Consultation site
+**Definition:** The static HTML site (re)generated from the registry's content, letting a user browse games grouped by system (name, description, jaquette) in a web browser instead of opening individual metadata files.
+**Code:** `site.Generate` in `internal/site/site.go`
+**Do not confuse with:** the registry itself, which is the underlying data source — the consultation site is a read-only rendering of it, regenerated on every `update`.

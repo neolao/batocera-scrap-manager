@@ -18,6 +18,9 @@ Knows how to read `gamelist.xml` files, the standard format used by Batocera/Emu
 **Registry**
 The heart of the tool: a centralized index of all already-known games, along with their metadata and a copy of their media (cover art, video, marquee, thumbnail). It knows how to import game sheets from ROMs folders without creating duplicates, and to detect when the metadata of an already-known game has changed so it can be refreshed automatically.
 
+**Consultation site**
+Turns the registry's content into a static HTML site, so it can be browsed in a web browser without opening individual metadata files.
+
 ## How data flows
 
 1. The user specifies, via the configuration, where the registry lives and which ROMs folders to watch.
@@ -25,6 +28,11 @@ The heart of the tool: a centralized index of all already-known games, along wit
 3. For each system, the `gamelist.xml` file (if it exists) is read and its games are compared against the content already present in the registry, with progress (the system name, then a counter for each game) displayed to the user as it happens.
 4. An unknown game is added to the registry, and its media files are copied into the registry; an already-known game whose metadata changed is refreshed and its media re-copied; an already-known, unchanged game is left untouched, with no unnecessary copying.
 5. The updated registry is saved, and a summary (games added, updated, unchanged) is displayed to the user.
+6. The consultation site is (re)generated from the up-to-date registry, so it always reflects the latest update.
+
+## Browsing the registry as a website
+
+Every time the registry is updated, a small static website is (re)generated inside the registry folder (`site/index.html`). It lists every known game grouped by system, showing its name, description, and jaquette when one is available. A system with no games, or a game without a jaquette, is displayed cleanly rather than showing a broken image. Opening this file in a browser gives a quick, readable overview of the registry's content without needing to inspect individual metadata files.
 
 ## Completing a ROMs folder from the registry
 

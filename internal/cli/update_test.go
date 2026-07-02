@@ -170,6 +170,43 @@ func TestExecute_Update_NoRomsFoldersConfigured_PrintsZeroSummary(t *testing.T) 
 	}
 }
 
+func TestExecute_Update_NominalFixture_GeneratesSiteWithGames(t *testing.T) {
+	romsFolder := writeUpdateFixtureRomsFolder(t)
+	registryPath := setUpdateConfig(t, romsFolder)
+	var out bytes.Buffer
+
+	code := Execute([]string{"update"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	html, err := os.ReadFile(filepath.Join(registryPath, "site", "index.html"))
+	if err != nil {
+		t.Fatalf("site not generated: %v", err)
+	}
+	if !strings.Contains(string(html), "Sonic") || !strings.Contains(string(html), "megadrive") {
+		t.Errorf("generated site = %q, want it to list the imported games", string(html))
+	}
+}
+
+func TestExecute_Update_NoRomsFoldersConfigured_StillGeneratesSite(t *testing.T) {
+	registryPath := setUpdateConfig(t, "")
+	var out bytes.Buffer
+
+	code := Execute([]string{"update"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	html, err := os.ReadFile(filepath.Join(registryPath, "site", "index.html"))
+	if err != nil {
+		t.Fatalf("site not generated: %v", err)
+	}
+	if !strings.Contains(string(html), "No games") {
+		t.Errorf("generated site = %q, want a no-games message", string(html))
+	}
+}
+
 func TestExecute_Update_RegistryNotConfigured_ReturnsErrorCode(t *testing.T) {
 	withTempConfig(t)
 	var out bytes.Buffer

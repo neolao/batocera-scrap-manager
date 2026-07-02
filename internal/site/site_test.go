@@ -11,6 +11,20 @@ import (
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
 )
 
+// writeMediaFile creates a dummy media file on disk at
+// <registryFolder>/<system>/<relPath>, as if it had already been copied
+// there by a previous update, so existence checks in Generate find it.
+func writeMediaFile(t *testing.T, registryFolder, system, relPath string) {
+	t.Helper()
+	fullPath := filepath.Join(registryFolder, system, filepath.FromSlash(relPath))
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		t.Fatalf("failed to set up test media file: %v", err)
+	}
+	if err := os.WriteFile(fullPath, []byte("dummy"), 0o644); err != nil {
+		t.Fatalf("failed to set up test media file: %v", err)
+	}
+}
+
 func TestGenerate_GamesGroupedBySystem_ListsNameDescriptionAndJaquette(t *testing.T) {
 	registryFolder := t.TempDir()
 	reg := &registry.Registry{
@@ -29,6 +43,8 @@ func TestGenerate_GamesGroupedBySystem_ListsNameDescriptionAndJaquette(t *testin
 			}},
 		},
 	}
+	writeMediaFile(t, registryFolder, "megadrive", "images/sonic.png")
+	writeMediaFile(t, registryFolder, "mastersystem", "images/alex.png")
 
 	if err := Generate(reg, registryFolder); err != nil {
 		t.Fatalf("Generate() error = %v", err)
@@ -268,6 +284,7 @@ func TestGenerate_Modal_ShowsVideoPlayer_WhenVideoAvailable(t *testing.T) {
 			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog", Video: "videos/sonic.mp4"}},
 		},
 	}
+	writeMediaFile(t, registryFolder, "megadrive", "videos/sonic.mp4")
 
 	if err := Generate(reg, registryFolder); err != nil {
 		t.Fatalf("Generate() error = %v", err)
@@ -315,6 +332,7 @@ func TestGenerate_ImagePath_PercentEncodesReservedCharacters(t *testing.T) {
 			}},
 		},
 	}
+	writeMediaFile(t, registryFolder, "switch", "images/Cat Quest III [010088501B8F2000] (1G+1U)-image.jpg")
 
 	if err := Generate(reg, registryFolder); err != nil {
 		t.Fatalf("Generate() error = %v", err)
@@ -327,6 +345,58 @@ func TestGenerate_ImagePath_PercentEncodesReservedCharacters(t *testing.T) {
 	}
 	if !strings.Contains(html, "%5B010088501B8F2000%5D") {
 		t.Errorf("image path does not percent-encode square brackets, got: %s", html)
+	}
+}
+
+func TestGenerate_ImageFileMissingOnDisk_RendersPlaceholderInsteadOfBrokenLink(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{
+				Path:  "Sonic.zip",
+				Name:  "Sonic the Hedgehog",
+				Image: "images/sonic.png",
+			}},
+		},
+	}
+	// Note: no file is actually written at registryFolder/megadrive/images/sonic.png.
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if strings.Contains(html, "sonic.png") {
+		t.Errorf("index.html references a jaquette file that does not exist on disk, got: %s", html)
+	}
+	if !strings.Contains(html, "card__art--empty") {
+		t.Errorf("index.html does not render a placeholder for the missing jaquette, got: %s", html)
+	}
+}
+
+func TestGenerate_VideoFileMissingOnDisk_OmitsVideoPlayer(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{
+				Path:  "Sonic.zip",
+				Name:  "Sonic the Hedgehog",
+				Video: "videos/sonic.mp4",
+			}},
+		},
+	}
+	// Note: no file is actually written at registryFolder/megadrive/videos/sonic.mp4.
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+	modal := extractByID(t, html, "modal-megadrive-0")
+
+	if strings.Contains(modal, "<video") {
+		t.Errorf("modal contains a video player referencing a video file that does not exist on disk, got: %s", modal)
 	}
 }
 

@@ -92,16 +92,26 @@ func Generate(reg *registry.Registry, registryFolder string) error {
 	}
 
 	var buf bytes.Buffer
-	if err := indexTemplate.Execute(&buf, groupBySystem(reg.Entries)); err != nil {
+	if err := indexTemplate.Execute(&buf, groupBySystem(reg.Entries, registryFolder)); err != nil {
 		return err
 	}
 
 	return os.WriteFile(filepath.Join(registryFolder, "index.html"), buf.Bytes(), 0o644)
 }
 
+// mediaFileExists reports whether the media file referenced by a game's
+// Image/Video field actually exists at <registryFolder>/<system>/<relPath>.
+// A game's metadata can reference a file that is missing from the registry
+// folder (partial scrape, manual cleanup, etc.); linking to it anyway would
+// produce a broken image/video in the browser instead of the placeholder.
+func mediaFileExists(registryFolder, system, relPath string) bool {
+	info, err := os.Stat(filepath.Join(registryFolder, system, filepath.FromSlash(relPath)))
+	return err == nil && !info.IsDir()
+}
+
 // groupBySystem groups entries by system, sorted by system name and then by
 // game name within each system, for deterministic output.
-func groupBySystem(entries []registry.Entry) []systemView {
+func groupBySystem(entries []registry.Entry, registryFolder string) []systemView {
 	bySystem := map[string][]gamelist.Game{}
 	for _, e := range entries {
 		bySystem[e.System] = append(bySystem[e.System], e.Game)
@@ -121,10 +131,10 @@ func groupBySystem(entries []registry.Entry) []systemView {
 		views := make([]gameView, len(games))
 		for i, g := range games {
 			view := gameView{Game: g, Stars: formatStars(g.Rating), Year: formatYear(g.ReleaseDate)}
-			if g.Image != "" {
+			if g.Image != "" && mediaFileExists(registryFolder, name, g.Image) {
 				view.ImagePath = escapeMediaPath(name, g.Image)
 			}
-			if g.Video != "" {
+			if g.Video != "" && mediaFileExists(registryFolder, name, g.Video) {
 				view.VideoPath = escapeMediaPath(name, g.Video)
 			}
 			views[i] = view

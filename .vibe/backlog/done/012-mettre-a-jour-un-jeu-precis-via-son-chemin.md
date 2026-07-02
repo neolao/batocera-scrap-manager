@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # Mettre à Jour un Jeu Précis via son Chemin
 

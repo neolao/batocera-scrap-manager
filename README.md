@@ -12,7 +12,8 @@ A command-line tool for managing game scraping data (metadata, box art, etc.) on
 - The registry keeps a copy of each game's cover art, video, marquee, and thumbnail alongside its metadata, organized by system just like on Batocera itself.
 - Complete a ROMs folder's missing metadata and media (description, jaquette, rating, genre, etc.) using the registry as the source of already-known information, with a summary of processed / completed / failed entries.
 - Remove a specific game's entry (metadata and media) from the registry.
-- Browse the registry's content in a web browser: updating the registry generates a styled static HTML site listing every game grouped by system, with its name, a short description, and jaquette, a navigation bar to jump between systems, a click-to-expand detail view for each game's full description, and a layout that stays readable on small screens.
+- Browse the registry's content in a web browser: updating the registry generates a styled static HTML site listing every game grouped by system, with its name, a short description, and jaquette, a navigation bar (scrollable when many systems are configured) to jump between systems, and a layout that stays readable on small screens.
+- Each game on the consultation site opens a detail view showing its full description, rating, release year, developer, publisher, genre, number of players, and gameplay video when available.
 <!-- vibe:end:features -->
 
 <!-- vibe:begin:install -->

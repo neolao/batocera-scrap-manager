@@ -14,10 +14,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `batocera-scrap-manager update` no longer adds a game to the registry if it has neither a description nor a jaquette, avoiding registry entries with no useful scraped data.
 - The generated consultation site now has a styled, retro-arcade look with a sticky navigation bar linking to each system, games presented as consistent cards, a "back to top" link in every system section, and a layout that stays readable on small screens.
 - On the consultation site, each game card now shows a truncated description and opens a detail view with the full description when clicked, instead of stretching the card to fit all the text.
+- The consultation site's detail view now also shows the game's rating, release year, developer, publisher, genre, and number of players, and plays its gameplay video when one was scraped.
 
 ### Fixed
 
 - The registry now recognizes a game by its ROM filename alone, instead of its full path: two ROMs with the same filename in different subfolders of the same system are correctly treated as the same game, instead of silently colliding on disk.
+- Image and video links on the consultation site are now properly encoded, fixing broken artwork for games whose file names contain characters like `[`, `]`, spaces, or parentheses.
+- Closing a game's detail view on the consultation site no longer scrolls the page away from where you were.
+- The consultation site's navigation bar now scrolls horizontally instead of wrapping onto several lines when many systems are configured, so it no longer takes up excessive vertical space.
 
 ## [0.2.0] - 2026-07-02
 

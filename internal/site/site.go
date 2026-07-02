@@ -6,9 +6,13 @@ package site
 import (
 	"bytes"
 	"html/template"
+	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/neolao/batocera-scrap-manager/internal/gamelist"
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
@@ -17,7 +21,64 @@ import (
 // systemView groups a system's games for rendering by indexTemplate.
 type systemView struct {
 	Name  string
-	Games []gamelist.Game
+	Games []gameView
+}
+
+// gameView wraps a gamelist.Game with fields precomputed for rendering:
+// properly percent-encoded media paths and human-readable rating/release
+// year, so the template stays free of formatting logic.
+type gameView struct {
+	gamelist.Game
+	ImagePath string
+	VideoPath string
+	Stars     string
+	Year      string
+}
+
+// escapeMediaPath builds a relative URL from system and a media path (as
+// found in gamelist.xml), percent-encoding each path segment. Go's
+// html/template contextual auto-escaping deliberately leaves reserved
+// characters such as '[' and ']' untouched in URL attributes, which some
+// HTTP servers mishandle; encoding them explicitly here avoids that.
+func escapeMediaPath(system, relPath string) string {
+	segments := strings.Split(system+"/"+relPath, "/")
+	for i, seg := range segments {
+		segments[i] = url.PathEscape(seg)
+	}
+	return strings.Join(segments, "/")
+}
+
+// formatStars renders a gamelist rating (a decimal string between 0 and 1)
+// as a 5-star string, or an empty string if rating is missing or invalid.
+func formatStars(rating string) string {
+	r, err := strconv.ParseFloat(rating, 64)
+	if err != nil {
+		return ""
+	}
+	if r < 0 {
+		r = 0
+	}
+	if r > 1 {
+		r = 1
+	}
+	filled := int(math.Round(r * 5))
+	return strings.Repeat("★", filled) + strings.Repeat("☆", 5-filled)
+}
+
+// formatYear extracts the year from a gamelist release date
+// (EmulationStation's "YYYYMMDDTHHMMSS" format), or an empty string if
+// releaseDate is missing or does not start with a 4-digit year.
+func formatYear(releaseDate string) string {
+	if len(releaseDate) < 4 {
+		return ""
+	}
+	year := releaseDate[:4]
+	for _, c := range year {
+		if c < '0' || c > '9' {
+			return ""
+		}
+	}
+	return year
 }
 
 // Generate writes a static HTML site directly at registryFolder/index.html
@@ -56,7 +117,19 @@ func groupBySystem(entries []registry.Entry) []systemView {
 	for _, name := range names {
 		games := bySystem[name]
 		sort.Slice(games, func(i, j int) bool { return games[i].Name < games[j].Name })
-		systems = append(systems, systemView{Name: name, Games: games})
+
+		views := make([]gameView, len(games))
+		for i, g := range games {
+			view := gameView{Game: g, Stars: formatStars(g.Rating), Year: formatYear(g.ReleaseDate)}
+			if g.Image != "" {
+				view.ImagePath = escapeMediaPath(name, g.Image)
+			}
+			if g.Video != "" {
+				view.VideoPath = escapeMediaPath(name, g.Video)
+			}
+			views[i] = view
+		}
+		systems = append(systems, systemView{Name: name, Games: views})
 	}
 	return systems
 }
@@ -118,7 +191,6 @@ img { max-width: 100%; display: block; }
   top: 0;
   z-index: 20;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem 1rem;
   padding: 0.75rem 1rem;
@@ -134,18 +206,26 @@ img { max-width: 100%; display: block; }
   color: var(--cyan);
   text-decoration: none;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 .console__systems {
   display: flex;
-  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
   gap: 0.5rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.2rem;
 }
 .console__systems a {
+  flex: 0 0 auto;
   font-family: var(--font-display);
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   text-decoration: none;
+  white-space: nowrap;
   color: var(--ink-dim);
   padding: 0.35rem 0.75rem;
   border: 1px solid var(--line);
@@ -273,7 +353,26 @@ html:has(.modal:target) { overflow: hidden; }
   letter-spacing: 0.05em;
   color: var(--cyan);
 }
-.modal__desc { margin: 0; line-height: 1.5; color: var(--ink); }
+.modal__desc { margin: 0 0 1rem; line-height: 1.5; color: var(--ink); }
+.modal__video { width: 100%; aspect-ratio: 4 / 3; border-radius: calc(var(--radius) - 4px); margin: 0 0 1rem; background: #000; }
+.modal__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0;
+  padding: 1rem 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+.modal__meta-label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.modal__meta-value { color: var(--ink); font-size: 0.9rem; }
 .back-to-top {
   display: inline-block;
   margin-top: 1.25rem;
@@ -317,8 +416,8 @@ html:has(.modal:target) { overflow: hidden; }
 <div class="grid">
 {{range $i, $g := .Games}}
 <a class="card" href="#modal-{{$sys}}-{{$i}}">
-<div class="card__art{{if not $g.Image}} card__art--empty{{end}}">
-{{if $g.Image}}<img src="{{printf "%s/%s" $sys $g.Image}}" alt="{{$g.Name}}">{{end}}
+<div class="card__art{{if not $g.ImagePath}} card__art--empty{{end}}">
+{{if $g.ImagePath}}<img src="{{$g.ImagePath}}" alt="{{$g.Name}}">{{end}}
 </div>
 <div class="card__body">
 <h3 class="card__name">{{$g.Name}}</h3>
@@ -329,12 +428,21 @@ html:has(.modal:target) { overflow: hidden; }
 </div>
 {{range $i, $g := .Games}}
 <div class="modal" id="modal-{{$sys}}-{{$i}}" role="dialog" aria-modal="true">
-<a class="modal__backdrop" href="#{{$sys}}" aria-label="Close"></a>
+<a class="modal__backdrop" href="#_modal-close" aria-label="Close"></a>
 <div class="modal__panel">
-<a class="modal__close" href="#{{$sys}}" aria-label="Close">&times;</a>
-{{if $g.Image}}<div class="modal__art"><img src="{{printf "%s/%s" $sys $g.Image}}" alt="{{$g.Name}}"></div>{{end}}
+<a class="modal__close" href="#_modal-close" aria-label="Close">&times;</a>
+{{if $g.ImagePath}}<div class="modal__art"><img src="{{$g.ImagePath}}" alt="{{$g.Name}}"></div>{{end}}
+{{if $g.VideoPath}}<video class="modal__video" src="{{$g.VideoPath}}" controls muted loop playsinline></video>{{end}}
 <h3 class="modal__name">{{$g.Name}}</h3>
 <p class="modal__desc">{{$g.Desc}}</p>
+<ul class="modal__meta">
+{{if $g.Stars}}<li><span class="modal__meta-label">Rating</span><span class="modal__meta-value">{{$g.Stars}}</span></li>{{end}}
+{{if $g.Year}}<li><span class="modal__meta-label">Year</span><span class="modal__meta-value">{{$g.Year}}</span></li>{{end}}
+{{if $g.Developer}}<li><span class="modal__meta-label">Developer</span><span class="modal__meta-value">{{$g.Developer}}</span></li>{{end}}
+{{if $g.Publisher}}<li><span class="modal__meta-label">Publisher</span><span class="modal__meta-value">{{$g.Publisher}}</span></li>{{end}}
+{{if $g.Genre}}<li><span class="modal__meta-label">Genre</span><span class="modal__meta-value">{{$g.Genre}}</span></li>{{end}}
+{{if $g.Players}}<li><span class="modal__meta-label">Players</span><span class="modal__meta-value">{{$g.Players}}</span></li>{{end}}
+</ul>
 </div>
 </div>
 {{end}}

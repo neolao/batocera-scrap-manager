@@ -185,8 +185,167 @@ func TestGenerate_GameCard_LinksToADetailModalWithTheFullDescription(t *testing.
 	if !strings.Contains(modal, "A blue hedgehog runs very fast through Green Hill Zone, collecting rings along the way.") {
 		t.Errorf("modal does not contain the game's full description, got: %s", modal)
 	}
-	if !strings.Contains(modal, `href="#megadrive"`) {
-		t.Errorf("modal does not contain a link back to the system section to close it, got: %s", modal)
+}
+
+func TestGenerate_ModalClose_DoesNotLinkToAnAnchorThatWouldScrollThePage(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	modal := extractByID(t, html, "modal-megadrive-0")
+	if strings.Contains(modal, `href="#megadrive"`) || strings.Contains(modal, `href="#top"`) {
+		t.Errorf("modal close/backdrop links to a real page anchor, which would scroll the page on close, got: %s", modal)
+	}
+	if strings.Count(modal, `href="#_modal-close"`) < 2 {
+		t.Errorf("expected both the close button and the backdrop to link to a non-existent anchor so closing does not scroll the page, got: %s", modal)
+	}
+}
+
+func TestGenerate_Modal_ShowsGameMetadata(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{
+				Path:        "Sonic.zip",
+				Name:        "Sonic the Hedgehog",
+				Rating:      "0.8",
+				ReleaseDate: "19910623T000000",
+				Developer:   "Sonic Team",
+				Publisher:   "Sega",
+				Genre:       "Platform",
+				Players:     "1",
+			}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+	modal := extractByID(t, html, "modal-megadrive-0")
+
+	for _, want := range []string{"Sonic Team", "Sega", "Platform", "1991", "★★★★☆"} {
+		if !strings.Contains(modal, want) {
+			t.Errorf("modal does not contain %q, got: %s", want, modal)
+		}
+	}
+}
+
+func TestGenerate_Modal_OmitsMissingMetadata_WithoutCrashing(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+	modal := extractByID(t, html, "modal-megadrive-0")
+
+	if strings.Contains(modal, "★") {
+		t.Errorf("modal shows a star rating for a game with no rating, got: %s", modal)
+	}
+}
+
+func TestGenerate_Modal_ShowsVideoPlayer_WhenVideoAvailable(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog", Video: "videos/sonic.mp4"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+	modal := extractByID(t, html, "modal-megadrive-0")
+
+	if !strings.Contains(modal, "<video") {
+		t.Errorf("modal does not contain a video player, got: %s", modal)
+	}
+	if !strings.Contains(modal, "megadrive/videos/sonic.mp4") {
+		t.Errorf("modal video does not reference the game's video file, got: %s", modal)
+	}
+}
+
+func TestGenerate_Modal_OmitsVideoPlayer_WhenNoVideo(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+	modal := extractByID(t, html, "modal-megadrive-0")
+
+	if strings.Contains(modal, "<video") {
+		t.Errorf("modal contains a video player for a game with no video, got: %s", modal)
+	}
+}
+
+func TestGenerate_ImagePath_PercentEncodesReservedCharacters(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "switch", Game: gamelist.Game{
+				Path:  "CatQuest3.nsp",
+				Name:  "Cat Quest III",
+				Image: "images/Cat Quest III [010088501B8F2000] (1G+1U)-image.jpg",
+			}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if strings.Contains(html, "[010088501B8F2000]") {
+		t.Errorf("image path contains un-encoded square brackets, which some HTTP servers mishandle, got: %s", html)
+	}
+	if !strings.Contains(html, "%5B010088501B8F2000%5D") {
+		t.Errorf("image path does not percent-encode square brackets, got: %s", html)
+	}
+}
+
+func TestGenerate_NavigationSystems_ScrollHorizontallyInsteadOfWrapping(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if !strings.Contains(html, "overflow-x: auto") {
+		t.Error("navigation systems list does not scroll horizontally when there are many systems")
 	}
 }
 

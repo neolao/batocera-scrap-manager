@@ -6,7 +6,7 @@
 - [`modules/config.md`](.vibe/modules/config.md) — persistence of the configured registry folder and ROMs folders
 - [`modules/gamelist.md`](.vibe/modules/gamelist.md) — parsing and writing of EmulationStation/Batocera `gamelist.xml` files
 - [`modules/registry.md`](.vibe/modules/registry.md) — centralized game index and media (one JSON file per game); imports from ROMs folders into the registry, completes ROMs folders back from the registry, and removes a game's entry on demand
-- [`modules/site.md`](.vibe/modules/site.md) — generates a static HTML site to browse the registry's content in a web browser
+- [`modules/site.md`](.vibe/modules/site.md) — generates a styled static HTML site, with sticky navigation between systems, to browse the registry's content in a web browser
 
 ## Observed patterns
 

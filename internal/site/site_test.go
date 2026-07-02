@@ -3,6 +3,7 @@ package site
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -43,6 +44,97 @@ func TestGenerate_GamesGroupedBySystem_ListsNameDescriptionAndJaquette(t *testin
 		if !strings.Contains(html, want) {
 			t.Errorf("index.html does not contain %q", want)
 		}
+	}
+}
+
+func TestGenerate_MultipleSystems_NavigationBarLinksToEachSystemAnchor(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog"}},
+			{System: "mastersystem", Game: gamelist.Game{Path: "Alex.zip", Name: "Alex Kidd"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	nav := extractTag(t, html, "nav")
+	for _, want := range []string{`href="#megadrive"`, `href="#mastersystem"`} {
+		if !strings.Contains(nav, want) {
+			t.Errorf("navigation bar does not link to %q, got: %s", want, nav)
+		}
+	}
+
+	for _, wantID := range []string{`id="megadrive"`, `id="mastersystem"`} {
+		if !strings.Contains(html, wantID) {
+			t.Errorf("index.html does not contain a section anchor %q", wantID)
+		}
+	}
+}
+
+func TestGenerate_SingleSystem_NavigationBarStillRendersLink(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	nav := extractTag(t, html, "nav")
+	if !strings.Contains(nav, `href="#megadrive"`) {
+		t.Errorf("navigation bar does not link to the only system, got: %s", nav)
+	}
+}
+
+func TestGenerate_EmbeddedStylesheet_IncludesResponsiveRules(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if !strings.Contains(html, "<style") {
+		t.Error("index.html does not contain an embedded stylesheet")
+	}
+	if !strings.Contains(html, "@media") {
+		t.Error("embedded stylesheet does not contain a responsive (@media) rule for small screens")
+	}
+}
+
+func TestGenerate_EachSystemSection_HasBackToTopLink(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog"}},
+			{System: "mastersystem", Game: gamelist.Game{Path: "Alex.zip", Name: "Alex Kidd"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if strings.Count(html, `href="#top"`) < 2 {
+		t.Errorf("expected a back-to-top link in each of the 2 system sections, got: %s", html)
 	}
 }
 
@@ -149,4 +241,16 @@ func readIndex(t *testing.T, registryFolder string) string {
 		t.Fatalf("failed to read generated index.html: %v", err)
 	}
 	return string(data)
+}
+
+// extractTag returns the content of the first occurrence of the given tag
+// name in html (e.g. "nav" for the first <nav ...>...</nav> block).
+func extractTag(t *testing.T, html, tagName string) string {
+	t.Helper()
+	re := regexp.MustCompile(`(?s)<` + tagName + `[^>]*>.*?</` + tagName + `>`)
+	match := re.FindString(html)
+	if match == "" {
+		t.Fatalf("index.html does not contain a <%s> element, got: %s", tagName, html)
+	}
+	return match
 }

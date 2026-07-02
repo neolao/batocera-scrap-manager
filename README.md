@@ -8,6 +8,7 @@ A command-line tool for managing game scraping data (metadata, box art, etc.) on
 - Configure the registry location and one or more Batocera ROMs folders to watch.
 - Browse the configured registry and the list of watched ROMs folders at any time.
 - Update the registry in one step from the configured ROMs folders: new games are added, games whose metadata changed are refreshed, and a summary (added / updated / unchanged) is displayed.
+- See live progress (current system and a per-game counter) while the registry is being updated, instead of waiting silently for the final summary.
 - The registry keeps a copy of each game's cover art, video, marquee, and thumbnail alongside its metadata, organized by system just like on Batocera itself.
 <!-- vibe:end:features -->
 

@@ -138,6 +138,25 @@ func TestGenerate_EachSystemSection_HasBackToTopLink(t *testing.T) {
 	}
 }
 
+func TestGenerate_CardArtwork_UsesFourByThreeAspectRatio(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if !strings.Contains(html, "aspect-ratio: 4 / 3") {
+		t.Errorf("card artwork does not use a 4:3 aspect ratio, got: %s", html)
+	}
+}
+
 func TestGenerate_GameWithoutJaquette_RendersWithoutBrokenImage(t *testing.T) {
 	registryFolder := t.TempDir()
 	reg := &registry.Registry{

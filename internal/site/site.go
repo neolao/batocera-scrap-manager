@@ -194,7 +194,7 @@ main { max-width: 72rem; margin: 0 auto; padding: 0 1.25rem 2rem; }
 }
 .card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(77, 240, 255, 0.2); }
 .card__art {
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 4 / 3;
   background: var(--bg-card);
 }
 .card__art--empty {

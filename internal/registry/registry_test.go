@@ -56,6 +56,18 @@ func TestSave_WritesRegistryThatCanBeReloaded(t *testing.T) {
 	}
 }
 
+func TestSave_SystemDirectoryBlockedByFile_ReturnsError(t *testing.T) {
+	path := t.TempDir()
+	if err := os.WriteFile(filepath.Join(path, "megadrive"), []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("failed to write test fixture: %v", err)
+	}
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}}}}
+
+	if err := Save(path, reg); err == nil {
+		t.Fatal("Save() error = nil, want error when a system subfolder is blocked by a file")
+	}
+}
+
 func TestSave_WritesOneJSONFilePerGameInsideSystemFolder(t *testing.T) {
 	path := t.TempDir()
 	reg := &Registry{Entries: []Entry{

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/neolao/batocera-scrap-manager/internal/config"
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
 )
 
@@ -24,25 +23,8 @@ func runRemove(args []string, out io.Writer) int {
 	}
 	system, romFilename := args[0], args[1]
 
-	configPath, err := config.DefaultPath()
-	if err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
-		return 1
-	}
-
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
-		return 1
-	}
-	if cfg.RegistryFolder == "" {
-		fmt.Fprintln(out, "error: registry not configured, run 'config set-registry' first")
-		return 1
-	}
-
-	reg, err := registry.Load(cfg.RegistryFolder)
-	if err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
+	cfg, reg, ok := loadConfigAndRegistry(out)
+	if !ok {
 		return 1
 	}
 

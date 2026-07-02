@@ -46,8 +46,8 @@ func TestExecute_Remove_GameNotFound_ReturnsErrorCode(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(out.String(), "error") {
-		t.Errorf("output = %q, want it to mention an error", out.String())
+	if !strings.Contains(out.String(), "no game found for system") {
+		t.Errorf("output = %q, want it to mention no game found for the system", out.String())
 	}
 	if _, err := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); err != nil {
 		t.Errorf("Sonic.json should be untouched: %v", err)

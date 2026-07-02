@@ -277,6 +277,75 @@ func TestGenerate_Modal_OmitsMissingMetadata_WithoutCrashing(t *testing.T) {
 	}
 }
 
+func TestGenerate_Modal_OutOfRangeRating_ClampsToFullStars(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog", Rating: "1.5"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+	modal := extractByID(t, html, "modal-megadrive-0")
+
+	if !strings.Contains(modal, "★★★★★") {
+		t.Errorf("modal does not show a full 5-star rating for an out-of-range rating, got: %s", modal)
+	}
+}
+
+func TestGenerate_Modal_MalformedReleaseDate_OmitsYear(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog", ReleaseDate: "unknown"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+	modal := extractByID(t, html, "modal-megadrive-0")
+
+	if strings.Contains(modal, "Year") {
+		t.Errorf("modal shows a year for a malformed release date, got: %s", modal)
+	}
+}
+
+func TestGenerate_GameNameAndDescriptionWithHTMLSpecialCharacters_AreEscaped(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{
+				Path: "Sonic.zip",
+				Name: "<script>alert(1)</script>",
+				Desc: `Tom & Jerry "Cat" <Mouse>`,
+			}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if strings.Contains(html, "<script>alert(1)</script>") {
+		t.Errorf("index.html contains an unescaped <script> tag from a game name, got: %s", html)
+	}
+	if !strings.Contains(html, "&lt;script&gt;alert(1)&lt;/script&gt;") {
+		t.Errorf("index.html does not contain the escaped game name, got: %s", html)
+	}
+	if !strings.Contains(html, "Tom &amp; Jerry &#34;Cat&#34; &lt;Mouse&gt;") {
+		t.Errorf("index.html does not contain the escaped description, got: %s", html)
+	}
+}
+
 func TestGenerate_Modal_ShowsVideoPlayer_WhenVideoAvailable(t *testing.T) {
 	registryFolder := t.TempDir()
 	reg := &registry.Registry{

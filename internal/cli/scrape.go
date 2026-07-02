@@ -28,25 +28,8 @@ func runScrape(args []string, out io.Writer) int {
 		return 0
 	}
 
-	configPath, err := config.DefaultPath()
-	if err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
-		return 1
-	}
-
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
-		return 1
-	}
-	if cfg.RegistryFolder == "" {
-		fmt.Fprintln(out, "error: registry not configured, run 'config set-registry' first")
-		return 1
-	}
-
-	reg, err := registry.Load(cfg.RegistryFolder)
-	if err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
+	cfg, reg, ok := loadConfigAndRegistry(out)
+	if !ok {
 		return 1
 	}
 
@@ -56,23 +39,16 @@ func runScrape(args []string, out io.Writer) int {
 
 	var processed, completed, failed int
 	for _, romsFolder := range cfg.RomsFolders {
-		lastSystem := ""
-		onProgress := func(e registry.CompletionEvent) {
-			if e.System != lastSystem {
-				fmt.Fprintf(out, "%s: %d game(s)\n", e.System, e.GameCount)
-				lastSystem = e.System
-			}
-			fmt.Fprintf(out, "  [%d/%d] %s: %s\n", e.GameIndex, e.GameCount, romsFolder, e.GameName)
-		}
+		onProgress := newCompletionProgressReporter(out, romsFolder)
 
-		p, c, f, err := registry.CompleteRomsFolder(reg, romsFolder, cfg.RegistryFolder, onProgress)
+		folderProcessed, folderCompleted, folderFailed, err := registry.CompleteRomsFolder(reg, romsFolder, cfg.RegistryFolder, onProgress)
 		if err != nil {
 			fmt.Fprintf(out, "error: %v\n", err)
 			return 1
 		}
-		processed += p
-		completed += c
-		failed += f
+		processed += folderProcessed
+		completed += folderCompleted
+		failed += folderFailed
 	}
 
 	fmt.Fprintf(out, "%d processed, %d completed, %d failed\n", processed, completed, failed)
@@ -90,14 +66,7 @@ func runScrapeTargeted(reg *registry.Registry, cfg config.Config, path string, o
 		return 1
 	}
 
-	lastSystem := ""
-	onProgress := func(e registry.CompletionEvent) {
-		if e.System != lastSystem {
-			fmt.Fprintf(out, "%s: %d game(s)\n", e.System, e.GameCount)
-			lastSystem = e.System
-		}
-		fmt.Fprintf(out, "  [%d/%d] %s: %s\n", e.GameIndex, e.GameCount, romsFolder, e.GameName)
-	}
+	onProgress := newCompletionProgressReporter(out, romsFolder)
 
 	completedGame, failedGame, err := registry.CompleteGame(reg, romsFolder, cfg.RegistryFolder, system, romFilename, onProgress)
 	if err != nil {

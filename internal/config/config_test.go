@@ -55,6 +55,19 @@ func TestSave_WritesConfigThatCanBeReloaded(t *testing.T) {
 	}
 }
 
+func TestSave_ParentDirectoryBlockedByFile_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("failed to write test fixture: %v", err)
+	}
+	path := filepath.Join(blocker, "config.json")
+
+	if err := Save(path, Config{RegistryFolder: "/registry"}); err == nil {
+		t.Fatal("Save() error = nil, want error when parent directory is blocked by a file")
+	}
+}
+
 func TestSave_CreatesParentDirectories(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "dir", "config.json")
 

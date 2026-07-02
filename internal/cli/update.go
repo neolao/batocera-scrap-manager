@@ -7,7 +7,6 @@ import (
 
 	"github.com/neolao/batocera-scrap-manager/internal/config"
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
-	"github.com/neolao/batocera-scrap-manager/internal/site"
 )
 
 const updateUsage = `Usage:
@@ -27,25 +26,8 @@ func runUpdate(args []string, out io.Writer) int {
 		return 0
 	}
 
-	configPath, err := config.DefaultPath()
-	if err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
-		return 1
-	}
-
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
-		return 1
-	}
-	if cfg.RegistryFolder == "" {
-		fmt.Fprintln(out, "error: registry not configured, run 'config set-registry' first")
-		return 1
-	}
-
-	reg, err := registry.Load(cfg.RegistryFolder)
-	if err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
+	cfg, reg, ok := loadConfigAndRegistry(out)
+	if !ok {
 		return 1
 	}
 
@@ -62,23 +44,17 @@ func runUpdate(args []string, out io.Writer) int {
 
 	var added, updated, unchanged int
 	for _, romsFolder := range cfg.RomsFolders {
-		a, u, unc, err := registry.ImportFromRomsFolder(reg, romsFolder, cfg.RegistryFolder, onProgress)
+		folderAdded, folderUpdated, folderUnchanged, err := registry.ImportFromRomsFolder(reg, romsFolder, cfg.RegistryFolder, onProgress)
 		if err != nil {
 			fmt.Fprintf(out, "error: %v\n", err)
 			return 1
 		}
-		added += a
-		updated += u
-		unchanged += unc
+		added += folderAdded
+		updated += folderUpdated
+		unchanged += folderUnchanged
 	}
 
-	if err := registry.Save(cfg.RegistryFolder, reg); err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
-		return 1
-	}
-
-	if err := site.Generate(reg, cfg.RegistryFolder); err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
+	if !saveAndGenerateSite(cfg, reg, out) {
 		return 1
 	}
 
@@ -112,13 +88,7 @@ func runUpdateTargeted(reg *registry.Registry, cfg config.Config, path string, o
 		return 1
 	}
 
-	if err := registry.Save(cfg.RegistryFolder, reg); err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
-		return 1
-	}
-
-	if err := site.Generate(reg, cfg.RegistryFolder); err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
+	if !saveAndGenerateSite(cfg, reg, out) {
 		return 1
 	}
 

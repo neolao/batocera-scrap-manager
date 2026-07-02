@@ -45,27 +45,40 @@ func Load(path string) (*Registry, error) {
 		}
 		system := systemDir.Name()
 
-		gameFiles, err := os.ReadDir(filepath.Join(path, system))
+		entries, err := loadSystemEntries(path, system)
 		if err != nil {
 			return nil, err
 		}
-		for _, gameFile := range gameFiles {
-			if gameFile.IsDir() || filepath.Ext(gameFile.Name()) != ".json" {
-				continue
-			}
-
-			data, err := os.ReadFile(filepath.Join(path, system, gameFile.Name()))
-			if err != nil {
-				return nil, err
-			}
-			var g gamelist.Game
-			if err := json.Unmarshal(data, &g); err != nil {
-				return nil, err
-			}
-			reg.Entries = append(reg.Entries, Entry{System: system, Game: g})
-		}
+		reg.Entries = append(reg.Entries, entries...)
 	}
 	return reg, nil
+}
+
+// loadSystemEntries reads every game JSON file in the registry folder's
+// subfolder for system, returning one Entry per file.
+func loadSystemEntries(path, system string) ([]Entry, error) {
+	gameFiles, err := os.ReadDir(filepath.Join(path, system))
+	if err != nil {
+		return nil, err
+	}
+
+	var entries []Entry
+	for _, gameFile := range gameFiles {
+		if gameFile.IsDir() || filepath.Ext(gameFile.Name()) != ".json" {
+			continue
+		}
+
+		data, err := os.ReadFile(filepath.Join(path, system, gameFile.Name()))
+		if err != nil {
+			return nil, err
+		}
+		var g gamelist.Game
+		if err := json.Unmarshal(data, &g); err != nil {
+			return nil, err
+		}
+		entries = append(entries, Entry{System: system, Game: g})
+	}
+	return entries, nil
 }
 
 // Save writes reg to the registry folder at path, as one JSON file per game
@@ -249,7 +262,7 @@ func ImportFromRomsFolder(reg *Registry, romsFolder, registryFolder string, onPr
 				onProgress(ProgressEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: g.Name})
 			}
 
-			status := reg.importGame(system, g)
+			status, copyErr := importOneGame(reg, romsFolder, registryFolder, system, g)
 			switch status {
 			case statusAdded:
 				added++
@@ -259,14 +272,23 @@ func ImportFromRomsFolder(reg *Registry, romsFolder, registryFolder string, onPr
 				unchanged++
 				continue
 			}
-
-			if copyErr := copyGameMedia(romsFolder, registryFolder, system, g); copyErr != nil {
+			if copyErr != nil {
 				return added, updated, unchanged, copyErr
 			}
 		}
 	}
 
 	return added, updated, unchanged, nil
+}
+
+// importOneGame merges g into reg and, if it was newly added or its metadata
+// changed, copies its referenced media from romsFolder into registryFolder.
+func importOneGame(reg *Registry, romsFolder, registryFolder, system string, g gamelist.Game) (status importStatus, copyErr error) {
+	status = reg.importGame(system, g)
+	if status == statusUnchanged {
+		return status, nil
+	}
+	return status, copyGameMedia(romsFolder, registryFolder, system, g)
 }
 
 // hasScrapedData reports whether g carries any information worth keeping in
@@ -329,14 +351,7 @@ func ImportGame(reg *Registry, romsFolder, registryFolder, system, romFilename s
 		return 0, 0, 0, ErrGameNotFound
 	}
 
-	name := filepath.Base(romFilename)
-	i := -1
-	for idx, g := range games {
-		if filepath.Base(g.Path) == name {
-			i = idx
-			break
-		}
-	}
+	i := findGameByFilename(games, romFilename)
 	if i == -1 {
 		return 0, 0, 0, ErrGameNotFound
 	}
@@ -350,19 +365,28 @@ func ImportGame(reg *Registry, romsFolder, registryFolder, system, romFilename s
 		onProgress(ProgressEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: g.Name})
 	}
 
-	switch reg.importGame(system, g) {
+	status, copyErr := importOneGame(reg, romsFolder, registryFolder, system, g)
+	switch status {
 	case statusAdded:
-		added = 1
+		return 1, 0, 0, copyErr
 	case statusUpdated:
-		updated = 1
+		return 0, 1, 0, copyErr
 	default:
 		return 0, 0, 1, nil
 	}
+}
 
-	if copyErr := copyGameMedia(romsFolder, registryFolder, system, g); copyErr != nil {
-		return added, updated, unchanged, copyErr
+// findGameByFilename returns the index in games of the entry whose ROM path
+// has the given base filename (ignoring any directory prefix), or -1 if none
+// matches.
+func findGameByFilename(games []gamelist.Game, romFilename string) int {
+	name := filepath.Base(romFilename)
+	for i, g := range games {
+		if filepath.Base(g.Path) == name {
+			return i
+		}
 	}
-	return added, updated, unchanged, nil
+	return -1
 }
 
 // CompletionEvent describes one game being examined by CompleteRomsFolder,
@@ -413,13 +437,8 @@ func CompleteRomsFolder(reg *Registry, romsFolder, registryFolder string, onProg
 		for i := range games {
 			processed++
 
-			j := reg.indexOf(system, games[i].Path)
-			if j == -1 {
-				continue
-			}
-
-			before := games[i]
-			if !mergeGame(&games[i], reg.Entries[j].Game) {
+			found, changed, before := completeOneGame(reg, games, i, system)
+			if !found || !changed {
 				continue
 			}
 			dirty = true
@@ -470,6 +489,20 @@ func mergeGame(dst *gamelist.Game, src gamelist.Game) bool {
 	return changed
 }
 
+// completeOneGame merges the registry's known metadata for games[i] (matched
+// by system and ROM path) into it, filling only empty fields. It reports
+// whether a matching registry entry was found and whether anything was
+// filled; before holds games[i]'s value prior to merging, for callers that
+// need to detect which media files were newly referenced.
+func completeOneGame(reg *Registry, games []gamelist.Game, i int, system string) (found, changed bool, before gamelist.Game) {
+	before = games[i]
+	j := reg.indexOf(system, games[i].Path)
+	if j == -1 {
+		return false, false, before
+	}
+	return true, mergeGame(&games[i], reg.Entries[j].Game), before
+}
+
 // CompleteGame fills the gaps of a single local game entry, identified by
 // system and romFilename (matched by ROM base name, ignoring any directory
 // prefix, like the rest of the registry — see decisions/005), from the
@@ -489,25 +522,16 @@ func CompleteGame(reg *Registry, romsFolder, registryFolder, system, romFilename
 		return false, false, ErrGameNotFound
 	}
 
-	name := filepath.Base(romFilename)
-	i := -1
-	for idx, g := range games {
-		if filepath.Base(g.Path) == name {
-			i = idx
-			break
-		}
-	}
+	i := findGameByFilename(games, romFilename)
 	if i == -1 {
 		return false, false, ErrGameNotFound
 	}
 
-	j := reg.indexOf(system, games[i].Path)
-	if j == -1 {
+	found, changed, before := completeOneGame(reg, games, i, system)
+	if !found {
 		return false, false, ErrGameNotFound
 	}
-
-	before := games[i]
-	if !mergeGame(&games[i], reg.Entries[j].Game) {
+	if !changed {
 		return false, false, nil
 	}
 

@@ -1,11 +1,13 @@
 # Module: cli
 **Role:** Entry point and command-line interface of batocera-scrap-manager — parses arguments and dispatches to commands.
-**Files:** `main.go`, `internal/cli/cli.go`, `internal/cli/config.go`, `internal/cli/update.go`, `internal/cli/scrape.go`, `internal/cli/remove.go`
+**Files:** `main.go`, `internal/cli/cli.go`, `internal/cli/common.go`, `internal/cli/config.go`, `internal/cli/update.go`, `internal/cli/scrape.go`, `internal/cli/remove.go`
 **Exports:** `cli.Execute(args []string, out io.Writer) int`
 **Depends on:** [`modules/config.md`](config.md), [`modules/registry.md`](registry.md), [`modules/site.md`](site.md)
 
+`internal/cli/common.go` factors out logic shared by `update`, `scrape`, and `remove`: `loadConfigAndRegistry` (load the config, verify `RegistryFolder` is set, load the registry — writing the same error message and returning `ok=false` on any failure), `saveAndGenerateSite` (save the registry then regenerate the HTML site), and `newCompletionProgressReporter` (the `registry.CompletionEvent` line-printing closure shared by `scrape`'s batch and targeted modes).
+
 ## `config` subcommand
-`internal/cli/config.go` implements `runConfig(args []string, out io.Writer) int`, dispatched by `Execute` on `args[0] == "config"`.
+`internal/cli/config.go` implements `runConfig(args []string, out io.Writer) int`, dispatched by `Execute` on `args[0] == "config"`, which itself dispatches to `runConfigSetRegistry`, `runConfigAddRomsFolder`, or `runConfigList`.
 
 - `config --help` — prints `configUsage` (the subcommand syntax) and returns exit code 0, without touching the config file (backlog item 013).
 - `config set-registry <path>` — sets the registry folder (converted to an absolute path via `internal/config`), persisted to the config file.

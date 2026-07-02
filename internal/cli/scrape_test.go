@@ -273,8 +273,8 @@ func TestExecute_Scrape_TargetedPath_OutsideConfiguredRomsFolders_ReturnsErrorCo
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(out.String(), "error") {
-		t.Errorf("output = %q, want it to mention an error", out.String())
+	if !strings.Contains(out.String(), "is not inside any configured ROMs folder") {
+		t.Errorf("output = %q, want it to mention the path is outside any configured ROMs folder", out.String())
 	}
 }
 
@@ -289,8 +289,8 @@ func TestExecute_Scrape_TargetedPath_NoMatchingRegistryEntry_ReturnsErrorCode(t 
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(out.String(), "error") {
-		t.Errorf("output = %q, want it to mention an error", out.String())
+	if !strings.Contains(out.String(), "no game found in the registry") {
+		t.Errorf("output = %q, want it to mention no game found in the registry", out.String())
 	}
 }
 

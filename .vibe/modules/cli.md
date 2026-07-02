@@ -7,6 +7,7 @@
 ## `config` subcommand
 `internal/cli/config.go` implements `runConfig(args []string, out io.Writer) int`, dispatched by `Execute` on `args[0] == "config"`.
 
+- `config --help` — prints `configUsage` (the subcommand syntax) and returns exit code 0, without touching the config file (backlog item 013).
 - `config set-registry <path>` — sets the registry folder (converted to an absolute path via `internal/config`), persisted to the config file.
 - `config add-roms-folder <path>` — adds a Batocera ROMs folder to watch (deduplicated by absolute path).
 - `config list` — displays the configured registry (or "(not set)") and the list of ROMs folders (or "(none)").
@@ -17,6 +18,7 @@ The config file path is resolved via `config.DefaultPath()`: the `BATOCERA_SCRAP
 ## `update` subcommand
 `internal/cli/update.go` implements `runUpdate(args []string, out io.Writer) int`, dispatched by `Execute` on `args[0] == "update"`.
 
+- `update --help` — prints `updateUsage` and returns exit code 0, checked before any config/registry loading so it works even with no registry configured (backlog item 013).
 - Loads the config, fails with exit code 1 if `RegistryFolder` is not set (explicit error message).
 - Loads the registry.
 - **Without an argument** (batch mode): calls `registry.ImportFromRomsFolder` (passing the ROMs folder, the registry folder, and a progress callback) for each configured ROMs folder; stops and returns exit code 1 as soon as a folder is not found.
@@ -28,7 +30,8 @@ The config file path is resolved via `config.DefaultPath()`: the `BATOCERA_SCRAP
 ## `remove` subcommand
 `internal/cli/remove.go` implements `runRemove(args []string, out io.Writer) int`, dispatched by `Execute` on `args[0] == "remove"`.
 
-- Expects two positional arguments, `<system> <rom-filename>` (e.g. `Sonic.zip` — no need for the original subfolder, if any); prints a usage message and returns exit code 1 if either is missing.
+- `remove --help` — prints `removeUsage` and returns exit code 0, without removing anything (backlog item 013).
+- Expects two positional arguments, `<system> <rom-filename>` (e.g. `Sonic.zip` — no need for the original subfolder, if any); prints the same usage message and returns exit code 1 if either is missing.
 - Loads the config, fails with exit code 1 if `RegistryFolder` is not set (same message as `update`/`scrape`).
 - Loads the registry, then calls `registry.Remove`. On `registry.ErrGameNotFound`, prints an error naming the system and filename and returns exit code 1; on any other error, prints it and returns exit code 1.
 - On success, prints a one-line confirmation (`"removed <rom-filename> (system: <system>)"`) and returns exit code 0.
@@ -36,6 +39,7 @@ The config file path is resolved via `config.DefaultPath()`: the `BATOCERA_SCRAP
 ## `scrape` subcommand
 `internal/cli/scrape.go` implements `runScrape(args []string, out io.Writer) int`, dispatched by `Execute` on `args[0] == "scrape"`.
 
+- `scrape --help` — prints `scrapeUsage` and returns exit code 0, checked before any config/registry loading so it works even with no registry configured (backlog item 013).
 - Loads the config, fails with exit code 1 if `RegistryFolder` is not set (same message as `update`).
 - Loads the registry (read-only — never saved back).
 - **Without an argument** (batch mode): calls `registry.CompleteRomsFolder` (passing the ROMs folder and the registry folder) for each configured ROMs folder; stops and returns exit code 1 as soon as a folder is not found.

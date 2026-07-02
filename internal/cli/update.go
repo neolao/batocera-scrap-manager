@@ -10,7 +10,23 @@ import (
 	"github.com/neolao/batocera-scrap-manager/internal/site"
 )
 
+const updateUsage = `Usage:
+  batocera-scrap-manager update
+  batocera-scrap-manager update <path>
+
+Without a path, imports or updates every game from every configured ROMs
+folder into the registry.
+
+With the path to a specific ROM file, only that game is imported or
+updated.
+`
+
 func runUpdate(args []string, out io.Writer) int {
+	if len(args) > 0 && args[0] == "--help" {
+		fmt.Fprint(out, updateUsage)
+		return 0
+	}
+
 	configPath, err := config.DefaultPath()
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)

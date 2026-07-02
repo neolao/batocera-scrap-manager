@@ -24,6 +24,7 @@
 - A business rule specific to one entry point (e.g. skipping empty games, only relevant to `ImportFromRomsFolder`) is applied at that entry point's loop, not inside the lower-level generic method it partly overlaps with (`(*Registry).Import`), so the generic method's semantics stay unaffected for other callers/tests.
 - Generated artifacts never auto-delete leftovers from a previous version of the tool (e.g. a stale `site/` subfolder after the consultation site moved to the registry root) — cleanup of old artifacts is left to the user.
 - A CLI command that can operate in a whole-folder mode or a single-item mode (e.g. `scrape` or `update` with or without a path argument) implements the targeted mode as a thin CLI-layer wrapper deriving the missing coordinates (ROMs folder, system) from the given path via the shared `resolveGamePath` helper (`internal/cli/scrape.go`), then delegates to a dedicated single-item function in the domain package that reuses the batch flow's internal helpers, rather than duplicating logic.
+- Each `run<Command>` function checks for a leading `--help` argument first, before any config or registry loading, printing a command-specific `<command>Usage` constant and returning exit code 0 — so `--help` never requires a configured registry and never triggers the command's real action.
 
 ## Other context files
 - [`models.md`](.vibe/models.md) — data models

@@ -14,6 +14,7 @@ A command-line tool for managing game scraping data (metadata, box art, etc.) on
 - Remove a specific game's entry (metadata and media) from the registry.
 - Browse the registry's content in a web browser: updating the registry generates a styled static HTML site listing every game grouped by system, with its name, a short description, and jaquette, a navigation bar (scrollable when many systems are configured) to jump between systems, and a layout that stays readable on small screens.
 - Each game on the consultation site opens a detail view showing its full description, rating, release year, developer, publisher, genre, number of players, and gameplay video when available.
+- Get detailed, command-specific help with `--help` on any command (e.g. `update --help`), instead of just the generic top-level help.
 <!-- vibe:end:features -->
 
 <!-- vibe:begin:install -->
@@ -44,6 +45,15 @@ Show help or version:
 ```sh
 batocera-scrap-manager --help
 batocera-scrap-manager --version
+```
+
+Each command also has its own detailed help:
+
+```sh
+batocera-scrap-manager config --help
+batocera-scrap-manager update --help
+batocera-scrap-manager scrape --help
+batocera-scrap-manager remove --help
 ```
 
 Configure the registry location and the ROMs folders to watch:

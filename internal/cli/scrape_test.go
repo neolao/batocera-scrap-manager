@@ -294,6 +294,34 @@ func TestExecute_Scrape_TargetedPath_NoMatchingRegistryEntry_ReturnsErrorCode(t 
 	}
 }
 
+func TestExecute_Scrape_Help_PrintsScrapeSpecificUsageAndReturnsSuccess(t *testing.T) {
+	withTempConfig(t)
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape", "--help"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "scrape") {
+		t.Errorf("output = %q, want it to describe the scrape command", out.String())
+	}
+}
+
+func TestExecute_Scrape_Help_NoRegistryConfigured_DoesNotError(t *testing.T) {
+	withTempConfig(t)
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape", "--help"}, &out)
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0 (--help should not require a configured registry)", code)
+	}
+	if strings.Contains(out.String(), "error") {
+		t.Errorf("output = %q, want no error message", out.String())
+	}
+}
+
 func TestExecute_Scrape_RomsFolderMissingOnDisk_ReturnsErrorCode(t *testing.T) {
 	missingFolder := filepath.Join(t.TempDir(), "does-not-exist")
 	setScrapeConfig(t, missingFolder)

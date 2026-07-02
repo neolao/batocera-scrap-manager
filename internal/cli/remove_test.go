@@ -83,6 +83,32 @@ func TestExecute_Remove_RegistryNotConfigured_ReturnsErrorCode(t *testing.T) {
 	}
 }
 
+func TestExecute_Remove_Help_PrintsRemoveSpecificUsageAndReturnsSuccess(t *testing.T) {
+	withTempConfig(t)
+	var out bytes.Buffer
+
+	code := Execute([]string{"remove", "--help"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "<system>") || !strings.Contains(out.String(), "<rom-filename>") {
+		t.Errorf("output = %q, want it to describe the <system> <rom-filename> arguments", out.String())
+	}
+}
+
+func TestExecute_Remove_Help_DoesNotRemoveAnything(t *testing.T) {
+	registryFolder := setRemoveConfig(t)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic", "A classic platformer.")
+	var out bytes.Buffer
+
+	Execute([]string{"remove", "--help"}, &out)
+
+	if _, err := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); err != nil {
+		t.Errorf("Sonic.json should be untouched by --help: %v", err)
+	}
+}
+
 func TestExecute_Remove_MissingArguments_ReturnsErrorCode(t *testing.T) {
 	setRemoveConfig(t)
 	var out bytes.Buffer

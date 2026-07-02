@@ -11,7 +11,23 @@ import (
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
 )
 
+const scrapeUsage = `Usage:
+  batocera-scrap-manager scrape
+  batocera-scrap-manager scrape <path>
+
+Without a path, completes missing metadata and media for every game in
+every configured ROMs folder, using the registry as the source of
+already-known information.
+
+With the path to a specific ROM file, only that game is completed.
+`
+
 func runScrape(args []string, out io.Writer) int {
+	if len(args) > 0 && args[0] == "--help" {
+		fmt.Fprint(out, scrapeUsage)
+		return 0
+	}
+
 	configPath, err := config.DefaultPath()
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)

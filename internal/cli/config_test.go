@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -73,6 +74,31 @@ func TestExecute_ConfigList_NoConfigYet_PrintsNotSet(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "not set") {
 		t.Errorf("output = %q, want it to mention the registry is not set", out.String())
+	}
+}
+
+func TestExecute_ConfigHelp_PrintsConfigSpecificUsageAndReturnsSuccess(t *testing.T) {
+	withTempConfig(t)
+	var out bytes.Buffer
+
+	code := Execute([]string{"config", "--help"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "set-registry") || !strings.Contains(out.String(), "add-roms-folder") || !strings.Contains(out.String(), "list") {
+		t.Errorf("output = %q, want it to describe the config subcommands", out.String())
+	}
+}
+
+func TestExecute_ConfigHelp_NoConfigFileYet_DoesNotCreateOne(t *testing.T) {
+	configPath := withTempConfig(t)
+	var out bytes.Buffer
+
+	Execute([]string{"config", "--help"}, &out)
+
+	if _, err := os.Stat(configPath); err == nil {
+		t.Error("config file was created by --help, want no side effect")
 	}
 }
 

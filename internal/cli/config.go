@@ -14,6 +14,10 @@ const configUsage = `Usage:
 `
 
 func runConfig(args []string, out io.Writer) int {
+	if len(args) > 0 && args[0] == "--help" {
+		fmt.Fprint(out, configUsage)
+		return 0
+	}
 	if len(args) == 0 {
 		fmt.Fprint(out, configUsage)
 		return 1

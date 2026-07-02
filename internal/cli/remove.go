@@ -14,6 +14,10 @@ const removeUsage = `Usage:
 `
 
 func runRemove(args []string, out io.Writer) int {
+	if len(args) > 0 && args[0] == "--help" {
+		fmt.Fprint(out, removeUsage)
+		return 0
+	}
 	if len(args) < 2 {
 		fmt.Fprint(out, removeUsage)
 		return 1

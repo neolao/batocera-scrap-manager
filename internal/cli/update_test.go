@@ -338,6 +338,34 @@ func TestExecute_Update_TargetedPath_NotInLocalGamelist_ReturnsErrorCode(t *test
 	}
 }
 
+func TestExecute_Update_Help_PrintsUpdateSpecificUsageAndReturnsSuccess(t *testing.T) {
+	withTempConfig(t)
+	var out bytes.Buffer
+
+	code := Execute([]string{"update", "--help"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "update") {
+		t.Errorf("output = %q, want it to describe the update command", out.String())
+	}
+}
+
+func TestExecute_Update_Help_NoRegistryConfigured_DoesNotError(t *testing.T) {
+	withTempConfig(t)
+	var out bytes.Buffer
+
+	code := Execute([]string{"update", "--help"}, &out)
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0 (--help should not require a configured registry)", code)
+	}
+	if strings.Contains(out.String(), "error") {
+		t.Errorf("output = %q, want no error message", out.String())
+	}
+}
+
 func TestExecute_Update_RegistryNotConfigured_ReturnsErrorCode(t *testing.T) {
 	withTempConfig(t)
 	var out bytes.Buffer

@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # Scraper un Jeu Précis via son Chemin
 

@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 depends_on: [001, 002]
 ---
 # Commande CLI de Complétion des Metadata

@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # Exclure les Jeux sans Données du Registre
 

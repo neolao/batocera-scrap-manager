@@ -23,12 +23,31 @@ const maxFormBytes = 64 << 10
 const savedParam = "saved"
 
 const (
-	savedFully   = "1"
-	savedNoSite  = "stale-site"
-	savedAnchor  = "#saved"
-	savedMessage = "Metadata saved to the registry."
-	staleMessage = "Metadata saved to the registry, but the consultation site could not be regenerated — run 'update' to rebuild it."
+	savedFully       = "1"
+	savedNoSite      = "stale-site"
+	savedProtected   = "protected"
+	savedUnprotected = "unprotected"
+	savedAnchor      = "#saved"
+
+	// staleSuffix turns an outcome into the variant reporting that the
+	// registry was written but the site derived from it was not.
+	staleSuffix = "-stale"
+
+	// staleCaveat is appended to an outcome's sentence in that case, rather
+	// than replacing it: what was asked for did happen.
+	staleCaveat = " The consultation site could not be regenerated — run 'update' to rebuild it."
 )
+
+// savedConfirmations maps the outcome a change redirected with to the sentence
+// the game page confirms it with. The sentences state the resulting state
+// rather than the action, so they stay true even when the submission turned out
+// to be a no-op — a stale page asking again for what already holds.
+var savedConfirmations = map[string]string{
+	savedFully:       "Metadata saved to the registry.",
+	savedNoSite:      "Metadata saved to the registry, but the consultation site could not be regenerated — run 'update' to rebuild it.",
+	savedProtected:   "This game is protected — updates will leave its metadata alone.",
+	savedUnprotected: "This game is no longer protected — updates can overwrite its metadata again.",
+}
 
 // saveGame applies a submitted correction to one game's metadata, writes the
 // registry and the consultation site, then redirects back to the game's page:
@@ -89,18 +108,20 @@ func (ui *webUI) saveGame(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, gameURL(system, id)+"?"+savedParam+"="+outcome+savedAnchor, http.StatusSeeOther)
 }
 
-// savedConfirmation turns the outcome a save redirected with into the
+// savedConfirmation turns the outcome a change redirected with into the
 // sentence the game page confirms it with — nothing at all when the page was
-// simply browsed to.
+// simply browsed to. An outcome carrying the stale suffix confirms what did
+// happen, then adds what did not.
 func savedConfirmation(outcome string) string {
-	switch outcome {
-	case savedFully:
-		return savedMessage
-	case savedNoSite:
-		return staleMessage
-	default:
-		return ""
+	if message, found := savedConfirmations[outcome]; found {
+		return message
 	}
+	if base, stale := strings.CutSuffix(outcome, staleSuffix); stale {
+		if message, found := savedConfirmations[base]; found {
+			return message + staleCaveat
+		}
+	}
+	return ""
 }
 
 // crossSite reports whether a submission came from somewhere other than the

@@ -97,6 +97,62 @@ func UpdateMetadata(reg *Registry, system, id string, m Metadata, handBack []str
 	return nil
 }
 
+// Protect marks every editable field of the entry of system whose game ID is
+// id, so no import refreshes any of them — the whole-game statement "these
+// values are the right ones", as opposed to UpdateMetadata's per-field marking
+// of what a correction changed. No value is written: protecting states that the
+// stored ones are correct. It returns ErrGameNotFound, without modifying
+// anything, if no entry matches.
+func Protect(reg *Registry, system, id string) error {
+	i := reg.indexOfID(system, id)
+	if i == -1 {
+		return ErrGameNotFound
+	}
+
+	reg.Entries[i].ManualFields = editableFieldNames()
+	return nil
+}
+
+// Unprotect hands every field of that same entry back to the scraper,
+// including the marks left by earlier per-field corrections — lifting is a
+// whole-game statement too (see decisions/021). Values are left as they are:
+// the next import is simply free to refresh them again. It returns
+// ErrGameNotFound, without modifying anything, if no entry matches.
+func Unprotect(reg *Registry, system, id string) error {
+	i := reg.indexOfID(system, id)
+	if i == -1 {
+		return ErrGameNotFound
+	}
+
+	reg.Entries[i].ManualFields = nil
+	return nil
+}
+
+// FullyProtected reports whether every editable field of the entry is marked,
+// which is what Protect leaves behind. It is derived from the same table the
+// marking uses rather than stored, so no caller can hold its own idea of what
+// a protected game is. A mark naming something uneditable is neither required
+// nor in the way.
+func (e Entry) FullyProtected() bool {
+	for _, field := range editableFields {
+		if !slices.Contains(e.ManualFields, field.Name) {
+			return false
+		}
+	}
+	return true
+}
+
+// editableFieldNames lists the name every editable field is marked under. The
+// slice is built fresh on each call, so an entry cloned from another one never
+// writes through to it.
+func editableFieldNames() []string {
+	names := make([]string, len(editableFields))
+	for i, field := range editableFields {
+		names[i] = field.Name
+	}
+	return names
+}
+
 // markedFields computes the hand-edited fields of entry now that its game
 // changed from before: the fields already marked, plus those this correction
 // changed, minus those handed back to the scraper. The result is a fresh

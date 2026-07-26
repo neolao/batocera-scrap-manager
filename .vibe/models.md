@@ -30,7 +30,7 @@ Defined in: `internal/gamelist/gamelist.go` (parsed from `gamelist.xml`, Emulati
 |---|---|---|
 | System | string | Batocera system name (subfolder name, e.g. `megadrive`) |
 | Game | Game | |
-| ManualFields | []string | names of the metadata fields corrected by hand (`name`, `desc`, `rating`, `release_date`, `developer`, `publisher`, `genre`, `players`); an import puts these values back instead of overwriting them. Empty for a game nobody corrected |
+| ManualFields | []string | names of the metadata fields an import must not overwrite (`name`, `desc`, `rating`, `release_date`, `developer`, `publisher`, `genre`, `players`); an import puts these values back instead of overwriting them. Empty for a game nobody corrected, all eight for a game protected as a whole — `Entry.FullyProtected()` derives that state from the same `editableFields` table rather than storing a flag |
 Defined in: `internal/registry/registry.go`
 
 ## storedGame (on-disk shape of an Entry's game)

@@ -17,6 +17,7 @@ A command-line tool for managing game scraping data (metadata, box art, etc.) on
 - Serve the registry over the local network and browse it from any device: a page lists every game grouped by system, and each game gets its own page with all its metadata and every medium scraped for it (jaquette, video, marquee, thumbnail). The address and port can be chosen, and an unknown address shows a clear "not found" page with a way back to the list.
 - Correct a badly scraped game straight from the browser: each game's page offers a pre-filled form for its name, description, rating, release year, developer, publisher, genre and number of players. Saving updates the registry and regenerates the consultation site immediately, with no restart and no file to edit by hand — and a refused entry comes back with what you typed still in place.
 - A value you corrected by hand is never overwritten by a later update, even though the ROMs folder still holds the badly scraped one. Each game's page shows which of its values were corrected that way, and any of them can be handed back to the scraper.
+- Declare a whole game good in one go, so later updates leave all of its metadata alone — from the command line, or from the game's own page in the browser, which states whether updates may still refresh it. Protecting changes none of its values, and the protection can be lifted just as easily.
 - Get detailed, command-specific help with `--help` on any command (e.g. `update --help`), instead of just the generic top-level help.
 <!-- vibe:end:features -->
 
@@ -98,6 +99,20 @@ Remove a game's entry from the registry:
 batocera-scrap-manager remove megadrive Sonic.zip
 ```
 
+Declare a game good, so later `update` runs stop refreshing its metadata:
+
+```sh
+batocera-scrap-manager protect megadrive Sonic.zip
+```
+
+None of its values change: protecting only states that the ones already stored are the right ones. Hand it back to the scraper with the symmetric command:
+
+```sh
+batocera-scrap-manager unprotect megadrive Sonic.zip
+```
+
+Note that `unprotect` clears every mark on the game, including the ones left by corrections you made earlier in the web browser. To hand back a single value instead, use the checkbox offered under it in the edit form. Neither command touches the game's media or its ROM file.
+
 Browse the registry live in a web browser, from this machine or from any device on the local network:
 
 ```sh
@@ -114,12 +129,16 @@ From a game's page, the "Edit metadata" link opens a form pre-filled with its na
 
 Every value you correct this way is remembered as hand-edited: later `update` runs refresh everything else from the ROMs folders but leave those values alone, and the game's page marks them so you can tell them apart. Each of them can be handed back to the scraper from the form, with the checkbox offered under it. Note that the ROMs folder itself keeps its own value — Batocera will still display the badly scraped one until it is fixed there too.
 
-The registry is read when the server starts: after an `update`, restart `serve` to see the changes. Corrections made from the browser take effect immediately, without restarting.
+A game's page also says whether updates may still refresh it — not protected, partly protected when only some values were corrected by hand, or protected — and offers a button to protect it. Once a game is fully protected the button lifts the protection instead, and the per-value marks give way to that single sentence. The button is only offered the other way round on a fully protected game: lifting in bulk from the partly protected state would quietly discard which values you had corrected, so that is left to the edit form, one value at a time.
+
+Whichever way you protect a game, Batocera keeps displaying what the ROMs folder holds until that is fixed there too.
+
+The registry is read when the server starts: after an `update`, restart `serve` to see the changes. Corrections and protection changes made from the browser take effect immediately, without restarting.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->
 ## Documentation
 
-- [docs/architecture.md](docs/architecture.md) — How the tool is put together: its main parts, how a ROMs folder's data flows into the registry and back out, how the registry is browsed and corrected, and how a hand-made correction is kept.
+- [docs/architecture.md](docs/architecture.md) — How the tool is put together: its main parts, how a ROMs folder's data flows into the registry and back out, how the registry is browsed and corrected, and how a hand-made correction — or a whole protected game — is kept from being overwritten.
 - [docs/configuration.md](docs/configuration.md) — Where the configuration lives, what it holds, and the environment variable that can relocate it.
 <!-- vibe:end:docs-index -->

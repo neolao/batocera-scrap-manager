@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -346,5 +347,331 @@ func TestUpdateMetadata_GameIDContainingADot_IsFoundByItsFullID(t *testing.T) {
 
 	if reg.Entries[0].Game.Name != "Micro Machines V3" {
 		t.Errorf("Name = %q, want the correction applied", reg.Entries[0].Game.Name)
+	}
+}
+
+// fullyScrapedGame is a game with every editable field set, so a test can
+// assert that protecting or lifting a protection changed none of them.
+func fullyScrapedGame() gamelist.Game {
+	return gamelist.Game{
+		Path:        "./Sonic.zip",
+		Name:        "Sonic the Hedgehog",
+		Desc:        "Fast blue mascot.",
+		Image:       "./images/Sonic.png",
+		Video:       "./videos/Sonic.mp4",
+		Rating:      "0.8",
+		ReleaseDate: "19910623T000000",
+		Developer:   "Sonic Team",
+		Publisher:   "Sega",
+		Genre:       "Platform",
+		Players:     "1",
+	}
+}
+
+func TestProtect_ScrapedGame_MarksEveryEditableFieldWithoutChangingAValue(t *testing.T) {
+	game := fullyScrapedGame()
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: game}}}
+
+	if err := Protect(reg, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("Protect() error = %v, want nil", err)
+	}
+
+	got := reg.Entries[0]
+	if got.Game != game {
+		t.Errorf("Game = %+v, want it byte-identical to %+v: protecting states values are right, it does not change them", got.Game, game)
+	}
+	want := []string{"name", "desc", "rating", "release_date", "developer", "publisher", "genre", "players"}
+	for _, field := range want {
+		if !slices.Contains(got.ManualFields, field) {
+			t.Errorf("ManualFields = %v, want it to contain %q", got.ManualFields, field)
+		}
+	}
+	if len(got.ManualFields) != len(want) {
+		t.Errorf("ManualFields = %v, want exactly the %d editable fields", got.ManualFields, len(want))
+	}
+}
+
+func TestProtect_ThenImportingADifferentlyScrapedGame_OverwritesNothing(t *testing.T) {
+	// The whole point of the feature: an update run against a ROMs folder that
+	// still holds the badly scraped values must leave the game alone.
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: fullyScrapedGame()}}}
+	if err := Protect(reg, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("Protect() error = %v, want nil", err)
+	}
+
+	added, updated, unchanged := reg.Import("megadrive", []gamelist.Game{{
+		Path:        "./Sonic.zip",
+		Name:        "Sonic teh Hedghog",
+		Desc:        "Badly scraped.",
+		Image:       "./images/Sonic.png",
+		Video:       "./videos/Sonic.mp4",
+		Rating:      "0.2",
+		ReleaseDate: "19950101T000000",
+		Developer:   "Unknown",
+		Publisher:   "Unknown",
+		Genre:       "Action",
+		Players:     "4",
+	}})
+
+	if added != 0 || updated != 0 || unchanged != 1 {
+		t.Errorf("added=%d updated=%d unchanged=%d, want 0,0,1", added, updated, unchanged)
+	}
+	if got := reg.Entries[0].Game; got != fullyScrapedGame() {
+		t.Errorf("Game = %+v, want every field to survive the import unchanged", got)
+	}
+}
+
+func TestProtect_ThenImportingAGameWhoseMediaMoved_StillRefreshesTheMedia(t *testing.T) {
+	// Protection covers the eight editable metadata fields and nothing else:
+	// media references are managed by their own flow, so a protected game still
+	// follows its artwork when the ROMs folder points somewhere else. Were it
+	// otherwise, a protected entry would keep pointing at a file that moved.
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: fullyScrapedGame()}}}
+	if err := Protect(reg, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("Protect() error = %v, want nil", err)
+	}
+
+	reg.Import("megadrive", []gamelist.Game{{
+		Path:  "./Sonic.zip",
+		Name:  "Sonic teh Hedghog",
+		Image: "./images/Sonic-boxart.png",
+		Video: "./videos/Sonic.mp4",
+	}})
+
+	got := reg.Entries[0].Game
+	if got.Image != "./images/Sonic-boxart.png" {
+		t.Errorf("Image = %q, want the media reference to follow the ROMs folder", got.Image)
+	}
+	if got.Name != "Sonic the Hedgehog" {
+		t.Errorf("Name = %q, want the protected metadata untouched", got.Name)
+	}
+}
+
+func TestProtect_GameAlreadyProtected_StaysMarkedOnceEach(t *testing.T) {
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: fullyScrapedGame()}}}
+
+	for range 3 {
+		if err := Protect(reg, "megadrive", "Sonic"); err != nil {
+			t.Fatalf("Protect() error = %v, want nil", err)
+		}
+	}
+
+	if got := len(reg.Entries[0].ManualFields); got != 8 {
+		t.Errorf("len(ManualFields) = %d, want 8: repeating the command must not grow the stored list", got)
+	}
+}
+
+func TestProtect_GameWithOneFieldAlreadyHandEdited_KeepsThatFieldMarkedOnce(t *testing.T) {
+	reg := &Registry{Entries: []Entry{{
+		System:       "megadrive",
+		Game:         fullyScrapedGame(),
+		ManualFields: []string{"name"},
+	}}}
+
+	if err := Protect(reg, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("Protect() error = %v, want nil", err)
+	}
+
+	got := reg.Entries[0].ManualFields
+	if len(got) != 8 {
+		t.Errorf("ManualFields = %v, want the 8 editable fields with no duplicate", got)
+	}
+}
+
+func TestProtect_UnknownGame_ReturnsErrGameNotFoundWithoutChangingAnything(t *testing.T) {
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: fullyScrapedGame()}}}
+
+	err := Protect(reg, "megadrive", "Streets of Rage")
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Fatalf("Protect() error = %v, want ErrGameNotFound", err)
+	}
+	if len(reg.Entries[0].ManualFields) != 0 {
+		t.Errorf("ManualFields = %v, want the known game left untouched", reg.Entries[0].ManualFields)
+	}
+}
+
+func TestProtect_UnknownSystem_ReturnsErrGameNotFound(t *testing.T) {
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: fullyScrapedGame()}}}
+
+	if err := Protect(reg, "nes", "Sonic"); !errors.Is(err, ErrGameNotFound) {
+		t.Fatalf("Protect() error = %v, want ErrGameNotFound", err)
+	}
+}
+
+func TestProtect_GameIDContainingADot_IsFoundByItsFullID(t *testing.T) {
+	// Same trap as UpdateMetadata's: running the id through GameID again would
+	// truncate it at the dot and lose the entry.
+	reg := &Registry{Entries: []Entry{{
+		System: "psx",
+		Game:   gamelist.Game{Path: "./Micro Machines v3.0.chd", Name: "Micro Machines V3"},
+	}}}
+
+	if err := Protect(reg, "psx", "Micro Machines v3.0"); err != nil {
+		t.Fatalf("Protect() error = %v, want nil", err)
+	}
+	if len(reg.Entries[0].ManualFields) != 8 {
+		t.Errorf("ManualFields = %v, want the entry to have been found and protected", reg.Entries[0].ManualFields)
+	}
+}
+
+func TestProtect_AppliedToAClone_DoesNotWriteThroughToTheOriginal(t *testing.T) {
+	// The web UI protects a clone, persists it, and only then swaps it in: a
+	// failed write must leave the served snapshot exactly as it was.
+	original := &Registry{Entries: []Entry{{
+		System:       "megadrive",
+		Game:         fullyScrapedGame(),
+		ManualFields: []string{"name"},
+	}}}
+	clone := original.Clone()
+
+	if err := Protect(clone, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("Protect() error = %v, want nil", err)
+	}
+
+	if got := original.Entries[0].ManualFields; strings.Join(got, ",") != "name" {
+		t.Errorf("original ManualFields = %v, want [name] untouched", got)
+	}
+}
+
+func TestUnprotect_ProtectedGame_ClearsEveryMarkWithoutChangingAValue(t *testing.T) {
+	game := fullyScrapedGame()
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: game}}}
+	if err := Protect(reg, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("Protect() error = %v, want nil", err)
+	}
+
+	if err := Unprotect(reg, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("Unprotect() error = %v, want nil", err)
+	}
+
+	got := reg.Entries[0]
+	if len(got.ManualFields) != 0 {
+		t.Errorf("ManualFields = %v, want none left", got.ManualFields)
+	}
+	if got.Game != game {
+		t.Errorf("Game = %+v, want it unchanged: lifting a protection stores no new value", got.Game)
+	}
+}
+
+func TestUnprotect_ThenImporting_RefreshesTheGameAgain(t *testing.T) {
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: fullyScrapedGame()}}}
+	if err := Protect(reg, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("Protect() error = %v, want nil", err)
+	}
+	if err := Unprotect(reg, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("Unprotect() error = %v, want nil", err)
+	}
+
+	_, updated, _ := reg.Import("megadrive", []gamelist.Game{{Path: "./Sonic.zip", Name: "Sonic", Genre: "Action"}})
+
+	if updated != 1 {
+		t.Errorf("updated = %d, want 1: an unprotected game is refreshable again", updated)
+	}
+	if got := reg.Entries[0].Game.Genre; got != "Action" {
+		t.Errorf("Genre = %q, want %q from the ROMs folder", got, "Action")
+	}
+}
+
+func TestUnprotect_GameWithOnlySomeFieldsHandEdited_ClearsThoseToo(t *testing.T) {
+	// Lifting is a whole-game statement: it hands everything back, including
+	// the marks left by earlier per-field corrections (see decisions/021).
+	reg := &Registry{Entries: []Entry{{
+		System:       "megadrive",
+		Game:         fullyScrapedGame(),
+		ManualFields: []string{"name", "genre"},
+	}}}
+
+	if err := Unprotect(reg, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("Unprotect() error = %v, want nil", err)
+	}
+
+	if got := reg.Entries[0].ManualFields; len(got) != 0 {
+		t.Errorf("ManualFields = %v, want none left", got)
+	}
+}
+
+func TestUnprotect_GameThatWasNotProtected_SucceedsAndChangesNothing(t *testing.T) {
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: fullyScrapedGame()}}}
+
+	if err := Unprotect(reg, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("Unprotect() error = %v, want nil: lifting an absent protection is not a failure", err)
+	}
+	if len(reg.Entries[0].ManualFields) != 0 {
+		t.Errorf("ManualFields = %v, want none", reg.Entries[0].ManualFields)
+	}
+}
+
+func TestUnprotect_UnknownGame_ReturnsErrGameNotFoundWithoutChangingAnything(t *testing.T) {
+	reg := &Registry{Entries: []Entry{{
+		System:       "megadrive",
+		Game:         fullyScrapedGame(),
+		ManualFields: []string{"name"},
+	}}}
+
+	err := Unprotect(reg, "megadrive", "Streets of Rage")
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Fatalf("Unprotect() error = %v, want ErrGameNotFound", err)
+	}
+	if strings.Join(reg.Entries[0].ManualFields, ",") != "name" {
+		t.Errorf("ManualFields = %v, want the known game left untouched", reg.Entries[0].ManualFields)
+	}
+}
+
+func TestUnprotect_AppliedToAClone_DoesNotWriteThroughToTheOriginal(t *testing.T) {
+	original := &Registry{Entries: []Entry{{
+		System:       "megadrive",
+		Game:         fullyScrapedGame(),
+		ManualFields: []string{"name", "genre"},
+	}}}
+	clone := original.Clone()
+
+	if err := Unprotect(clone, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("Unprotect() error = %v, want nil", err)
+	}
+
+	if got := original.Entries[0].ManualFields; strings.Join(got, ",") != "name,genre" {
+		t.Errorf("original ManualFields = %v, want [name genre] untouched", got)
+	}
+}
+
+func TestFullyProtected_EveryEditableFieldMarked_ReportsTrue(t *testing.T) {
+	entry := Entry{ManualFields: []string{
+		"players", "genre", "publisher", "developer", "release_date", "rating", "desc", "name",
+	}}
+
+	if !entry.FullyProtected() {
+		t.Errorf("FullyProtected() = false, want true: the marks are the whole set, order is irrelevant")
+	}
+}
+
+func TestFullyProtected_OneEditableFieldMissing_ReportsFalse(t *testing.T) {
+	// desc is not among the rows a game's page shows, so counting only the
+	// displayed ones would wrongly call this game protected.
+	entry := Entry{ManualFields: []string{
+		"name", "rating", "release_date", "developer", "publisher", "genre", "players",
+	}}
+
+	if entry.FullyProtected() {
+		t.Errorf("FullyProtected() = true, want false: %q is still refreshable", "desc")
+	}
+}
+
+func TestFullyProtected_NothingMarked_ReportsFalse(t *testing.T) {
+	if (Entry{}).FullyProtected() {
+		t.Errorf("FullyProtected() = true, want false for a game with no mark at all")
+	}
+}
+
+func TestFullyProtected_EveryFieldMarkedPlusAnUnknownName_StillReportsTrue(t *testing.T) {
+	// A mark written by a later version of the tool must not make the game read
+	// as partly protected.
+	entry := Entry{ManualFields: []string{
+		"name", "desc", "rating", "release_date", "developer", "publisher", "genre", "players", "region",
+	}}
+
+	if !entry.FullyProtected() {
+		t.Errorf("FullyProtected() = false, want true: an unknown extra mark protects nothing but breaks nothing")
 	}
 }

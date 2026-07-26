@@ -40,6 +40,8 @@ func Handler(reg *registry.Registry, registryFolder string) http.Handler {
 	// every method, so the mux's own method-not-allowed handling would never
 	// fire for this URL.
 	mux.HandleFunc("/game/{system}/{id}/edit", ui.serveWrongMethod)
+	mux.HandleFunc("POST /game/{system}/{id}/protect", ui.setProtection)
+	mux.HandleFunc("/game/{system}/{id}/protect", ui.serveWrongProtectMethod)
 	mux.Handle("GET "+mediaURLPrefix, http.StripPrefix(mediaURLPrefix,
 		http.FileServer(fileOnlyFS{http.Dir(registryFolder)})))
 	mux.HandleFunc("/", ui.serveUnknownPage)
@@ -86,6 +88,9 @@ type gameDetail struct {
 	VideoURL  string
 	Extras    []extraMedium
 	Fields    []metadataField
+	// Protection states, in words, whether updates may refresh this game, and
+	// offers the one control that state allows.
+	Protection protectionControl
 }
 
 // extraMedium is a labelled still image of a game beyond its cover art
@@ -166,15 +171,22 @@ func renderGameNotFound(w http.ResponseWriter, system, id string) {
 func (ui *webUI) gameDetail(entry registry.Entry) gameDetail {
 	view := site.GroupBySystem([]registry.Entry{entry}, ui.registryFolder)[0].Games[0]
 
-	handEdited := func(field string) bool { return slices.Contains(entry.ManualFields, field) }
+	// A fully protected game says so once, at the game level: lighting the mark
+	// of every single field under that sentence reads as noise, or as a
+	// contradiction.
+	fullyProtected := entry.FullyProtected()
+	handEdited := func(field string) bool {
+		return !fullyProtected && slices.Contains(entry.ManualFields, field)
+	}
 	detail := gameDetail{
-		Name:      view.Name,
-		System:    view.System,
-		SystemURL: "/#" + view.System,
-		EditURL:   gameURL(view.System, view.ID) + "/edit",
-		Desc:      view.Desc,
-		CoverURL:  mediaURL(view.ImagePath),
-		VideoURL:  mediaURL(view.VideoPath),
+		Name:       view.Name,
+		System:     view.System,
+		SystemURL:  "/#" + view.System,
+		EditURL:    gameURL(view.System, view.ID) + "/edit",
+		Protection: protectionOf(entry, view.System, view.ID),
+		Desc:       view.Desc,
+		CoverURL:   mediaURL(view.ImagePath),
+		VideoURL:   mediaURL(view.VideoPath),
 		Fields: []metadataField{
 			{Label: "Rating", Value: ratingValue(view), HandEdited: handEdited("rating")},
 			{Label: "Year", Value: view.Year, HandEdited: handEdited("release_date")},
@@ -384,7 +396,16 @@ var gameTemplate = newPage("game", `
 </div>
 {{end}}
 </dl>
-<p class="meta__actions"><a class="button" href="{{.EditURL}}">Edit metadata</a></p>
+<p class="meta__state">{{.Protection.Summary}}</p>
+<div class="meta__actions">
+<a class="button" href="{{.EditURL}}">Edit metadata</a>
+{{if .Protection.Label}}
+<form class="meta__protect" method="post" action="{{.Protection.Action}}">
+<input type="hidden" name="protected" value="{{.Protection.Value}}">
+<button class="button button--quiet" type="submit">{{.Protection.Label}}</button>
+</form>
+{{end}}
+</div>
 </div>
 </div>
 {{if or .VideoURL .Extras}}

@@ -1,6 +1,6 @@
 # Module: cli
 **Role:** Entry point and command-line interface of batocera-scrap-manager — parses arguments and dispatches to commands.
-**Files:** `main.go`, `internal/cli/cli.go`, `internal/cli/common.go`, `internal/cli/config.go`, `internal/cli/update.go`, `internal/cli/scrape.go`, `internal/cli/remove.go`, `internal/cli/serve.go`
+**Files:** `main.go`, `internal/cli/cli.go`, `internal/cli/common.go`, `internal/cli/config.go`, `internal/cli/update.go`, `internal/cli/scrape.go`, `internal/cli/remove.go`, `internal/cli/protect.go`, `internal/cli/serve.go`
 **Exports:** `cli.Execute(args []string, out io.Writer) int`
 **Depends on:** [`modules/config.md`](config.md), [`modules/registry.md`](registry.md), [`modules/store.md`](store.md), [`modules/webui.md`](webui.md)
 
@@ -37,6 +37,15 @@ The config file path is resolved via `config.DefaultPath()`: the `BATOCERA_SCRAP
 - Loads the config, fails with exit code 1 if `RegistryFolder` is not set (same message as `update`/`scrape`).
 - Loads the registry, then calls `registry.Remove`. On `registry.ErrGameNotFound`, prints an error naming the system and filename and returns exit code 1; on any other error, prints it and returns exit code 1.
 - On success, prints a one-line confirmation (`"removed <rom-filename> (system: <system>)"`) and returns exit code 0.
+
+## `protect` and `unprotect` subcommands
+`internal/cli/protect.go` implements `runProtect` and `runUnprotect`, dispatched by `Execute` on `args[0] == "protect"` / `"unprotect"`. Both are one call to `applyProtection`, which differs only by the usage constant, the confirmation verb, and the `registry.Protect`/`registry.Unprotect` function it is handed — two verbs rather than one command with a flag, so both halves of the feature appear in the top-level `--help` (backlog item 018).
+
+- `--help` — prints `protectUsage` / `unprotectUsage` and returns exit code 0, before any config or registry loading. `unprotectUsage` states that the lift also clears the marks left by corrections made in the web UI, since that is not recoverable from the CLI.
+- Expects exactly two positional arguments, `<system> <rom-filename>`. `parseProtectionArgs` is deliberately stricter than `runRemove`'s reading: any argument starting with `-` is refused by name, and a count other than 2 is refused rather than silently ignored (`remove nes a.zip b.zip` still swallows `b.zip`). Both refusals print `error: ...` then the usage, and return exit code 1.
+- Converts the ROM filename to the registry's game ID with the exported `registry.GameID` — the CLI addresses a game by filename while the registry addresses it by ID, and that rule is never re-derived locally (see [`decisions/014`](../decisions/014-dedupe-by-extension-stripped-filename-too.md)).
+- Applies the change, then persists through `saveAndGenerateSite`. On `registry.ErrGameNotFound`, prints `remove`'s exact wording (`error: no game found for system %q and filename %q`) and returns exit code 1.
+- On success, prints `"protected <rom-filename> (system: <system>)"` / `"unprotected ..."` and returns exit code 0. Both are idempotent: re-running either succeeds and stores the same state.
 
 ## `scrape` subcommand
 `internal/cli/scrape.go` implements `runScrape(args []string, out io.Writer) int`, dispatched by `Execute` on `args[0] == "scrape"`.

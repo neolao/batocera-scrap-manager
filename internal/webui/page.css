@@ -142,7 +142,19 @@
   color: var(--magenta);
   text-transform: uppercase;
 }
-.meta__actions { margin: 1.25rem 0 0; }
+.meta__state {
+  margin: 1.25rem 0 0;
+  color: var(--ink-dim);
+  font-size: 0.9rem;
+}
+.meta__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+}
+.meta__protect { margin: 0; }
 .button {
   display: inline-block;
   font-family: var(--font-display);

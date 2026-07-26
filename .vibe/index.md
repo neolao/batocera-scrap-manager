@@ -40,6 +40,9 @@
 - A change is applied to a `Clone()` of the shared state, persisted, and only swapped in once the write succeeded — so a failed write never leaves memory claiming something the disk does not hold, and no rollback path has to be maintained.
 - Data the user typed by hand is marked as such and treated as authoritative against automated refreshes, rather than relying on the automated flow to guess (`Entry.ManualFields`, see [`decisions/017`](.vibe/decisions/017-protect-hand-edited-fields-from-later-imports.md)); the mark is stored with `omitempty`, so files written before the feature stay byte-identical.
 - An HTTP surface with no accounts to authenticate still refuses what it can cheaply recognize as not its own: a submission whose `Sec-Fetch-Site`/`Origin` names another site, or a body over an explicit cap.
+- A state a user can change from two places is stored once and *derived* wherever it is read (`Entry.FullyProtected` over `editableFields`), never duplicated as a flag the CLI and the web UI would each have to maintain — see [`decisions/021`](.vibe/decisions/021-whole-game-protection-is-every-field-marked-at-once.md).
+- A control that toggles a state submits the state it asks for, not "flip it", and its confirmation names the resulting state rather than the action — so a page rendered before the state changed elsewhere produces a harmless repeat, still truthfully confirmed.
+- Two entry points onto one domain operation may differ in what they *offer* without differing in what they *mean*: the CLI lifts a protection unconditionally, the web UI only from the fully protected state, and both call the same function.
 
 ## Other context files
 - [`models.md`](.vibe/models.md) — data models

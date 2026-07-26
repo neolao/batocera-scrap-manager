@@ -20,6 +20,8 @@ Commands:
   update      Update the registry from the configured ROMs folders
   scrape      Complete missing ROMs metadata and media from the registry
   remove      Remove a game's entry (metadata and media) from the registry
+  protect     Protect a game's metadata from being overwritten by 'update'
+  unprotect   Let 'update' refresh a game's metadata again
   serve       Browse the registry in a web browser
 `
 
@@ -46,6 +48,10 @@ func Execute(args []string, out io.Writer) int {
 		return runScrape(args[1:], out)
 	case "remove":
 		return runRemove(args[1:], out)
+	case "protect":
+		return runProtect(args[1:], out)
+	case "unprotect":
+		return runUnprotect(args[1:], out)
 	case "serve":
 		return runServe(args[1:], out)
 	default:

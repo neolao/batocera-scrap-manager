@@ -7,7 +7,7 @@ batocera-scrap-manager is organized around three main areas that work together t
 ## The main parts
 
 **Command-line interface**
-The tool's entry point. It interprets the commands typed by the user (`config`, `update`, `scrape`, `remove`, `serve`, `--version`, `--help`) and displays results and error messages.
+The tool's entry point. It interprets the commands typed by the user (`config`, `update`, `scrape`, `remove`, `protect`, `unprotect`, `serve`, `--version`, `--help`) and displays results and error messages.
 
 **Configuration**
 Keeps track of two essential pieces of information between runs: where the registry lives, and which Batocera ROMs folders should be watched. This configuration is saved to disk and read back on every command.
@@ -51,7 +51,7 @@ Two kinds of pages are served, sharing the static site's look:
 
 A game is addressed by the same identifier the registry already uses to name its file on disk, so no second matching rule is introduced. An address designating an unknown system or an unknown game — or one that is simply malformed — answers with a "not found" page in the same style, naming what could not be found and offering a link back to the list, rather than a blank page or a server error. Media files are read from the registry folder only: no address can reach a file outside it, and the folders themselves are never listed.
 
-The registry is read once, when the server starts: after an `update`, the server must be restarted to reflect the changes. A correction made from the server's own form is the exception — it is applied to what the server serves as well as to the disk, so it shows immediately.
+The registry is read once, when the server starts: after an `update`, the server must be restarted to reflect the changes. Changes made from the server's own pages are the exception — a correction, and protecting or unprotecting a game, are applied to what the server serves as well as to the disk, so they show immediately.
 
 ```mermaid
 flowchart LR
@@ -61,6 +61,8 @@ flowchart LR
   SRV --> LIST["Game list page"]
   SRV --> GAME["One page per game"]
   SRV --> EDIT["Edit form + save"]
+  SRV --> PROT["Protect / unprotect"]
+  PROT --> COMMIT
   SRV --> MEDIA["Media files"]
   SRV --> NF["Not-found page"]
   EDIT --> COMMIT["Commit: registry + consultation site"]
@@ -86,6 +88,19 @@ Each game therefore records which of its values were corrected by hand. An impor
 Marking happens only for the values a correction actually changes: opening the form and saving it untouched freezes nothing. A registry written by an earlier version of the tool, which knows nothing of these marks, keeps loading normally with no value protected, and a game nobody corrected is stored exactly as it was before.
 
 The correction lives in the registry: the ROMs folder keeps its own value, so Batocera itself still shows the badly scraped one until it is fixed there too. Completing a ROMs folder from the registry does not fix it either, since completion only ever fills fields left empty locally.
+
+## Protecting a whole game
+
+Marking one value at a time is the right granularity for a correction, but not for a game that is simply already right: shielding it that way would mean editing each of its values into something else and back. A game can therefore be protected as a whole, which marks all eight of its editable values at once, and unprotected, which clears them.
+
+This is the same mechanism at its limit, not a second one — there is no separate "protected" flag, and the state a game's page reports is derived from the very same list of editable values that the marking writes. Nothing can drift as a result: the day an editable value is added, a game cannot end up half-protected while still reading as protected. Protecting writes no value at all; it only states that the ones already stored are the right ones. Media references and the ROM path stay outside it, so a protected game still follows its artwork when the ROMs folder points somewhere else.
+
+Because lifting is a whole-game statement, it also drops the marks left by earlier per-value corrections. The two entry points differ deliberately in what they offer:
+
+- The command line lifts unconditionally, and says so in its help.
+- A game's page only offers the bulk lift once the game is *fully* protected. From the partly protected state it offers protection only — lifting in bulk there would silently discard which values the user had corrected by hand, and that cannot be reconstructed. Selective lifting stays one click away, on the edit form, one value at a time.
+
+The page states the result in words — not protected, partly protected, protected — and a fully protected game shows that sentence instead of the per-value marks, which would otherwise all light up at once and read as noise. The control submits the state being asked for rather than "flip it", so a page left open while the game's state changed elsewhere produces a harmless repeat instead of the opposite of what its button offered.
 
 ## Completing a ROMs folder from the registry
 

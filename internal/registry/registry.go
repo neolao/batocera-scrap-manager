@@ -15,14 +15,39 @@ import (
 )
 
 // Entry associates a parsed game with the Batocera system it belongs to.
+// ManualFields names the metadata fields of Game that were corrected by hand
+// (see editableFields): an import puts those values back instead of letting
+// the ROMs folder's own, still badly scraped, value win — see decisions/017.
 type Entry struct {
-	System string
-	Game   gamelist.Game
+	System       string
+	Game         gamelist.Game
+	ManualFields []string
+}
+
+// storedGame is the on-disk shape of an entry: the game's own fields, flat at
+// the root of its JSON file exactly as before, plus the registry's own
+// bookkeeping. The key is omitted for a game nobody edited, so files written
+// by an earlier version and files written now are byte-identical for
+// untouched games, and reading one back yields an entry with nothing
+// protected.
+type storedGame struct {
+	gamelist.Game
+	ManualFields []string `json:"manual_fields,omitempty"`
 }
 
 // Registry is the centralized index of games already known.
 type Registry struct {
 	Entries []Entry
+}
+
+// Clone returns a copy of the registry that can be modified without touching
+// the original — the way a caller applies a change, tries to write it to
+// disk, and only swaps it in once the write succeeded, so a failed save never
+// leaves memory claiming something the disk does not hold.
+func (r *Registry) Clone() *Registry {
+	clone := &Registry{Entries: make([]Entry, len(r.Entries))}
+	copy(clone.Entries, r.Entries)
+	return clone
 }
 
 // Load reconstructs the registry from the registry folder at path, by
@@ -72,11 +97,11 @@ func loadSystemEntries(path, system string) ([]Entry, error) {
 		if err != nil {
 			return nil, err
 		}
-		var g gamelist.Game
-		if err := json.Unmarshal(data, &g); err != nil {
+		var stored storedGame
+		if err := json.Unmarshal(data, &stored); err != nil {
 			return nil, err
 		}
-		entries = append(entries, Entry{System: system, Game: g})
+		entries = append(entries, Entry{System: system, Game: stored.Game, ManualFields: stored.ManualFields})
 	}
 	return entries, nil
 }
@@ -95,7 +120,7 @@ func Save(path string, reg *Registry) error {
 			return err
 		}
 
-		data, err := json.MarshalIndent(e.Game, "", "  ")
+		data, err := json.MarshalIndent(storedGame{Game: e.Game, ManualFields: e.ManualFields}, "", "  ")
 		if err != nil {
 			return err
 		}
@@ -190,9 +215,13 @@ const (
 
 // mergeGameEntry merges g (belonging to system) into the registry, reporting
 // whether it was newly added, replaced an existing entry with different
-// metadata, or left unchanged.
+// metadata, or left unchanged. Fields the existing entry marks as
+// hand-edited keep their stored value, so a game still badly scraped in the
+// ROMs folder cannot undo a correction; when they are the only difference,
+// nothing is left to merge and the game counts as unchanged.
 func (r *Registry) mergeGameEntry(system string, g gamelist.Game) importStatus {
 	if i := r.indexOf(system, g.Path); i != -1 {
+		keepHandEditedFields(&g, r.Entries[i].Game, r.Entries[i].ManualFields)
 		if r.Entries[i].Game == g {
 			return statusUnchanged
 		}

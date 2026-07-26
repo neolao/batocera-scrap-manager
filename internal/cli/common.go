@@ -6,7 +6,7 @@ import (
 
 	"github.com/neolao/batocera-scrap-manager/internal/config"
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
-	"github.com/neolao/batocera-scrap-manager/internal/site"
+	"github.com/neolao/batocera-scrap-manager/internal/store"
 )
 
 // loadConfigAndRegistry loads the persisted configuration and registry,
@@ -42,11 +42,7 @@ func loadConfigAndRegistry(out io.Writer) (cfg config.Config, reg *registry.Regi
 // the static site from it, writing an error message to out and returning
 // false if either step fails.
 func saveAndGenerateSite(cfg config.Config, reg *registry.Registry, out io.Writer) bool {
-	if err := registry.Save(cfg.RegistryFolder, reg); err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
-		return false
-	}
-	if err := site.Generate(reg, cfg.RegistryFolder); err != nil {
+	if err := store.Save(reg, cfg.RegistryFolder); err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return false
 	}

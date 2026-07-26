@@ -5,9 +5,10 @@
 - [`modules/cli.md`](.vibe/modules/cli.md) — entry point and command-line interface
 - [`modules/config.md`](.vibe/modules/config.md) — persistence of the configured registry folder and ROMs folders
 - [`modules/gamelist.md`](.vibe/modules/gamelist.md) — parsing and writing of EmulationStation/Batocera `gamelist.xml` files
-- [`modules/registry.md`](.vibe/modules/registry.md) — centralized game index and media (one JSON file per game); imports from ROMs folders into the registry, completes ROMs folders (or a single targeted game) back from the registry, and removes a game's entry on demand
-- [`modules/site.md`](.vibe/modules/site.md) — shared presentation layer: turns registry entries into HTML views (grouping, formatting, theme) and generates the styled static HTML site, with sticky navigation between systems
-- [`modules/webui.md`](.vibe/modules/webui.md) — serves the registry over HTTP: game list, one page per game, themed 404, and the media files
+- [`modules/registry.md`](.vibe/modules/registry.md) — centralized game index and media (one JSON file per game); imports from ROMs folders into the registry, completes ROMs folders (or a single targeted game) back from the registry, removes a game's entry, and applies a hand-made metadata correction that later imports must not overwrite
+- [`modules/site.md`](.vibe/modules/site.md) — shared presentation layer: turns registry entries into HTML views (grouping, formatting, theme, and the inverse conversions a form needs) and generates the styled static HTML site, with sticky navigation between systems
+- [`modules/store.md`](.vibe/modules/store.md) — the one place committing a registry change: writes the registry and regenerates the consultation site derived from it
+- [`modules/webui.md`](.vibe/modules/webui.md) — serves the registry over HTTP: game list, one page per game, the form correcting a game's metadata, themed error pages, and the media files
 
 ## Observed patterns
 
@@ -34,6 +35,11 @@
 - An HTML template never computes: grouping, sorting, formatting and media-presence checks are precomputed into view structs (`site.GameView`, `webui.gameDetail`), so a template only iterates and prints.
 - A "value missing" state is represented by an empty precomputed field (e.g. an empty media path meaning "no such file on disk"), which every renderer then branches on to show a placeholder — rather than each renderer re-running the existence check.
 - Commands print only their own results on `out`: a long-running command silences the library noise it would otherwise inherit (`http.Server.ErrorLog` discarded) instead of interleaving it with the user's output.
+- A two-step invariant needed by several packages (write the registry, then regenerate the site derived from it) lives in one package both can import (`internal/store`) rather than being repeated — see [`decisions/020`](.vibe/decisions/020-one-place-committing-a-registry-change.md); the dependency direction is what forced a new package rather than a helper in `registry` or `cli`.
+- A value stored in one format but displayed in a lossier one is edited in its displayed form, and left byte-identical when that displayed form did not change — so opening a form and saving it degrades nothing (see [`decisions/019`](.vibe/decisions/019-edit-the-displayed-formats-not-the-stored-ones.md)). Each such conversion sits next to its formatter, never in the package that happens to need it.
+- A change is applied to a `Clone()` of the shared state, persisted, and only swapped in once the write succeeded — so a failed write never leaves memory claiming something the disk does not hold, and no rollback path has to be maintained.
+- Data the user typed by hand is marked as such and treated as authoritative against automated refreshes, rather than relying on the automated flow to guess (`Entry.ManualFields`, see [`decisions/017`](.vibe/decisions/017-protect-hand-edited-fields-from-later-imports.md)); the mark is stored with `omitempty`, so files written before the feature stay byte-identical.
+- An HTTP surface with no accounts to authenticate still refuses what it can cheaply recognize as not its own: a submission whose `Sec-Fetch-Site`/`Origin` names another site, or a body over an explicit cap.
 
 ## Other context files
 - [`models.md`](.vibe/models.md) — data models

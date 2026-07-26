@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/neolao/batocera-scrap-manager/internal/gamelist"
@@ -1454,5 +1455,38 @@ func TestFindByID_EmptyRegistry_ReturnsNotFound(t *testing.T) {
 
 	if _, found := reg.FindByID("megadrive", "Sonic"); found {
 		t.Error("FindByID() found = true on an empty registry, want false")
+	}
+}
+
+func TestClone_EditingTheCopy_LeavesTheOriginalUntouched(t *testing.T) {
+	// A caller that must not commit anything until the write to disk succeeded
+	// edits a clone and only then swaps it in.
+	reg := &Registry{Entries: []Entry{{
+		System:       "megadrive",
+		Game:         gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"},
+		ManualFields: []string{"genre"},
+	}}}
+
+	clone := reg.Clone()
+	if err := UpdateMetadata(clone, "megadrive", "Sonic", Metadata{Name: "Sonic the Hedgehog"}, nil); err != nil {
+		t.Fatalf("UpdateMetadata() error = %v, want nil", err)
+	}
+
+	if reg.Entries[0].Game.Name != "Sonic" {
+		t.Errorf("original Name = %q, want it untouched by the edit on the clone", reg.Entries[0].Game.Name)
+	}
+	if strings.Join(reg.Entries[0].ManualFields, ",") != "genre" {
+		t.Errorf("original ManualFields = %v, want them untouched", reg.Entries[0].ManualFields)
+	}
+	if clone.Entries[0].Game.Name != "Sonic the Hedgehog" {
+		t.Errorf("clone Name = %q, want the edit applied there", clone.Entries[0].Game.Name)
+	}
+}
+
+func TestClone_EmptyRegistry_ReturnsAnEmptyRegistry(t *testing.T) {
+	clone := (&Registry{}).Clone()
+
+	if clone == nil || len(clone.Entries) != 0 {
+		t.Errorf("Clone() = %v, want an empty registry", clone)
 	}
 }

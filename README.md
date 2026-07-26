@@ -15,6 +15,8 @@ A command-line tool for managing game scraping data (metadata, box art, etc.) on
 - Browse the registry's content in a web browser: updating the registry generates a styled static HTML site listing every game grouped by system, with its name, a short description, and jaquette, a navigation bar (scrollable when many systems are configured) to jump between systems, and a layout that stays readable on small screens.
 - Each game on the consultation site opens a detail view showing its full description, rating, release year, developer, publisher, genre, number of players, and gameplay video when available.
 - Serve the registry over the local network and browse it from any device: a page lists every game grouped by system, and each game gets its own page with all its metadata and every medium scraped for it (jaquette, video, marquee, thumbnail). The address and port can be chosen, and an unknown address shows a clear "not found" page with a way back to the list.
+- Correct a badly scraped game straight from the browser: each game's page offers a pre-filled form for its name, description, rating, release year, developer, publisher, genre and number of players. Saving updates the registry and regenerates the consultation site immediately, with no restart and no file to edit by hand — and a refused entry comes back with what you typed still in place.
+- A value you corrected by hand is never overwritten by a later update, even though the ROMs folder still holds the badly scraped one. Each game's page shows which of its values were corrected that way, and any of them can be handed back to the scraper.
 - Get detailed, command-specific help with `--help` on any command (e.g. `update --help`), instead of just the generic top-level help.
 <!-- vibe:end:features -->
 
@@ -108,5 +110,9 @@ It listens on `0.0.0.0:8080` by default and prints the address to open. Choose a
 batocera-scrap-manager serve --addr 127.0.0.1:9000
 ```
 
-The registry is read when the server starts: after an `update`, restart `serve` to see the changes.
+From a game's page, the "Edit metadata" link opens a form pre-filled with its name, description, rating, release year, developer, publisher, genre and number of players. Saving writes the correction into the registry, regenerates the browsable HTML site, and brings you back to the game's page with a confirmation. The rating is picked as the stars it is shown with, and the release date as its year alone; anything you leave untouched keeps exactly the value that was stored. A game's ROM file and its media are never modified by this form, and a correction that cannot be accepted (an empty name, an implausible year) comes back on the form with what you typed and an explanation.
+
+Every value you correct this way is remembered as hand-edited: later `update` runs refresh everything else from the ROMs folders but leave those values alone, and the game's page marks them so you can tell them apart. Each of them can be handed back to the scraper from the form, with the checkbox offered under it. Note that the ROMs folder itself keeps its own value — Batocera will still display the badly scraped one until it is fixed there too.
+
+The registry is read when the server starts: after an `update`, restart `serve` to see the changes. Corrections made from the browser take effect immediately, without restarting.
 <!-- vibe:end:usage -->

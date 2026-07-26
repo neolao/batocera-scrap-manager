@@ -22,7 +22,10 @@ The heart of the tool: a centralized index of all already-known games, along wit
 Turns the registry's content into HTML, so it can be browsed in a web browser without opening individual metadata files. It is the shared presentation layer: it both writes the static site regenerated on every update, and provides the theme, the grouping by system and the formatting (rating stars, release year, safely encoded media links) reused by the web server, so both renderings stay consistent.
 
 **Web server**
-Serves the registry's content over HTTP on demand: the game list, one page per game, and the media files themselves. Unlike the static site, each game has its own address, which is what makes a game reachable, linkable — and, later, editable.
+Serves the registry's content over HTTP on demand: the game list, one page per game, the form correcting a game's metadata, and the media files themselves. Unlike the static site, each game has its own address, which is what makes a game reachable, linkable and editable.
+
+**Commit of a registry change**
+Writing the registry and regenerating the consultation site derived from it always go together, so the two never drift apart. Both the commands and the web server go through the same single place to do it, which also tells apart the case where the registry itself was written but only the site could not be regenerated.
 
 ## How data flows
 
@@ -48,7 +51,7 @@ Two kinds of pages are served, sharing the static site's look:
 
 A game is addressed by the same identifier the registry already uses to name its file on disk, so no second matching rule is introduced. An address designating an unknown system or an unknown game — or one that is simply malformed — answers with a "not found" page in the same style, naming what could not be found and offering a link back to the list, rather than a blank page or a server error. Media files are read from the registry folder only: no address can reach a file outside it, and the folders themselves are never listed.
 
-The registry is read once, when the server starts: after an `update`, the server must be restarted to reflect the changes.
+The registry is read once, when the server starts: after an `update`, the server must be restarted to reflect the changes. A correction made from the server's own form is the exception — it is applied to what the server serves as well as to the disk, so it shows immediately.
 
 ```mermaid
 flowchart LR
@@ -57,10 +60,32 @@ flowchart LR
   REG --> SRV
   SRV --> LIST["Game list page"]
   SRV --> GAME["One page per game"]
+  SRV --> EDIT["Edit form + save"]
   SRV --> MEDIA["Media files"]
   SRV --> NF["Not-found page"]
+  EDIT --> COMMIT["Commit: registry + consultation site"]
   SITE["Consultation site"] -. shared theme and formatting .-> SRV
 ```
+
+## Correcting a game by hand
+
+A game that was badly scraped can be corrected from its own page, without editing any file or re-running anything. The page links to a form of its own, pre-filled with the eight values a user may fix: name, description, rating, release year, developer, publisher, genre and number of players. The ROM file's path and the game's media are deliberately absent from it — the path is what identifies the entry, and no correction may reach it.
+
+Two of those values are stored in Batocera's own conventions but displayed in a friendlier, lossier form: the rating as five stars, the release date as its year alone. The form edits what is displayed — a star count, a year — and a value whose displayed form the user did not change keeps its stored value untouched, down to the byte: a rating stored as `0.85` is not degraded to `0.8` just because the form was opened and saved, and a release date keeps its month and day.
+
+Saving is a POST answered by a redirect back to the game's page, which then shows a confirmation: reloading that page can never re-submit the correction. Nothing is committed to what the server serves until the write to disk succeeded, so a failure leaves the served pages and the registry agreeing with each other. If the registry was written but the consultation site could not be regenerated, the confirmation says so instead of claiming a failure — the registry is the source of truth, and the correction did apply. A submission that cannot be accepted (an empty name, an implausible year, a rating outside the offered choices) is not a redirect: the form comes back with the submitted values kept, a summary of what was refused and a message on each offending field, and nothing is written.
+
+Since the web server has no accounts to authenticate and is meant for a home network, a submission that did not come from the registry's own pages is refused, and the size of a submission is capped.
+
+## Keeping a hand-made correction
+
+An update imports what the ROMs folders hold, and treats a game whose metadata differs from its local game sheet as a game to refresh. A correction made by hand creates exactly that difference — so, left alone, it would be silently undone by the next update, with the badly scraped value coming back.
+
+Each game therefore records which of its values were corrected by hand. An import applies the incoming game as usual, then puts those values back, so they are never overwritten; when they are the only difference, nothing is left to refresh and the game is reported as unchanged rather than as updated on every single run. A game's page marks those values so they can be told apart at a glance, and the form offers, under each of them, to hand the value back to the scraper — after which updates are free to refresh it again.
+
+Marking happens only for the values a correction actually changes: opening the form and saving it untouched freezes nothing. A registry written by an earlier version of the tool, which knows nothing of these marks, keeps loading normally with no value protected, and a game nobody corrected is stored exactly as it was before.
+
+The correction lives in the registry: the ROMs folder keeps its own value, so Batocera itself still shows the badly scraped one until it is fixed there too. Completing a ROMs folder from the registry does not fix it either, since completion only ever fills fields left empty locally.
 
 ## Completing a ROMs folder from the registry
 
@@ -72,7 +97,7 @@ A game's entry — its metadata sheet and every media file it owns in the regist
 
 ## Registry layout
 
-The registry mirrors Batocera's own folder layout: each system gets its own subfolder at the top level of the registry, containing the same media subfolders (images, videos, etc.) found on the original ROMs folder. Each game's metadata is kept in its own file inside its system's subfolder, next to its media, rather than in one large file for the whole registry — so a single corrupted or damaged game entry cannot affect the rest of the collection.
+The registry mirrors Batocera's own folder layout: each system gets its own subfolder at the top level of the registry, containing the same media subfolders (images, videos, etc.) found on the original ROMs folder. Each game's metadata is kept in its own file inside its system's subfolder, next to its media, rather than in one large file for the whole registry — so a single corrupted or damaged game entry cannot affect the rest of the collection. Alongside a game's own values, that file records the ones corrected by hand, and only when there are any — a game nobody corrected is stored exactly as previous versions of the tool stored it.
 
 ## Principles followed
 

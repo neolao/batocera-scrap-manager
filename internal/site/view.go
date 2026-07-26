@@ -63,10 +63,12 @@ func EscapeMediaPath(system, relPath string) string {
 	return strings.Join(segments, "/")
 }
 
-// filledStars converts a gamelist rating (a decimal string between 0 and 1)
+// FilledStars converts a gamelist rating (a decimal string between 0 and 1)
 // into a number of filled stars out of five, reporting whether the rating
-// was usable at all.
-func filledStars(rating string) (int, bool) {
+// was usable at all. It is exported because a rating is corrected as the
+// stars it displays as, never as its stored decimal (see decisions/019), so
+// a form has to read the stored value the same way this package renders it.
+func FilledStars(rating string) (int, bool) {
 	r, err := strconv.ParseFloat(rating, 64)
 	if err != nil {
 		return 0, false
@@ -83,7 +85,7 @@ func filledStars(rating string) (int, bool) {
 // FormatStars renders a gamelist rating (a decimal string between 0 and 1)
 // as a 5-star string, or an empty string if rating is missing or invalid.
 func FormatStars(rating string) string {
-	filled, ok := filledStars(rating)
+	filled, ok := FilledStars(rating)
 	if !ok {
 		return ""
 	}
@@ -95,7 +97,7 @@ func FormatStars(rating string) string {
 // announces poorly or not at all. It returns an empty string for a missing
 // or invalid rating.
 func formatRatingLabel(rating string) string {
-	filled, ok := filledStars(rating)
+	filled, ok := FilledStars(rating)
 	if !ok {
 		return ""
 	}
@@ -116,6 +118,26 @@ func FormatYear(releaseDate string) string {
 		}
 	}
 	return year
+}
+
+// RatingFromStars builds the gamelist rating storing filled stars out of
+// five, the inverse of FilledStars. Zero stars is a rating of its own ("0",
+// rendered as five empty stars), distinct from a game with no rating at all
+// (an empty string, rendered as a placeholder). It lives next to FilledStars
+// so the two directions cannot drift apart.
+func RatingFromStars(filled int) string {
+	return strconv.FormatFloat(float64(filled)/5, 'f', -1, 64)
+}
+
+// ReleaseDateFromYear builds the gamelist release date storing year, the
+// inverse of FormatYear. Only a year is ever displayed, so only a year is
+// ever asked for: the day and month default to the 1st of January. An empty
+// year produces an empty release date.
+func ReleaseDateFromYear(year string) string {
+	if year == "" {
+		return ""
+	}
+	return year + "0101T000000"
 }
 
 // MediaFileExists reports whether the media file referenced by a game's

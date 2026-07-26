@@ -14,6 +14,8 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"slices"
+	"sync"
 
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
 	"github.com/neolao/batocera-scrap-manager/internal/site"
@@ -32,6 +34,12 @@ func Handler(reg *registry.Registry, registryFolder string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", ui.serveHome)
 	mux.HandleFunc("GET /game/{system}/{id}", ui.serveGame)
+	mux.HandleFunc("GET /game/{system}/{id}/edit", ui.serveEditForm)
+	mux.HandleFunc("POST /game/{system}/{id}/edit", ui.saveGame)
+	// The methodless pattern is what answers 405: the catch-all below matches
+	// every method, so the mux's own method-not-allowed handling would never
+	// fire for this URL.
+	mux.HandleFunc("/game/{system}/{id}/edit", ui.serveWrongMethod)
 	mux.Handle("GET "+mediaURLPrefix, http.StripPrefix(mediaURLPrefix,
 		http.FileServer(fileOnlyFS{http.Dir(registryFolder)})))
 	mux.HandleFunc("/", ui.serveUnknownPage)
@@ -39,8 +47,11 @@ func Handler(reg *registry.Registry, registryFolder string) http.Handler {
 }
 
 // webUI holds what every page needs: the registry snapshot to render, and
-// the folder its media files are read from.
+// the folder its media files are read from. Requests are served
+// concurrently and a correction replaces the snapshot, so mu guards every
+// access to reg — the readers as much as the writer.
 type webUI struct {
+	mu             sync.RWMutex
 	reg            *registry.Registry
 	registryFolder string
 }
@@ -68,6 +79,8 @@ type gameDetail struct {
 	Name      string
 	System    string
 	SystemURL string
+	EditURL   string
+	Saved     string
 	Desc      string
 	CoverURL  string
 	VideoURL  string
@@ -84,15 +97,19 @@ type extraMedium struct {
 
 // metadataField is one labelled metadata row of a game's page. An empty
 // Value renders as a placeholder rather than dropping the row, so the set of
-// labels stays the same from one game to the next.
+// labels stays the same from one game to the next. HandEdited marks a value
+// corrected by hand, which later updates leave alone.
 type metadataField struct {
-	Label string
-	Value string
+	Label      string
+	Value      string
+	HandEdited bool
 }
 
 // serveHome renders every game of the registry, grouped by system.
 func (ui *webUI) serveHome(w http.ResponseWriter, _ *http.Request) {
+	ui.mu.RLock()
 	systems := site.GroupBySystem(ui.reg.Entries, ui.registryFolder)
+	ui.mu.RUnlock()
 
 	listings := make([]systemListing, len(systems))
 	for i, system := range systems {
@@ -117,20 +134,30 @@ func (ui *webUI) serveHome(w http.ResponseWriter, _ *http.Request) {
 func (ui *webUI) serveGame(w http.ResponseWriter, r *http.Request) {
 	system, id := r.PathValue("system"), r.PathValue("id")
 
+	ui.mu.RLock()
 	entry, found := ui.reg.FindByID(system, id)
+	ui.mu.RUnlock()
 	if !found {
-		render(w, http.StatusNotFound, notFoundTemplate,
-			"No game named "+id+" in system "+system+".")
+		renderGameNotFound(w, system, id)
 		return
 	}
 
-	render(w, http.StatusOK, gameTemplate, ui.gameDetail(entry))
+	detail := ui.gameDetail(entry)
+	detail.Saved = savedConfirmation(r.URL.Query().Get(savedParam))
+	render(w, http.StatusOK, gameTemplate, detail)
 }
 
 // serveUnknownPage renders the not-found page for any URL the mux has no
 // route for.
 func (ui *webUI) serveUnknownPage(w http.ResponseWriter, r *http.Request) {
-	render(w, http.StatusNotFound, notFoundTemplate, "There is nothing at "+r.URL.Path+".")
+	renderProblem(w, http.StatusNotFound, "Not found", "There is nothing at "+r.URL.Path+".")
+}
+
+// renderGameNotFound renders the not-found page for a URL naming a game the
+// registry does not know — an unknown system, an unknown identifier, or a
+// game requested under the wrong system.
+func renderGameNotFound(w http.ResponseWriter, system, id string) {
+	renderProblem(w, http.StatusNotFound, "Not found", "No game named "+id+" in system "+system+".")
 }
 
 // gameDetail builds the rendering view of one registry entry, reusing the
@@ -139,20 +166,22 @@ func (ui *webUI) serveUnknownPage(w http.ResponseWriter, r *http.Request) {
 func (ui *webUI) gameDetail(entry registry.Entry) gameDetail {
 	view := site.GroupBySystem([]registry.Entry{entry}, ui.registryFolder)[0].Games[0]
 
+	handEdited := func(field string) bool { return slices.Contains(entry.ManualFields, field) }
 	detail := gameDetail{
 		Name:      view.Name,
 		System:    view.System,
 		SystemURL: "/#" + view.System,
+		EditURL:   gameURL(view.System, view.ID) + "/edit",
 		Desc:      view.Desc,
 		CoverURL:  mediaURL(view.ImagePath),
 		VideoURL:  mediaURL(view.VideoPath),
 		Fields: []metadataField{
-			{Label: "Rating", Value: ratingValue(view)},
-			{Label: "Year", Value: view.Year},
-			{Label: "Developer", Value: view.Developer},
-			{Label: "Publisher", Value: view.Publisher},
-			{Label: "Genre", Value: view.Genre},
-			{Label: "Players", Value: view.Players},
+			{Label: "Rating", Value: ratingValue(view), HandEdited: handEdited("rating")},
+			{Label: "Year", Value: view.Year, HandEdited: handEdited("release_date")},
+			{Label: "Developer", Value: view.Developer, HandEdited: handEdited("developer")},
+			{Label: "Publisher", Value: view.Publisher, HandEdited: handEdited("publisher")},
+			{Label: "Genre", Value: view.Genre, HandEdited: handEdited("genre")},
+			{Label: "Players", Value: view.Players, HandEdited: handEdited("players")},
 		},
 	}
 
@@ -200,6 +229,22 @@ func mediaURL(escapedPath string) string {
 		return ""
 	}
 	return path.Clean(mediaURLPrefix + escapedPath)
+}
+
+// problem is what the themed error page shows: the status code, a short
+// title for the browser tab, and a sentence naming what went wrong.
+type problem struct {
+	Code    int
+	Title   string
+	Message string
+}
+
+// renderProblem renders the themed error page — every refusal the web UI
+// answers (a game that does not exist, a method it does not accept, a
+// submission it cannot read) is shown in-theme rather than as a bare error
+// string.
+func renderProblem(w http.ResponseWriter, status int, title, message string) {
+	render(w, status, problemTemplate, problem{Code: status, Title: title, Message: message})
 }
 
 // render writes one HTML page, rendering it fully before sending anything so
@@ -322,6 +367,7 @@ var gameTemplate = newPage("game", `
 <a href="/">Registry</a><span class="crumbs__sep">/</span><a href="{{.SystemURL}}">{{.System}}</a><span class="crumbs__sep">/</span><span class="crumbs__current">{{.Name}}</span>
 </nav>
 <main>
+{{if .Saved}}<p class="banner" id="saved" role="status" tabindex="-1">{{.Saved}}</p>{{end}}
 <article class="game">
 <h2 class="game__title">{{.Name}}</h2>
 <div class="game__layout">
@@ -333,11 +379,12 @@ var gameTemplate = newPage("game", `
 <dl class="meta">
 {{range .Fields}}
 <div>
-<dt class="meta__label">{{.Label}}</dt>
+<dt class="meta__label">{{.Label}}{{if .HandEdited}} <span class="meta__manual" title="Corrected by hand: updates leave this value alone">hand-edited</span>{{end}}</dt>
 {{if .Value}}<dd class="meta__value">{{.Value}}</dd>{{else}}<dd class="meta__value meta__value--empty">&mdash;</dd>{{end}}
 </div>
 {{end}}
 </dl>
+<p class="meta__actions"><a class="button" href="{{.EditURL}}">Edit metadata</a></p>
 </div>
 </div>
 {{if or .VideoURL .Extras}}
@@ -365,15 +412,15 @@ var gameTemplate = newPage("game", `
 {{end}}
 `)
 
-// notFoundTemplate renders a themed page naming what could not be found,
-// rather than a bare error string.
-var notFoundTemplate = newPage("not-found", `
-{{define "title"}}Not found - Registry{{end}}
+// problemTemplate renders a themed page naming what went wrong, rather than
+// a bare error string.
+var problemTemplate = newPage("problem", `
+{{define "title"}}{{.Title}} - Registry{{end}}
 {{define "body"}}
 <main>
 <div class="notfound">
-<p class="notfound__code">404</p>
-<p class="notfound__message">{{.}}</p>
+<p class="notfound__code">{{.Code}}</p>
+<p class="notfound__message">{{.Message}}</p>
 <a class="notfound__back" href="/">Back to the game list</a>
 </div>
 </main>

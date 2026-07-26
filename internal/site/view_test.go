@@ -196,3 +196,64 @@ func TestStyleSheet_IsSharedAndCarriesThemeAndResponsiveRules(t *testing.T) {
 		t.Error("shared stylesheet contains the static site's modal rules, which the served pages do not use")
 	}
 }
+
+func TestFilledStars_UnparsableRating_ReportsItAsUnusable(t *testing.T) {
+	if _, ok := FilledStars("not a rating"); ok {
+		t.Error("ok = true, want false for a rating that is not a number")
+	}
+	if _, ok := FilledStars(""); ok {
+		t.Error("ok = true, want false for a missing rating")
+	}
+	if filled, ok := FilledStars("0.85"); !ok || filled != 4 {
+		t.Errorf("FilledStars(0.85) = %d, %v, want 4, true", filled, ok)
+	}
+}
+
+func TestRatingFromStars_EveryStarCount_ReadsBackAsTheSameCount(t *testing.T) {
+	// The form offers whole stars: what it stores must come back as the very
+	// star count the user picked, or a saved rating would drift on each edit.
+	for want := 0; want <= 5; want++ {
+		rating := RatingFromStars(want)
+		got, ok := FilledStars(rating)
+		if !ok {
+			t.Errorf("FilledStars(%q) reported an unusable rating, built from %d stars", rating, want)
+			continue
+		}
+		if got != want {
+			t.Errorf("RatingFromStars(%d) = %q, which reads back as %d stars", want, rating, got)
+		}
+	}
+}
+
+func TestRatingFromStars_FiveStars_IsTheStoredMaximum(t *testing.T) {
+	if got := RatingFromStars(5); got != "1" {
+		t.Errorf("RatingFromStars(5) = %q, want %q (Batocera stores a rating between 0 and 1)", got, "1")
+	}
+}
+
+func TestRatingFromStars_ZeroStars_IsAStoredRatingNotAMissingOne(t *testing.T) {
+	// "Not rated" and "0/5" render differently (an em-dash versus five empty
+	// stars), so zero stars must still produce a stored value.
+	got := RatingFromStars(0)
+
+	if got == "" {
+		t.Fatal("RatingFromStars(0) = \"\", want a stored rating distinct from no rating at all")
+	}
+	if stars := FormatStars(got); stars != "☆☆☆☆☆" {
+		t.Errorf("FormatStars(%q) = %q, want five empty stars", got, stars)
+	}
+}
+
+func TestReleaseDateFromYear_AYear_ProducesADateThatReadsBackAsThatYear(t *testing.T) {
+	got := ReleaseDateFromYear("1991")
+
+	if year := FormatYear(got); year != "1991" {
+		t.Errorf("FormatYear(ReleaseDateFromYear(1991)) = %q, want 1991 (built %q)", year, got)
+	}
+}
+
+func TestReleaseDateFromYear_NoYear_ProducesNoDate(t *testing.T) {
+	if got := ReleaseDateFromYear(""); got != "" {
+		t.Errorf("ReleaseDateFromYear(\"\") = %q, want an empty release date", got)
+	}
+}

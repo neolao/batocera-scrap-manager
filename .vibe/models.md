@@ -30,7 +30,21 @@ Defined in: `internal/gamelist/gamelist.go` (parsed from `gamelist.xml`, Emulati
 |---|---|---|
 | System | string | Batocera system name (subfolder name, e.g. `megadrive`) |
 | Game | Game | |
+| ManualFields | []string | names of the metadata fields corrected by hand (`name`, `desc`, `rating`, `release_date`, `developer`, `publisher`, `genre`, `players`); an import puts these values back instead of overwriting them. Empty for a game nobody corrected |
 Defined in: `internal/registry/registry.go`
+
+## storedGame (on-disk shape of an Entry's game)
+| Field | Type | Notes |
+|---|---|---|
+| *(embedded)* Game | Game | the game's own fields, flat at the root of its JSON file, unchanged from earlier versions |
+| ManualFields | []string | `json:"manual_fields,omitempty"` — omitted entirely when nothing was corrected, so a file written before this feature and a file written now for an untouched game are identical |
+Defined in: `internal/registry/registry.go` (written by `Save`, read by `Load`)
+
+## Metadata (a correction)
+| Field | Type | Notes |
+|---|---|---|
+| Name, Desc, Rating, ReleaseDate, Developer, Publisher, Genre, Players | string | the eight editable fields at once; an empty one clears the stored value. The ROM path and the media references are deliberately absent, so no correction can reach them |
+Defined in: `internal/registry/metadata.go`
 
 ## Registry
 | Field | Type | Notes |

@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - Users can now browse the registry live in a web browser with `batocera-scrap-manager serve`: it starts a web server (on `0.0.0.0:8080` by default, changeable with `--addr`) offering a page that lists every game grouped by system, and a page per game showing its full metadata and every medium scraped for it (jaquette, video, marquee, thumbnail). A link pointing at an unknown system or game shows a "not found" page offering a way back to the list, and pressing Ctrl+C stops the server.
+- A badly scraped game can now be corrected straight from the web browser: each game's page has an "Edit metadata" link opening a pre-filled form for its name, description, rating, release year, developer, publisher, genre and number of players. Saving updates the registry and regenerates the consultation site right away, without restarting the server or editing any file by hand. The rating is picked as the stars it displays as and the release date as its year alone; a value left untouched keeps exactly what was stored for it.
+- A value corrected by hand is no longer overwritten by later `batocera-scrap-manager update` runs, even though the ROMs folder still holds the badly scraped one. Each game's page marks which of its values were corrected that way, and the edit form can hand any of them back to the scraper.
 
 ## [0.3.0] - 2026-07-02
 

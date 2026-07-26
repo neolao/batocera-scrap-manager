@@ -131,3 +131,109 @@
 @media (max-width: 720px) {
   .game__layout { grid-template-columns: minmax(0, 1fr); }
 }
+.meta__manual {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--magenta);
+  border-radius: 999px;
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  color: var(--magenta);
+  text-transform: uppercase;
+}
+.meta__actions { margin: 1.25rem 0 0; }
+.button {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--cyan);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+.button:hover, .button:focus-visible {
+  color: var(--bg);
+  background: var(--cyan);
+  border-color: var(--cyan);
+}
+.button--quiet { color: var(--ink-dim); }
+.button--quiet:hover, .button--quiet:focus-visible {
+  color: var(--bg);
+  background: var(--ink-dim);
+  border-color: var(--ink-dim);
+}
+.form { max-width: 40rem; }
+.form__fields { border: 1px solid var(--line); border-radius: var(--radius); padding: 1.25rem; margin: 0; }
+.form__fields legend {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  padding: 0 0.5rem;
+}
+.field { margin-bottom: 1.25rem; }
+.field:last-child { margin-bottom: 0; }
+.field__label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.35rem;
+}
+.field__required { color: var(--magenta); }
+.field__control {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.6rem;
+  color: var(--ink);
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) - 4px);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+}
+.field__control:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+textarea.field__control { resize: vertical; line-height: 1.6; }
+.field__hint { margin: 0 0 0.35rem; font-size: 0.75rem; color: var(--ink-dim); }
+.field__error { margin: 0 0 0.35rem; font-size: 0.8rem; color: var(--magenta); }
+.field--invalid .field__control { border-color: var(--magenta); }
+.field__manual { display: flex; align-items: center; gap: 0.4rem; margin: 0.4rem 0 0; }
+.field__manual label { font-size: 0.8rem; color: var(--ink-dim); }
+.field__manual input { accent-color: var(--magenta); }
+.form__actions { display: flex; gap: 0.75rem; align-items: center; margin-top: 1.25rem; }
+.errors {
+  border: 1px solid var(--magenta);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin: 0 0 1.25rem;
+}
+.errors__title {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--magenta);
+}
+.errors ul { margin: 0; padding-left: 1.2rem; }
+.errors a { color: var(--ink); }
+.banner {
+  margin: 1.25rem 0 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--cyan);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+.banner:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }

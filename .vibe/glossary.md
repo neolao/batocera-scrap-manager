@@ -18,7 +18,7 @@
 **Code:** `gamelist.Game`, `gamelist.Parse` in `internal/gamelist/gamelist.go`
 
 ## Import
-**Definition:** The action of populating the registry from the `gamelist.xml` files already present in the ROMs folders, without duplicating already-known entries (deduplication key: system + ROM filename, ignoring any subfolder prefix — see [`decisions/005`](decisions/005-match-registry-entries-by-rom-filename-not-full-path.md)), while also detecting metadata that changed since the last import. A game with neither a description nor a jaquette locally — meaning it has not actually been scraped yet — is not imported (see [`decisions/007`](decisions/007-skip-empty-games-only-on-import-not-retroactively.md)).
+**Definition:** The action of populating the registry from the `gamelist.xml` files already present in the ROMs folders, without duplicating already-known entries (deduplication key: system + ROM filename, ignoring any subfolder prefix — see [`decisions/005`](decisions/005-match-registry-entries-by-rom-filename-not-full-path.md)), while also detecting metadata that changed since the last import. A game with neither a description nor a jaquette locally — meaning it has not actually been scraped yet — is not imported (see [`decisions/007`](decisions/007-skip-empty-games-only-on-import-not-retroactively.md)). A Hand-edited field is the one thing an import never overwrites.
 **Code:** `(*Registry).Import`, `registry.ImportFromRomsFolder` in `internal/registry/registry.go`
 **Do not confuse with:** the `update` command (`internal/cli/update.go`), which is the CLI command exposing this import mechanism to the user.
 
@@ -38,6 +38,11 @@
 **Do not confuse with:** the registry itself, which is the underlying data source — the consultation site is a read-only rendering of it, regenerated on every `update`.
 
 ## Web UI
-**Definition:** The registry served live over HTTP by the `serve` command: a page listing every game grouped by system, and one page per game — addressed by its Game ID — showing its full metadata and every medium available for it. Read-only at this stage; it is the surface on which editing a game, deleting it, and managing its media are to be built.
+**Definition:** The registry served live over HTTP by the `serve` command: a page listing every game grouped by system, and one page per game — addressed by its Game ID — showing its full metadata and every medium available for it, plus the form correcting that metadata. Deleting a game and managing its media are still to be built on the same per-game URLs.
 **Code:** `webui.Handler` in `internal/webui/webui.go`, `runServe` in `internal/cli/serve.go`
 **Do not confuse with:** the Consultation site, which is a static file regenerated on every update and browsable without any server running — the web UI renders the registry on demand and gives each game its own address (see [`decisions/015`](decisions/015-real-per-game-pages-in-the-served-web-ui.md)).
+
+## Hand-edited field
+**Definition:** A metadata field of a registry entry whose value was corrected by a user rather than obtained by scraping. The registry records which fields these are, per game, and an Import puts their stored value back instead of letting the ROMs folder's own — still badly scraped — value win, so a correction is not undone by the next `update`. Only the eight editable text fields can be one (never the ROM path nor a media reference), a field becomes one when a correction actually changes its value, and it stops being one when the user hands it back to the scraper.
+**Code:** `registry.Entry.ManualFields`, `editableFields`, `keepHandEditedFields`, `UpdateMetadata` in `internal/registry/metadata.go` and `internal/registry/registry.go`
+**Do not confuse with:** Completion, which also protects existing values — but locally, in the ROMs folder, and by never overwriting any non-empty field rather than by remembering who set it.

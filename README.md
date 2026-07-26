@@ -116,3 +116,10 @@ Every value you correct this way is remembered as hand-edited: later `update` ru
 
 The registry is read when the server starts: after an `update`, restart `serve` to see the changes. Corrections made from the browser take effect immediately, without restarting.
 <!-- vibe:end:usage -->
+
+<!-- vibe:begin:docs-index -->
+## Documentation
+
+- [docs/architecture.md](docs/architecture.md) — How the tool is put together: its main parts, how a ROMs folder's data flows into the registry and back out, how the registry is browsed and corrected, and how a hand-made correction is kept.
+- [docs/configuration.md](docs/configuration.md) — Where the configuration lives, what it holds, and the environment variable that can relocate it.
+<!-- vibe:end:docs-index -->

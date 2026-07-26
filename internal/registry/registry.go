@@ -106,15 +106,16 @@ func Save(path string, reg *Registry) error {
 	return nil
 }
 
-// gameID returns the identifier used to both deduplicate registry entries
-// (see indexOf) and name their JSON file on disk (see gameFileName): a ROM
-// path's base name, without its directory prefix or file extension. Two
-// ROMs that would collide on that on-disk file — e.g. differing only by
-// extension, or nested in different subfolders of the same system — must
-// therefore also be treated as the same registry entry, or a later Save()
-// would silently overwrite one with the other (see decisions/005, which
-// established the same principle for the subfolder case).
-func gameID(path string) string {
+// GameID returns the identifier used to deduplicate registry entries (see
+// indexOf), name their JSON file on disk (see gameFileName), and address
+// them from outside the package (see FindByID): a ROM path's base name,
+// without its directory prefix or file extension. Two ROMs that would
+// collide on that on-disk file — e.g. differing only by extension, or
+// nested in different subfolders of the same system — must therefore also
+// be treated as the same registry entry, or a later Save() would silently
+// overwrite one with the other (see decisions/005, which established the
+// same principle for the subfolder case).
+func GameID(path string) string {
 	base := filepath.Base(path)
 	return strings.TrimSuffix(base, filepath.Ext(base))
 }
@@ -122,7 +123,7 @@ func gameID(path string) string {
 // gameFileName derives the name of the JSON file storing g's metadata, from
 // the base name of its ROM path.
 func gameFileName(g gamelist.Game) string {
-	return gameID(g.Path) + ".json"
+	return GameID(g.Path) + ".json"
 }
 
 // mediaFields lists accessors for a game's four media references (cover
@@ -222,18 +223,37 @@ func (r *Registry) Import(system string, games []gamelist.Game) (added, updated,
 	return added, updated, unchanged
 }
 
-// indexOf finds the entry matching system and path's gameID — the registry
-// is stored flat per system on disk, one JSON file per gameID, so two ROMs
-// that share a gameID (e.g. differing only by subfolder or extension) are
+// indexOf finds the entry matching system and path's GameID — the registry
+// is stored flat per system on disk, one JSON file per game ID, so two ROMs
+// that share a game ID (e.g. differing only by subfolder or extension) are
 // the same entry.
 func (r *Registry) indexOf(system, path string) int {
-	id := gameID(path)
+	return r.indexOfID(system, GameID(path))
+}
+
+// indexOfID finds the entry matching system and the already-derived game
+// ID id. Unlike indexOf it does not run id through GameID, which would
+// truncate an id whose game name contains a dot (e.g. "Micro Machines
+// v3.0") and lose the entry.
+func (r *Registry) indexOfID(system, id string) int {
 	for i, e := range r.Entries {
-		if e.System == system && gameID(e.Game.Path) == id {
+		if e.System == system && GameID(e.Game.Path) == id {
 			return i
 		}
 	}
 	return -1
+}
+
+// FindByID returns the entry of system whose game ID (see GameID) is id,
+// reporting whether it was found. It is the lookup used by callers that
+// address a game by its identifier rather than by a ROM path, such as the
+// web UI's per-game URLs.
+func (r *Registry) FindByID(system, id string) (Entry, bool) {
+	i := r.indexOfID(system, id)
+	if i == -1 {
+		return Entry{}, false
+	}
+	return r.Entries[i], true
 }
 
 // ProgressEvent describes one game being processed by ImportFromRomsFolder,

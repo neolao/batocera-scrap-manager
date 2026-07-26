@@ -55,3 +55,17 @@ Defined in: `internal/registry/registry.go` (passed to the optional `onProgress`
 | GameCount | int | total number of local games found for System |
 | GameName | string | |
 Defined in: `internal/registry/registry.go` (passed to the optional `onProgress` callback of `CompleteRomsFolder`)
+
+## SystemView / GameView
+| Field | Type | Notes |
+|---|---|---|
+| SystemView.Name | string | Batocera system name |
+| SystemView.Games | []GameView | that system's games, sorted by name |
+| GameView.Game | gamelist.Game | embedded — the raw metadata |
+| GameView.ID | string | `registry.GameID(Game.Path)`; the key used in the web UI's per-game URLs |
+| GameView.System | string | |
+| GameView.ImagePath / VideoPath / MarqueePath / ThumbnailPath | string | percent-encoded `<system>/<relPath>`, relative to the registry folder; **empty when the referenced file is not on disk** — that emptiness is how every renderer detects a missing medium |
+| GameView.Stars | string | rating as `★★★★☆`, empty if missing or invalid |
+| GameView.RatingLabel | string | the same rating in words (`4/5`), so it is not conveyed by glyphs alone; empty if missing or invalid |
+| GameView.Year | string | 4-digit year extracted from `ReleaseDate`, empty if missing or invalid |
+Defined in: `internal/site/view.go` (produced by `site.GroupBySystem`, consumed by the static site and the web UI)

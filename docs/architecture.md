@@ -7,7 +7,7 @@ batocera-scrap-manager is organized around three main areas that work together t
 ## The main parts
 
 **Command-line interface**
-The tool's entry point. It interprets the commands typed by the user (`config`, `update`, `scrape`, `remove`, `--version`, `--help`) and displays results and error messages.
+The tool's entry point. It interprets the commands typed by the user (`config`, `update`, `scrape`, `remove`, `serve`, `--version`, `--help`) and displays results and error messages.
 
 **Configuration**
 Keeps track of two essential pieces of information between runs: where the registry lives, and which Batocera ROMs folders should be watched. This configuration is saved to disk and read back on every command.
@@ -19,7 +19,10 @@ Knows how to read `gamelist.xml` files, the standard format used by Batocera/Emu
 The heart of the tool: a centralized index of all already-known games, along with their metadata and a copy of their media (cover art, video, marquee, thumbnail). It knows how to import game sheets from ROMs folders without creating duplicates, and to detect when the metadata of an already-known game has changed so it can be refreshed automatically.
 
 **Consultation site**
-Turns the registry's content into a static HTML site, so it can be browsed in a web browser without opening individual metadata files.
+Turns the registry's content into HTML, so it can be browsed in a web browser without opening individual metadata files. It is the shared presentation layer: it both writes the static site regenerated on every update, and provides the theme, the grouping by system and the formatting (rating stars, release year, safely encoded media links) reused by the web server, so both renderings stay consistent.
+
+**Web server**
+Serves the registry's content over HTTP on demand: the game list, one page per game, and the media files themselves. Unlike the static site, each game has its own address, which is what makes a game reachable, linkable — and, later, editable.
 
 ## How data flows
 
@@ -33,6 +36,31 @@ Turns the registry's content into a static HTML site, so it can be browsed in a 
 ## Browsing the registry as a website
 
 Every time the registry is updated, a small static website is (re)generated directly at the root of the registry folder (`index.html`), for easy discovery. It lists every known game grouped by system, showing its name, a short description, and jaquette when one is available, each presented in a consistently styled card. Clicking a card opens a detail view with the game's full description, rating, release year, developer, publisher, genre, number of players, and gameplay video (when available), so the card grid itself stays compact and readable. A navigation bar stays visible at the top of the page while scrolling, with a direct link to every system — scrolling horizontally rather than growing tall when many systems are configured — and each system section offers a link back to the top of the page. A system with no games, a game without a jaquette, or a game whose jaquette/video file is missing from the registry folder, is displayed cleanly rather than showing a broken image or an empty video player. Image and video links are safely encoded so game file names with spaces, brackets, or parentheses do not break. The layout adapts to small screens so it stays readable on a phone or tablet. Opening this file in a browser gives a quick, readable overview of the registry's content without needing to inspect individual metadata files.
+
+## Browsing the registry from a running server
+
+The static site is a snapshot written to disk; the tool can also serve the registry itself over HTTP, which is what makes each game addressable. The server listens on every interface on port 8080 by default — so the registry can be browsed from a phone or another computer on the same network — and both the address and the port can be changed. On startup it prints the address it actually listens on plus a URL usable as-is in a browser, and it stops cleanly when interrupted, letting requests in flight finish.
+
+Two kinds of pages are served, sharing the static site's look:
+
+- the game list, grouped by system, where each game links to its own page;
+- one page per game, showing its full description, all of its metadata labels (rating, year, developer, publisher, genre, players) — kept visible even when the game has no value for them — and every medium actually present for it: jaquette, video, marquee, thumbnail. A game with no cover art, no description or no media is presented cleanly rather than showing empty or broken elements, and its rating is written out in words next to the stars so it is not conveyed by symbols alone.
+
+A game is addressed by the same identifier the registry already uses to name its file on disk, so no second matching rule is introduced. An address designating an unknown system or an unknown game — or one that is simply malformed — answers with a "not found" page in the same style, naming what could not be found and offering a link back to the list, rather than a blank page or a server error. Media files are read from the registry folder only: no address can reach a file outside it, and the folders themselves are never listed.
+
+The registry is read once, when the server starts: after an `update`, the server must be restarted to reflect the changes.
+
+```mermaid
+flowchart LR
+  CLI["serve command"] --> REG["Registry (read at startup)"]
+  CLI --> SRV["Web server"]
+  REG --> SRV
+  SRV --> LIST["Game list page"]
+  SRV --> GAME["One page per game"]
+  SRV --> MEDIA["Media files"]
+  SRV --> NF["Not-found page"]
+  SITE["Consultation site"] -. shared theme and formatting .-> SRV
+```
 
 ## Completing a ROMs folder from the registry
 

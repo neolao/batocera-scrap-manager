@@ -1381,3 +1381,78 @@ func TestImportGame_MediaCopyFails_ReturnsError(t *testing.T) {
 		t.Fatal("ImportGame() error = nil, want error when the media copy fails")
 	}
 }
+
+func TestGameID_PathWithFolderAndExtension_ReturnsBareFileName(t *testing.T) {
+	cases := map[string]string{
+		"./roms/Sonic.zip":        "Sonic",
+		"Sonic.zip":               "Sonic",
+		"sub/folder/Sonic.zip":    "Sonic",
+		"Sonic 3 & Knuckles.md":   "Sonic 3 & Knuckles",
+		"Sonic":                   "Sonic",
+		"Micro Machines v3.0.zip": "Micro Machines v3.0",
+	}
+	for path, want := range cases {
+		if got := GameID(path); got != want {
+			t.Errorf("GameID(%q) = %q, want %q", path, got, want)
+		}
+	}
+}
+
+func TestFindByID_KnownGame_ReturnsItsEntry(t *testing.T) {
+	reg := &Registry{Entries: []Entry{
+		{System: "mastersystem", Game: gamelist.Game{Path: "./Alex.zip", Name: "Alex Kidd"}},
+		{System: "megadrive", Game: gamelist.Game{Path: "./roms/Sonic.zip", Name: "Sonic"}},
+	}}
+
+	entry, found := reg.FindByID("megadrive", "Sonic")
+
+	if !found {
+		t.Fatal("FindByID() found = false, want true")
+	}
+	if entry.Game.Name != "Sonic" || entry.System != "megadrive" {
+		t.Errorf("FindByID() entry = %+v, want the megadrive Sonic entry", entry)
+	}
+}
+
+func TestFindByID_IDContainingADot_IsNotTruncatedLikeAPath(t *testing.T) {
+	// A game ID is already extension-free: re-deriving an ID from it would
+	// turn "Micro Machines v3.0" into "Micro Machines v3" and lose the game.
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "Micro Machines v3.0.zip", Name: "Micro Machines"}},
+	}}
+
+	if _, found := reg.FindByID("megadrive", "Micro Machines v3.0"); !found {
+		t.Error("FindByID() found = false, want true for an ID whose name contains a dot")
+	}
+	if _, found := reg.FindByID("megadrive", "Micro Machines v3"); found {
+		t.Error("FindByID() found = true for a truncated ID, want false")
+	}
+}
+
+func TestFindByID_UnknownGame_ReturnsNotFound(t *testing.T) {
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic"}},
+	}}
+
+	if _, found := reg.FindByID("megadrive", "Does Not Exist"); found {
+		t.Error("FindByID() found = true for an unknown game, want false")
+	}
+}
+
+func TestFindByID_KnownGameUnderAnotherSystem_ReturnsNotFound(t *testing.T) {
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic"}},
+	}}
+
+	if _, found := reg.FindByID("mastersystem", "Sonic"); found {
+		t.Error("FindByID() found = true for a game belonging to another system, want false")
+	}
+}
+
+func TestFindByID_EmptyRegistry_ReturnsNotFound(t *testing.T) {
+	reg := &Registry{}
+
+	if _, found := reg.FindByID("megadrive", "Sonic"); found {
+		t.Error("FindByID() found = true on an empty registry, want false")
+	}
+}

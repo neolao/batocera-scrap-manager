@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Users can now browse the registry live in a web browser with `batocera-scrap-manager serve`: it starts a web server (on `0.0.0.0:8080` by default, changeable with `--addr`) offering a page that lists every game grouped by system, and a page per game showing its full metadata and every medium scraped for it (jaquette, video, marquee, thumbnail). A link pointing at an unknown system or game shows a "not found" page offering a way back to the list, and pressing Ctrl+C stops the server.
+
 ## [0.3.0] - 2026-07-02
 
 ### Added

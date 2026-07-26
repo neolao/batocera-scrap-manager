@@ -14,6 +14,7 @@ A command-line tool for managing game scraping data (metadata, box art, etc.) on
 - Remove a specific game's entry (metadata and media) from the registry.
 - Browse the registry's content in a web browser: updating the registry generates a styled static HTML site listing every game grouped by system, with its name, a short description, and jaquette, a navigation bar (scrollable when many systems are configured) to jump between systems, and a layout that stays readable on small screens.
 - Each game on the consultation site opens a detail view showing its full description, rating, release year, developer, publisher, genre, number of players, and gameplay video when available.
+- Serve the registry over the local network and browse it from any device: a page lists every game grouped by system, and each game gets its own page with all its metadata and every medium scraped for it (jaquette, video, marquee, thumbnail). The address and port can be chosen, and an unknown address shows a clear "not found" page with a way back to the list.
 - Get detailed, command-specific help with `--help` on any command (e.g. `update --help`), instead of just the generic top-level help.
 <!-- vibe:end:features -->
 
@@ -54,6 +55,7 @@ batocera-scrap-manager config --help
 batocera-scrap-manager update --help
 batocera-scrap-manager scrape --help
 batocera-scrap-manager remove --help
+batocera-scrap-manager serve --help
 ```
 
 Configure the registry location and the ROMs folders to watch:
@@ -93,4 +95,18 @@ Remove a game's entry from the registry:
 ```sh
 batocera-scrap-manager remove megadrive Sonic.zip
 ```
+
+Browse the registry live in a web browser, from this machine or from any device on the local network:
+
+```sh
+batocera-scrap-manager serve
+```
+
+It listens on `0.0.0.0:8080` by default and prints the address to open. Choose another address or port with `--addr`, and press `Ctrl+C` to stop it:
+
+```sh
+batocera-scrap-manager serve --addr 127.0.0.1:9000
+```
+
+The registry is read when the server starts: after an `update`, restart `serve` to see the changes.
 <!-- vibe:end:usage -->

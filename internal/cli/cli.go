@@ -20,6 +20,7 @@ Commands:
   update      Update the registry from the configured ROMs folders
   scrape      Complete missing ROMs metadata and media from the registry
   remove      Remove a game's entry (metadata and media) from the registry
+  serve       Browse the registry in a web browser
 `
 
 // Execute runs the CLI with the given arguments and writes output to out.
@@ -45,6 +46,8 @@ func Execute(args []string, out io.Writer) int {
 		return runScrape(args[1:], out)
 	case "remove":
 		return runRemove(args[1:], out)
+	case "serve":
+		return runServe(args[1:], out)
 	default:
 		fmt.Fprintf(out, "unknown command: %s\n", args[0])
 		return 1

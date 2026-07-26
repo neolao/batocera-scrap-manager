@@ -1,2 +1,9 @@
 # The binary produced by `go build -o batocera-scrap-manager .`
 /batocera-scrap-manager
+
+# Test binaries left behind by `go test -c` / `go test -o`
+*.test
+
+# Coverage and profiling output (`go test -coverprofile=...`, `-cpuprofile=...`)
+*.out
+*.prof

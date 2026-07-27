@@ -72,6 +72,140 @@ func TestExecute_Remove_MediumThatCannotBeDeleted_ConfirmsTheRemovalAndNamesWhat
 	}
 }
 
+func TestExecute_Remove_ExistingGame_RegeneratesTheSiteWithoutIt(t *testing.T) {
+	registryFolder := setRemoveConfig(t)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic the Hedgehog", "A classic platformer.")
+	writeRegistryEntry(t, registryFolder, "snes", "./Mario.zip", "Super Mario World", "Another classic.")
+	var out bytes.Buffer
+
+	code := Execute([]string{"remove", "megadrive", "Sonic.zip"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	index, err := os.ReadFile(filepath.Join(registryFolder, "index.html"))
+	if err != nil {
+		t.Fatalf("expected the consultation site to be regenerated: %v", err)
+	}
+	if strings.Contains(string(index), "Sonic the Hedgehog") {
+		t.Error("index.html still lists the removed game, want it regenerated without it")
+	}
+	if !strings.Contains(string(index), "Super Mario World") {
+		t.Error("index.html no longer lists the game that was kept, want the rest of the registry intact")
+	}
+}
+
+func TestExecute_Remove_SiteCannotBeRegenerated_ConfirmsTheRemovalAndSaysTheSiteIsStale(t *testing.T) {
+	registryFolder := setRemoveConfig(t)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic the Hedgehog", "A classic platformer.")
+	// A directory where index.html belongs: the registry still saves, the site
+	// cannot be written.
+	if err := os.Mkdir(filepath.Join(registryFolder, "index.html"), 0o755); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	var out bytes.Buffer
+
+	code := Execute([]string{"remove", "megadrive", "Sonic.zip"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0: the game was removed (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "removed Sonic.zip") {
+		t.Errorf("output = %q, want it to confirm what was removed", out.String())
+	}
+	if !strings.Contains(out.String(), "consultation site") {
+		t.Errorf("output = %q, want it to warn that the consultation site is stale", out.String())
+	}
+	if !strings.Contains(out.String(), "update") {
+		t.Errorf("output = %q, want it to name 'update' as the way to rebuild the site", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); err == nil {
+		t.Error("Sonic.json still exists, want it deleted even though the site could not be regenerated")
+	}
+}
+
+func TestExecute_Remove_RegistryCannotBeWritten_WarnsAboutTheRegistryNotAStaleSite(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: a read-only file would still be writable")
+	}
+	registryFolder := setRemoveConfig(t)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic the Hedgehog", "A classic platformer.")
+	writeRegistryEntry(t, registryFolder, "snes", "./Mario.zip", "Super Mario World", "Another classic.")
+	// The entry that survives the removal is still readable, but can no longer
+	// be rewritten: registry.Save fails before the site is ever generated.
+	kept := filepath.Join(registryFolder, "snes", "Mario.json")
+	if err := os.Chmod(kept, 0o444); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(kept, 0o644) })
+	var out bytes.Buffer
+
+	code := Execute([]string{"remove", "megadrive", "Sonic.zip"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0: the game was removed (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "removed Sonic.zip") {
+		t.Errorf("output = %q, want it to confirm what was removed", out.String())
+	}
+	if !strings.Contains(out.String(), "registry") {
+		t.Errorf("output = %q, want it to warn that the registry could not be written", out.String())
+	}
+	if strings.Contains(out.String(), "consultation site") {
+		t.Errorf("output = %q, want the registry failure worded apart from a merely stale site", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); err == nil {
+		t.Error("Sonic.json still exists, want it deleted even though the registry could not be rewritten")
+	}
+}
+
+func TestExecute_Remove_MediumLeftBehindAndStaleSite_ReportsBothWarnings(t *testing.T) {
+	registryFolder := setRemoveConfig(t)
+	systemDir := filepath.Join(registryFolder, "megadrive")
+	if err := os.MkdirAll(systemDir, 0o755); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	entry := `{"path":"./Sonic.zip","name":"Sonic the Hedgehog","image":"images/Sonic.png"}`
+	if err := os.WriteFile(filepath.Join(systemDir, "Sonic.json"), []byte(entry), 0o644); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	blocked := filepath.Join(systemDir, "images", "Sonic.png")
+	if err := os.MkdirAll(blocked, 0o755); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(blocked, "keeps it non-empty"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(registryFolder, "index.html"), 0o755); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	var out bytes.Buffer
+
+	code := Execute([]string{"remove", "megadrive", "Sonic.zip"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0: the game was removed (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "Sonic.png") {
+		t.Errorf("output = %q, want it to name the file left behind", out.String())
+	}
+	if !strings.Contains(out.String(), "consultation site") {
+		t.Errorf("output = %q, want it to also warn that the consultation site is stale", out.String())
+	}
+}
+
+func TestExecute_Remove_GameNotFound_DoesNotRegenerateTheSite(t *testing.T) {
+	registryFolder := setRemoveConfig(t)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic the Hedgehog", "A classic platformer.")
+	var out bytes.Buffer
+
+	Execute([]string{"remove", "megadrive", "Does Not Exist.zip"}, &out)
+
+	if _, err := os.Stat(filepath.Join(registryFolder, "index.html")); err == nil {
+		t.Error("index.html was written, want a failed removal to leave the registry folder untouched")
+	}
+}
+
 func TestExecute_Remove_GameNotFound_ReturnsErrorCode(t *testing.T) {
 	registryFolder := setRemoveConfig(t)
 	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic", "A classic platformer.")

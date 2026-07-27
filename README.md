@@ -11,7 +11,7 @@ A command-line tool for managing game scraping data (metadata, box art, etc.) on
 - See live progress (current system and a per-game counter) while the registry is being updated, instead of waiting silently for the final summary.
 - The registry keeps a copy of each game's cover art, video, marquee, and thumbnail alongside its metadata, organized by system just like on Batocera itself.
 - Complete a ROMs folder's missing metadata and media (description, jaquette, rating, genre, etc.) using the registry as the source of already-known information, with a summary of processed / completed / failed entries. A single game can also be targeted by its path, to complete just that one.
-- Remove a specific game's entry (metadata and media) from the registry.
+- Remove a specific game's entry (metadata and media) from the registry, with the consultation site rebuilt straight away so it stops listing the game. Should the site fail to be rebuilt, the removal is still confirmed and the site is reported as out of date rather than left to look like a failure.
 - Browse the registry's content in a web browser: updating the registry generates a styled static HTML site listing every game grouped by system, with its name, a short description, and jaquette, a navigation bar (scrollable when many systems are configured) to jump between systems, and a layout that stays readable on small screens.
 - Each game on the consultation site opens a detail view showing its full description, rating, release year, developer, publisher, genre, number of players, and gameplay video when available.
 - Serve the registry over the local network and browse it from any device: a page lists every game grouped by system, and each game gets its own page with all its metadata and every medium scraped for it (jaquette, video, marquee, thumbnail). The address and port can be chosen, and an unknown address shows a clear "not found" page with a way back to the list.
@@ -99,6 +99,8 @@ Remove a game's entry from the registry:
 ```sh
 batocera-scrap-manager remove megadrive Sonic.zip
 ```
+
+It names what it removed, and rebuilds the browsable HTML site without the game, so there is no need to run `update` afterwards just to stop seeing it. If the site could not be rebuilt, the removal is still confirmed — the game is gone either way — and a warning tells you the site is out of date and that `update` rebuilds it. Removing a game that is not in the registry changes nothing at all.
 
 Declare a game good, so later `update` runs stop refreshing its metadata:
 

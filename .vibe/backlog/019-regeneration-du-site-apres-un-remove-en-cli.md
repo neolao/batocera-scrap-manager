@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Régénération Du Site Après Un Remove En CLI
 

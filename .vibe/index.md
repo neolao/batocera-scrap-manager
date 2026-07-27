@@ -47,6 +47,7 @@
 - A destructive step is confirmed on a page of its own, listing what really exists rather than what the data model allows, and the outcome that reaches the next page carries the *name* of what it acted on — a redirect target that cannot show what left it cannot confirm with an opaque token.
 - A partial failure that leaves the intent fulfilled (media that resisted deletion) is its own sentinel, distinct from both success and failure, so no caller tells the user to redo what already happened.
 - A path built from scraped data is checked to stay inside the folder it belongs to before anything irreversible is done with it.
+- Two failures reported by the same call are worded apart when their recovery differs (a stale site rebuilt by `update` vs. a registry that could not be rewritten), rather than folded into one `%v` — a shared helper is bypassed rather than given a mode parameter when its "a failure means nothing was applied" contract does not hold at that call site (see [`decisions/023`](.vibe/decisions/023-remove-warns-about-persistence-it-never-denies-the-deletion.md)).
 
 ## Other context files
 - [`models.md`](.vibe/models.md) — data models

@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
+	"github.com/neolao/batocera-scrap-manager/internal/store"
 )
 
 const removeUsage = `Usage:
@@ -45,5 +46,25 @@ func runRemove(args []string, out io.Writer) int {
 	if err != nil {
 		fmt.Fprintf(out, "warning: %v\n", err)
 	}
+
+	// Deliberately not saveAndGenerateSite: its "print an error, fail the
+	// command" semantics assume nothing was applied, which is never true here —
+	// registry.Remove already erased the game's file. Every failure left is a
+	// warning about persistence, not a denied removal (see decisions/023).
+	if err := store.Save(reg, cfg.RegistryFolder); err != nil {
+		fmt.Fprintf(out, "warning: %s\n", persistenceWarning(err))
+	}
 	return 0
+}
+
+// persistenceWarning words a store.Save failure that followed a removal already
+// committed on disk. The two cases call for different recovery, so they are not
+// folded into one message: a stale consultation site is rebuilt by 'update',
+// whereas a registry that could not be rewritten is about the other entries and
+// sending the user to 'update' would hide that.
+func persistenceWarning(err error) string {
+	if errors.Is(err, store.ErrSiteNotRegenerated) {
+		return "the consultation site was not regenerated and no longer matches the registry — run 'batocera-scrap-manager update' to rebuild it"
+	}
+	return fmt.Sprintf("the game is deleted, but the registry could not be fully written, so its other entries may not have been saved: %v", err)
 }

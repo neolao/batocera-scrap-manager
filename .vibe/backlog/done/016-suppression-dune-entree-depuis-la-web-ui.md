@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 depends_on: [014]
 ---
 # Suppression D'une Entrée Depuis La Web UI

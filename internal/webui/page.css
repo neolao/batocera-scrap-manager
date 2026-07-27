@@ -180,6 +180,41 @@
   background: var(--ink-dim);
   border-color: var(--ink-dim);
 }
+/* The destructive action says so in words first; the colour only seconds it. */
+.button--danger { color: var(--magenta); border-color: rgba(255, 62, 200, 0.4); }
+.button--danger:hover, .button--danger:focus-visible {
+  color: var(--bg);
+  background: var(--magenta);
+  border-color: var(--magenta);
+}
+/* Pushed away from the actions it sits next to, so it is not clicked for one
+   of them on a wrapped row. */
+.meta__delete { margin-left: auto; }
+.confirm { max-width: 40rem; }
+.confirm__lead { margin: 0 0 0.75rem; }
+.confirm__files {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem 0.75rem 2.2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+.confirm__files code { font-family: var(--font-display); font-size: 0.85rem; color: var(--ink-dim); }
+.confirm__note {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--cyan);
+  background: var(--bg-card);
+  font-size: 0.9rem;
+}
+.confirm__warning {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--magenta);
+}
 .form { max-width: 40rem; }
 .form__fields { border: 1px solid var(--line); border-radius: var(--radius); padding: 1.25rem; margin: 0; }
 .form__fields legend {

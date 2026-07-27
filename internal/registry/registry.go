@@ -7,6 +7,7 @@ package registry
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -162,38 +163,84 @@ var mediaFields = []func(*gamelist.Game) *string{
 	func(g *gamelist.Game) *string { return &g.Thumbnail },
 }
 
-// ErrGameNotFound is returned by Remove when no entry matches the given
-// system and ROM filename.
+// ErrGameNotFound is returned by Remove and RemoveByID when no entry matches
+// the given system and ROM filename or game ID.
 var ErrGameNotFound = errors.New("registry: game not found")
 
-// Remove deletes, from the registry folder at registryFolder, the metadata
-// file and every media file (cover art, video, marquee, thumbnail)
-// belonging to the entry matching system and romFilename (e.g. "Sonic.zip"
-// — any directory prefix is ignored, since the registry does not reproduce
-// the ROM's original subfolder), then removes that entry from reg. It
-// returns ErrGameNotFound, without modifying anything, if no entry matches.
+// ErrMediaLeftBehind marks a deletion that went through — the game's metadata
+// file is gone from the registry folder, and its entry from the registry —
+// while at least one of its media files could not be deleted. It is worth
+// telling apart from a failed deletion: the game is really gone, and only
+// unreferenced files remain, which no caller should report as "nothing was
+// deleted" (see decisions/022).
+var ErrMediaLeftBehind = errors.New("registry: media files left behind")
+
+// Remove deletes the entry of system whose ROM filename is romFilename (e.g.
+// "Sonic.zip" — any directory prefix is ignored, since the registry does not
+// reproduce the ROM's original subfolder), as RemoveByID does for the game ID
+// derived from it.
 func Remove(reg *Registry, registryFolder, system, romFilename string) error {
-	i := reg.indexOf(system, romFilename)
+	return RemoveByID(reg, registryFolder, system, GameID(romFilename))
+}
+
+// RemoveByID deletes, from the registry folder at registryFolder, the metadata
+// file and every media file (cover art, video, marquee, thumbnail) belonging to
+// the entry of system whose game ID (see GameID) is id, then removes that entry
+// from reg. It is the deletion callers that already hold an identifier use:
+// unlike Remove it does not run id through GameID, which would truncate an id
+// whose game name contains a dot and either miss the entry or match another one.
+//
+// The metadata file is deleted first, and its deletion is what commits the
+// whole operation: once it is gone, the entry leaves reg even if a medium
+// resists, and the remaining media are still attempted rather than abandoned at
+// the first failure — reported together as ErrMediaLeftBehind. The reverse
+// order would leave a listed game with broken images. It returns
+// ErrGameNotFound, without deleting anything, if no entry matches.
+func RemoveByID(reg *Registry, registryFolder, system, id string) error {
+	i := reg.indexOfID(system, id)
 	if i == -1 {
 		return ErrGameNotFound
 	}
 	g := reg.Entries[i].Game
+	systemFolder := filepath.Join(registryFolder, system)
 
-	if err := removeIfExists(filepath.Join(registryFolder, system, gameFileName(g))); err != nil {
+	if err := removeIfExists(filepath.Join(systemFolder, gameFileName(g))); err != nil {
 		return err
 	}
+	reg.Entries = append(reg.Entries[:i], reg.Entries[i+1:]...)
+
+	var leftBehind []string
 	for _, field := range mediaFields {
 		relPath := *field(&g)
 		if relPath == "" {
 			continue
 		}
-		if err := removeIfExists(filepath.Join(registryFolder, system, relPath)); err != nil {
-			return err
+		path, inside := mediumPath(systemFolder, relPath)
+		if !inside {
+			leftBehind = append(leftBehind, relPath)
+			continue
+		}
+		if err := removeIfExists(path); err != nil {
+			leftBehind = append(leftBehind, relPath)
 		}
 	}
-
-	reg.Entries = append(reg.Entries[:i], reg.Entries[i+1:]...)
+	if len(leftBehind) > 0 {
+		return fmt.Errorf("%w: %s", ErrMediaLeftBehind, strings.Join(leftBehind, ", "))
+	}
 	return nil
+}
+
+// mediumPath resolves a game's media reference against its system's folder in
+// the registry, reporting whether it stays inside it. Media references come
+// from scraped gamelist.xml files, so one of them reaching outside — with a
+// "../.." prefix — must not make a deletion erase a file the registry does not
+// own: os.Remove has no undo.
+func mediumPath(systemFolder, relPath string) (path string, inside bool) {
+	path = filepath.Join(systemFolder, filepath.FromSlash(relPath))
+	if !strings.HasPrefix(path, systemFolder+string(filepath.Separator)) {
+		return "", false
+	}
+	return path, true
 }
 
 // removeIfExists deletes the file at path, silently ignoring the case where

@@ -42,6 +42,9 @@ func Handler(reg *registry.Registry, registryFolder string) http.Handler {
 	mux.HandleFunc("/game/{system}/{id}/edit", ui.serveWrongMethod)
 	mux.HandleFunc("POST /game/{system}/{id}/protect", ui.setProtection)
 	mux.HandleFunc("/game/{system}/{id}/protect", ui.serveWrongProtectMethod)
+	mux.HandleFunc("GET /game/{system}/{id}/delete", ui.serveDeleteConfirmation)
+	mux.HandleFunc("POST /game/{system}/{id}/delete", ui.deleteGame)
+	mux.HandleFunc("/game/{system}/{id}/delete", ui.serveWrongDeleteMethod)
 	mux.Handle("GET "+mediaURLPrefix, http.StripPrefix(mediaURLPrefix,
 		http.FileServer(fileOnlyFS{http.Dir(registryFolder)})))
 	mux.HandleFunc("/", ui.serveUnknownPage)
@@ -56,6 +59,14 @@ type webUI struct {
 	mu             sync.RWMutex
 	reg            *registry.Registry
 	registryFolder string
+}
+
+// homeView is the game list: one section per system, and the confirmation of
+// a deletion that redirected here. The list is where a deletion lands — the
+// deleted game's own page is gone — so it is the page that confirms it.
+type homeView struct {
+	Systems []systemListing
+	Deleted string
 }
 
 // systemListing is one system's section of the home page.
@@ -82,6 +93,7 @@ type gameDetail struct {
 	System    string
 	SystemURL string
 	EditURL   string
+	DeleteURL string
 	Saved     string
 	Desc      string
 	CoverURL  string
@@ -111,7 +123,7 @@ type metadataField struct {
 }
 
 // serveHome renders every game of the registry, grouped by system.
-func (ui *webUI) serveHome(w http.ResponseWriter, _ *http.Request) {
+func (ui *webUI) serveHome(w http.ResponseWriter, r *http.Request) {
 	ui.mu.RLock()
 	systems := site.GroupBySystem(ui.reg.Entries, ui.registryFolder)
 	ui.mu.RUnlock()
@@ -130,7 +142,11 @@ func (ui *webUI) serveHome(w http.ResponseWriter, _ *http.Request) {
 		listings[i] = systemListing{Name: system.Name, Games: cards}
 	}
 
-	render(w, http.StatusOK, homeTemplate, listings)
+	query := r.URL.Query()
+	render(w, http.StatusOK, homeTemplate, homeView{
+		Systems: listings,
+		Deleted: deletedConfirmation(query.Get(deletedParam), query.Get(systemParam), query[warningParam]),
+	})
 }
 
 // serveGame renders one game's full metadata and media, or the not-found
@@ -183,6 +199,7 @@ func (ui *webUI) gameDetail(entry registry.Entry) gameDetail {
 		System:     view.System,
 		SystemURL:  "/#" + view.System,
 		EditURL:    gameURL(view.System, view.ID) + "/edit",
+		DeleteURL:  gameURL(view.System, view.ID) + "/delete",
 		Protection: protectionOf(entry, view.System, view.ID),
 		Desc:       view.Desc,
 		CoverURL:   mediaURL(view.ImagePath),
@@ -256,6 +273,12 @@ type problem struct {
 // submission it cannot read) is shown in-theme rather than as a bare error
 // string.
 func renderProblem(w http.ResponseWriter, status int, title, message string) {
+	// A 404 is cacheable by heuristic, and the pages that answer one here are
+	// URLs whose game may well come back — a later import recreating what a
+	// deletion removed. Only the refusals are kept out of the cache; the pages
+	// that do render content stay cacheable, so going back to the list still
+	// restores its scroll position.
+	w.Header().Set("Cache-Control", "no-store")
 	render(w, status, problemTemplate, problem{Code: status, Title: title, Message: message})
 }
 
@@ -335,18 +358,22 @@ func newPage(name, body string) *template.Template {
 // game's own page.
 var homeTemplate = newPage("home", `
 {{define "body"}}
-{{if not .}}
+{{if not .Systems}}
+<main>
+{{if .Deleted}}<p class="banner" id="deleted" role="status" tabindex="-1">{{.Deleted}}</p>{{end}}
 <p class="empty-state">No games in the registry yet.</p>
+</main>
 {{else}}
 <nav class="console" aria-label="Systems">
 <a class="console__brand" href="#top">Registry</a>
 <div class="console__systems">
-{{range .}}<a href="#{{.Name}}">{{.Name}}</a>
+{{range .Systems}}<a href="#{{.Name}}">{{.Name}}</a>
 {{end}}
 </div>
 </nav>
 <main>
-{{range .}}
+{{if .Deleted}}<p class="banner" id="deleted" role="status" tabindex="-1">{{.Deleted}}</p>{{end}}
+{{range .Systems}}
 <section id="{{.Name}}" class="system">
 <h2 class="system__title">{{.Name}}</h2>
 <div class="grid">
@@ -405,6 +432,7 @@ var gameTemplate = newPage("game", `
 <button class="button button--quiet" type="submit">{{.Protection.Label}}</button>
 </form>
 {{end}}
+<a class="button button--danger meta__delete" href="{{.DeleteURL}}">Delete from the registry</a>
 </div>
 </div>
 </div>

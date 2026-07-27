@@ -22,7 +22,7 @@ The heart of the tool: a centralized index of all already-known games, along wit
 Turns the registry's content into HTML, so it can be browsed in a web browser without opening individual metadata files. It is the shared presentation layer: it both writes the static site regenerated on every update, and provides the theme, the grouping by system and the formatting (rating stars, release year, safely encoded media links) reused by the web server, so both renderings stay consistent.
 
 **Web server**
-Serves the registry's content over HTTP on demand: the game list, one page per game, the form correcting a game's metadata, and the media files themselves. Unlike the static site, each game has its own address, which is what makes a game reachable, linkable and editable.
+Serves the registry's content over HTTP on demand: the game list, one page per game, the form correcting a game's metadata, the page confirming a game's deletion, and the media files themselves. Unlike the static site, each game has its own address, which is what makes a game reachable, linkable, editable and deletable.
 
 **Commit of a registry change**
 Writing the registry and regenerating the consultation site derived from it always go together, so the two never drift apart. Both the commands and the web server go through the same single place to do it, which also tells apart the case where the registry itself was written but only the site could not be regenerated.
@@ -51,7 +51,7 @@ Two kinds of pages are served, sharing the static site's look:
 
 A game is addressed by the same identifier the registry already uses to name its file on disk, so no second matching rule is introduced. An address designating an unknown system or an unknown game — or one that is simply malformed — answers with a "not found" page in the same style, naming what could not be found and offering a link back to the list, rather than a blank page or a server error. Media files are read from the registry folder only: no address can reach a file outside it, and the folders themselves are never listed.
 
-The registry is read once, when the server starts: after an `update`, the server must be restarted to reflect the changes. Changes made from the server's own pages are the exception — a correction, and protecting or unprotecting a game, are applied to what the server serves as well as to the disk, so they show immediately.
+The registry is read once, when the server starts: after an `update`, the server must be restarted to reflect the changes. Changes made from the server's own pages are the exception — a correction, protecting or unprotecting a game, and deleting one are applied to what the server serves as well as to the disk, so they show immediately.
 
 ```mermaid
 flowchart LR
@@ -63,6 +63,8 @@ flowchart LR
   SRV --> EDIT["Edit form + save"]
   SRV --> PROT["Protect / unprotect"]
   PROT --> COMMIT
+  SRV --> DEL["Delete: confirm then erase"]
+  DEL --> COMMIT
   SRV --> MEDIA["Media files"]
   SRV --> NF["Not-found page"]
   EDIT --> COMMIT["Commit: registry + consultation site"]
@@ -109,6 +111,12 @@ The registry can also flow back the other way: once it holds richer information 
 ## Removing an entry from the registry
 
 A game's entry — its metadata sheet and every media file it owns in the registry — can also be removed on demand, by designating it through its system and its ROM filename (e.g. `Sonic.zip`); no need to know or reconstruct its original subfolder, since the registry itself never reproduces one. Removal deletes the matching files from disk and drops the entry, without touching any other game; asking to remove a game that is not in the registry is reported as an error rather than silently doing nothing.
+
+The same removal is reachable from a game's page in the browser, which is what makes it usable without knowing the exact ROM filename. It is deliberately a two-step flow: the page's link leads to a confirmation page, which names the game and lists, file by file, exactly what is about to be erased — only the media actually present, since promising to delete files a game never had would misrepresent what is at stake. Merely opening that page never deletes anything, and it warns when the game is protected against updates, which does not stand in the way of deleting it. Confirming erases the files, regenerates the consultation site without the game, and leads back to the game list — the deleted game's own page no longer exists to return to — with a banner naming what was deleted, since the list is the one page that cannot show what left it.
+
+Deleting is also the one change that does not follow the tool's usual "nothing is committed until the whole write succeeded" rule, for a reason worth knowing: writing the registry only ever *writes* files, it never deletes one that left it. What actually persists a deletion is the erasure of the game's metadata file — so that erasure is the point of no return, and what the server serves is updated the moment it happens. Were it updated later, the next change to any other game would rewrite every entry the server still held and bring the deleted game's file back. Consequently, once that file is gone the deletion is reported as done: a consultation site that could not be regenerated afterwards is a caveat added to the confirmation, never a claim that nothing was deleted.
+
+Two safeguards apply to the files themselves. A media reference that points outside the registry folder — scraped data can hold anything — is refused rather than followed, since erasing a file the registry does not own cannot be undone. And a media file that cannot be erased no longer aborts the removal: the game is removed all the same, the remaining media are still attempted, and what was left behind is named, since those files are no longer reachable from anywhere in the tool.
 
 ## Registry layout
 

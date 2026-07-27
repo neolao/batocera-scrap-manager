@@ -36,7 +36,9 @@ The config file path is resolved via `config.DefaultPath()`: the `BATOCERA_SCRAP
 - Expects two positional arguments, `<system> <rom-filename>` (e.g. `Sonic.zip` — no need for the original subfolder, if any); prints the same usage message and returns exit code 1 if either is missing.
 - Loads the config, fails with exit code 1 if `RegistryFolder` is not set (same message as `update`/`scrape`).
 - Loads the registry, then calls `registry.Remove`. On `registry.ErrGameNotFound`, prints an error naming the system and filename and returns exit code 1; on any other error, prints it and returns exit code 1.
+- `registry.ErrMediaLeftBehind` is the exception: the game itself is gone, so it prints the normal confirmation followed by a `warning:` line naming the leftover files, and returns exit code **0** — reporting it as a failure would have the user retry a removal that already happened.
 - On success, prints a one-line confirmation (`"removed <rom-filename> (system: <system>)"`) and returns exit code 0.
+- Unlike the web UI's deletion, it does **not** regenerate the consultation site: `index.html` still lists the removed game until the next `update`. Pre-existing behaviour, untouched by backlog item 016.
 
 ## `protect` and `unprotect` subcommands
 `internal/cli/protect.go` implements `runProtect` and `runUnprotect`, dispatched by `Execute` on `args[0] == "protect"` / `"unprotect"`. Both are one call to `applyProtection`, which differs only by the usage constant, the confirmation verb, and the `registry.Protect`/`registry.Unprotect` function it is handed — two verbs rather than one command with a flag, so both halves of the feature appear in the top-level `--help` (backlog item 018).

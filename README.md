@@ -18,6 +18,7 @@ A command-line tool for managing game scraping data (metadata, box art, etc.) on
 - Correct a badly scraped game straight from the browser: each game's page offers a pre-filled form for its name, description, rating, release year, developer, publisher, genre and number of players. Saving updates the registry and regenerates the consultation site immediately, with no restart and no file to edit by hand — and a refused entry comes back with what you typed still in place.
 - A value you corrected by hand is never overwritten by a later update, even though the ROMs folder still holds the badly scraped one. Each game's page shows which of its values were corrected that way, and any of them can be handed back to the scraper.
 - Declare a whole game good in one go, so later updates leave all of its metadata alone — from the command line, or from the game's own page in the browser, which states whether updates may still refresh it. Protecting changes none of its values, and the protection can be lifted just as easily.
+- Delete a game from the registry straight from the browser, without knowing its exact ROM filename: a confirmation page names the game and lists, file by file, the metadata and media about to be erased. Once confirmed, the consultation site is regenerated without it and the game list comes back with a banner naming what was deleted.
 - Get detailed, command-specific help with `--help` on any command (e.g. `update --help`), instead of just the generic top-level help.
 <!-- vibe:end:features -->
 
@@ -133,12 +134,14 @@ A game's page also says whether updates may still refresh it — not protected, 
 
 Whichever way you protect a game, Batocera keeps displaying what the ROMs folder holds until that is fixed there too.
 
+A game's page also offers "Delete from the registry", which leads to a confirmation page rather than deleting on the spot: it names the game and lists every file about to be erased — its metadata and each medium actually stored for it — and warns you when the game is protected, since that does not prevent its deletion. Cancelling brings you back to the game untouched; confirming erases those files, regenerates the browsable HTML site without the game, and returns you to the list with a banner naming what was deleted. Only the registry is concerned: the ROM file and the media in your ROMs folders are left as they are, and a later `update` will simply import the game again from there. Deleting a game that is already gone says so instead of failing silently.
+
 The registry is read when the server starts: after an `update`, restart `serve` to see the changes. Corrections and protection changes made from the browser take effect immediately, without restarting.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->
 ## Documentation
 
-- [docs/architecture.md](docs/architecture.md) — How the tool is put together: its main parts, how a ROMs folder's data flows into the registry and back out, how the registry is browsed and corrected, and how a hand-made correction — or a whole protected game — is kept from being overwritten.
+- [docs/architecture.md](docs/architecture.md) — How the tool is put together: its main parts, how a ROMs folder's data flows into the registry and back out, how the registry is browsed, corrected and pruned, and how a hand-made correction — or a whole protected game — is kept from being overwritten.
 - [docs/configuration.md](docs/configuration.md) — Where the configuration lives, what it holds, and the environment variable that can relocate it.
 <!-- vibe:end:docs-index -->

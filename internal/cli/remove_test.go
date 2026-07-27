@@ -36,6 +36,42 @@ func TestExecute_Remove_ExistingGame_DeletesEntryAndConfirms(t *testing.T) {
 	}
 }
 
+func TestExecute_Remove_MediumThatCannotBeDeleted_ConfirmsTheRemovalAndNamesWhatIsLeft(t *testing.T) {
+	registryFolder := setRemoveConfig(t)
+	systemDir := filepath.Join(registryFolder, "megadrive")
+	if err := os.MkdirAll(systemDir, 0o755); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	entry := `{"path":"./Sonic.zip","name":"Sonic","image":"images/Sonic.png"}`
+	if err := os.WriteFile(filepath.Join(systemDir, "Sonic.json"), []byte(entry), 0o644); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	// A non-empty directory where the cover art is expected: os.Remove refuses it.
+	blocked := filepath.Join(systemDir, "images", "Sonic.png")
+	if err := os.MkdirAll(blocked, 0o755); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(blocked, "keeps it non-empty"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	var out bytes.Buffer
+
+	code := Execute([]string{"remove", "megadrive", "Sonic.zip"}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0: the game itself was removed (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "removed") {
+		t.Errorf("output = %q, want it to confirm the removal", out.String())
+	}
+	if !strings.Contains(out.String(), "Sonic.png") {
+		t.Errorf("output = %q, want it to name the file left behind", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(systemDir, "Sonic.json")); err == nil {
+		t.Error("Sonic.json still exists, want it deleted")
+	}
+}
+
 func TestExecute_Remove_GameNotFound_ReturnsErrorCode(t *testing.T) {
 	registryFolder := setRemoveConfig(t)
 	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic", "A classic platformer.")

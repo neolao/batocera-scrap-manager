@@ -925,6 +925,19 @@ func TestCompleteRomsFolder_MediaDestinationBlockedByFile_CountsGameAsFailedAndC
 	}
 }
 
+// writeRegistryMedium creates a media file inside a system's folder of the
+// registry, at the relative path a game's media reference points to.
+func writeRegistryMedium(t *testing.T, registryFolder, system, relPath, content string) {
+	t.Helper()
+	fullPath := filepath.Join(registryFolder, system, filepath.FromSlash(relPath))
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+}
+
 func writeRegistryWithSonicAndMedia(t *testing.T) (registryFolder string, reg *Registry) {
 	t.Helper()
 	registryFolder = t.TempDir()
@@ -1038,6 +1051,220 @@ func TestRemove_GameInSubfolder_FoundByFilenameAlone(t *testing.T) {
 	}
 	if len(reg.Entries) != 0 {
 		t.Errorf("Entries = %v, want empty", reg.Entries)
+	}
+}
+
+// writeRegistryWithDottedGameID builds a registry holding a game whose base
+// name contains a dot — the case that tells apart addressing by ROM filename
+// (which strips what looks like an extension) from addressing by game ID.
+func writeRegistryWithDottedGameID(t *testing.T) (registryFolder string, reg *Registry) {
+	t.Helper()
+	registryFolder = t.TempDir()
+	reg = &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Micro Machines v3.0.zip", Name: "Micro Machines v3.0"}},
+		{System: "megadrive", Game: gamelist.Game{Path: "./Micro Machines v3.zip", Name: "Micro Machines v3"}},
+	}}
+	if err := Save(registryFolder, reg); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+	return registryFolder, reg
+}
+
+func TestRemoveByID_GameIDContainingADot_RemovesThatEntryAndNoOther(t *testing.T) {
+	registryFolder, reg := writeRegistryWithDottedGameID(t)
+
+	err := RemoveByID(reg, registryFolder, "megadrive", "Micro Machines v3.0")
+
+	if err != nil {
+		t.Fatalf("RemoveByID() error = %v, want nil", err)
+	}
+	if len(reg.Entries) != 1 || reg.Entries[0].Game.Name != "Micro Machines v3" {
+		t.Errorf("Entries = %v, want only \"Micro Machines v3\" left", reg.Entries)
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", "Micro Machines v3.0.json")); statErr == nil {
+		t.Error("Micro Machines v3.0.json still exists, want it deleted")
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", "Micro Machines v3.json")); statErr != nil {
+		t.Errorf("Micro Machines v3.json should be untouched: %v", statErr)
+	}
+}
+
+func TestRemoveByID_ExistingGame_DeletesEveryMediumAndTheEntry(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: gamelist.Game{
+		Path:  "./Sonic.zip",
+		Name:  "Sonic",
+		Image: "images/Sonic.png", Video: "videos/Sonic.mp4",
+		Marquee: "images/Sonic-marquee.png", Thumbnail: "images/Sonic-thumb.png",
+	}}}}
+	media := []string{"images/Sonic.png", "videos/Sonic.mp4", "images/Sonic-marquee.png", "images/Sonic-thumb.png"}
+	for _, relPath := range media {
+		writeRegistryMedium(t, registryFolder, "megadrive", relPath, "fake medium")
+	}
+	if err := Save(registryFolder, reg); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+
+	err := RemoveByID(reg, registryFolder, "megadrive", "Sonic")
+
+	if err != nil {
+		t.Fatalf("RemoveByID() error = %v, want nil", err)
+	}
+	if len(reg.Entries) != 0 {
+		t.Errorf("Entries = %v, want empty", reg.Entries)
+	}
+	for _, relPath := range media {
+		if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", filepath.FromSlash(relPath))); statErr == nil {
+			t.Errorf("%s still exists, want it deleted", relPath)
+		}
+	}
+}
+
+func TestRemoveByID_UnknownID_ReturnsErrGameNotFoundWithoutModifyingAnything(t *testing.T) {
+	registryFolder, reg := writeRegistryWithSonicAndMedia(t)
+
+	err := RemoveByID(reg, registryFolder, "megadrive", "Does Not Exist")
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Fatalf("RemoveByID() error = %v, want ErrGameNotFound", err)
+	}
+	if len(reg.Entries) != 2 {
+		t.Errorf("Entries = %v, want unchanged (still 2)", reg.Entries)
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); statErr != nil {
+		t.Errorf("Sonic.json should be untouched: %v", statErr)
+	}
+}
+
+func TestRemoveByID_KnownIDOfAnotherSystem_ReturnsErrGameNotFound(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}},
+	}}
+	if err := Save(registryFolder, reg); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+
+	err := RemoveByID(reg, registryFolder, "mastersystem", "Sonic")
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Fatalf("RemoveByID() error = %v, want ErrGameNotFound", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); statErr != nil {
+		t.Errorf("the megadrive game should be untouched: %v", statErr)
+	}
+}
+
+func TestRemove_RomFilenameWhoseBaseNameContainsADot_StillFindsTheEntry(t *testing.T) {
+	registryFolder, reg := writeRegistryWithDottedGameID(t)
+
+	err := Remove(reg, registryFolder, "megadrive", "Micro Machines v3.0.zip")
+
+	if err != nil {
+		t.Fatalf("Remove() error = %v, want nil", err)
+	}
+	if len(reg.Entries) != 1 || reg.Entries[0].Game.Name != "Micro Machines v3" {
+		t.Errorf("Entries = %v, want only \"Micro Machines v3\" left", reg.Entries)
+	}
+}
+
+func TestRemoveByID_MediumPointingOutsideTheRegistryFolder_LeavesThatFileAlone(t *testing.T) {
+	base := t.TempDir()
+	registryFolder := filepath.Join(base, "registry")
+	outside := filepath.Join(base, "not-ours.png")
+	if err := os.WriteFile(outside, []byte("someone else's file"), 0o644); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: gamelist.Game{
+		Path: "./Sonic.zip", Name: "Sonic", Image: "../../not-ours.png",
+	}}}}
+	if err := Save(registryFolder, reg); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+
+	err := RemoveByID(reg, registryFolder, "megadrive", "Sonic")
+
+	if _, statErr := os.Stat(outside); statErr != nil {
+		t.Fatalf("a file outside the registry folder was deleted: %v", statErr)
+	}
+	if !errors.Is(err, ErrMediaLeftBehind) {
+		t.Errorf("RemoveByID() error = %v, want it to report the medium as left behind", err)
+	}
+	if len(reg.Entries) != 0 {
+		t.Errorf("Entries = %v, want the entry gone: its game file was deleted", reg.Entries)
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); statErr == nil {
+		t.Error("Sonic.json still exists, want it deleted")
+	}
+}
+
+func TestRemoveByID_MediumThatCannotBeDeleted_StillDeletesTheOthersAndReportsIt(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: gamelist.Game{
+		Path: "./Sonic.zip", Name: "Sonic",
+		Image: "images/Sonic.png", Video: "videos/Sonic.mp4",
+	}}}}
+	// A non-empty directory where a medium is expected: os.Remove refuses it,
+	// without depending on file permissions to stage the failure.
+	blocked := filepath.Join(registryFolder, "megadrive", "images", "Sonic.png")
+	if err := os.MkdirAll(blocked, 0o755); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(blocked, "keeps it non-empty"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	writeRegistryMedium(t, registryFolder, "megadrive", "videos/Sonic.mp4", "fake video")
+	if err := Save(registryFolder, reg); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+
+	err := RemoveByID(reg, registryFolder, "megadrive", "Sonic")
+
+	if !errors.Is(err, ErrMediaLeftBehind) {
+		t.Fatalf("RemoveByID() error = %v, want it to report a medium left behind", err)
+	}
+	if !strings.Contains(err.Error(), "Sonic.png") {
+		t.Errorf("error = %q, want it to name the file left behind", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", "videos", "Sonic.mp4")); statErr == nil {
+		t.Error("the video still exists: removal stopped at the first failure instead of going on")
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); statErr == nil {
+		t.Error("Sonic.json still exists, want the deletion to hold")
+	}
+	if len(reg.Entries) != 0 {
+		t.Errorf("Entries = %v, want the entry gone: its game file was deleted", reg.Entries)
+	}
+}
+
+func TestRemoveByID_GameFileThatCannotBeDeleted_ChangesNothing(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &Registry{Entries: []Entry{{System: "megadrive", Game: gamelist.Game{
+		Path: "./Sonic.zip", Name: "Sonic", Image: "images/Sonic.png",
+	}}}}
+	writeRegistryMedium(t, registryFolder, "megadrive", "images/Sonic.png", "fake cover art")
+	// A non-empty directory in place of the game file: os.Remove refuses it.
+	blocked := filepath.Join(registryFolder, "megadrive", "Sonic.json")
+	if err := os.MkdirAll(blocked, 0o755); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(blocked, "keeps it non-empty"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("failed to prepare the test fixture: %v", err)
+	}
+
+	err := RemoveByID(reg, registryFolder, "megadrive", "Sonic")
+
+	if err == nil {
+		t.Fatal("RemoveByID() error = nil, want the failure to delete the game file reported")
+	}
+	if errors.Is(err, ErrMediaLeftBehind) {
+		t.Errorf("error = %v, want it reported as a failed deletion, not as media left behind", err)
+	}
+	if len(reg.Entries) != 1 {
+		t.Errorf("Entries = %v, want the entry kept: nothing was deleted", reg.Entries)
+	}
+	if _, statErr := os.Stat(filepath.Join(registryFolder, "megadrive", "images", "Sonic.png")); statErr != nil {
+		t.Errorf("the cover art was deleted although the game file survived: %v", statErr)
 	}
 }
 

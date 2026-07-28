@@ -30,7 +30,7 @@ func crowdedRegistry(t *testing.T, system string, count int) (*registry.Registry
 func TestServeSystem_ListsOnlyThatSystemsGames(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	rec := get(t, Handler(reg, registryFolder), "/system/megadrive")
+	rec := get(t, Handler(reg, registryFolder, nil), "/system/megadrive")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -46,7 +46,7 @@ func TestServeSystem_ListsOnlyThatSystemsGames(t *testing.T) {
 
 func TestServeSystem_GameCardsLinkToTheirOwnPage(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
-	h := Handler(reg, registryFolder)
+	h := Handler(reg, registryFolder, nil)
 
 	links := cardLinks(get(t, h, "/system/megadrive").Body.String())
 
@@ -61,7 +61,7 @@ func TestServeSystem_GameCardsLinkToTheirOwnPage(t *testing.T) {
 func TestServeSystem_UnknownSystem_ReturnsNotFound(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	rec := get(t, Handler(reg, registryFolder), "/system/nosuchsystem")
+	rec := get(t, Handler(reg, registryFolder, nil), "/system/nosuchsystem")
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
@@ -74,7 +74,7 @@ func TestServeSystem_UnknownSystem_ReturnsNotFound(t *testing.T) {
 func TestServeSystem_FirstPage_ShowsTheFirstGamesAndNoPreviousLink(t *testing.T) {
 	reg, registryFolder := crowdedRegistry(t, "megadrive", gamesPerPage+5)
 
-	body := get(t, Handler(reg, registryFolder), "/system/megadrive").Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), "/system/megadrive").Body.String()
 
 	if !strings.Contains(body, "Game 001") {
 		t.Errorf("first page does not show the first game, got: %s", body)
@@ -96,7 +96,7 @@ func TestServeSystem_FirstPage_ShowsTheFirstGamesAndNoPreviousLink(t *testing.T)
 func TestServeSystem_SecondPage_ShowsTheNextGamesAndBothPagerLinks(t *testing.T) {
 	reg, registryFolder := crowdedRegistry(t, "megadrive", 2*gamesPerPage+5)
 
-	rec := get(t, Handler(reg, registryFolder), "/system/megadrive?page=2")
+	rec := get(t, Handler(reg, registryFolder, nil), "/system/megadrive?page=2")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -116,7 +116,7 @@ func TestServeSystem_SecondPage_ShowsTheNextGamesAndBothPagerLinks(t *testing.T)
 func TestServeSystem_LastPage_HasNoNextLink(t *testing.T) {
 	reg, registryFolder := crowdedRegistry(t, "megadrive", gamesPerPage+5)
 
-	body := get(t, Handler(reg, registryFolder), "/system/megadrive?page=2").Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), "/system/megadrive?page=2").Body.String()
 
 	if !strings.Contains(body, fmt.Sprintf("Game %03d", gamesPerPage+5)) {
 		t.Errorf("last page does not show the very last game, got: %s", body)
@@ -131,7 +131,7 @@ func TestServeSystem_LastPage_HasNoNextLink(t *testing.T) {
 
 func TestServeSystem_PagerLinksLeadToPagesThatExist(t *testing.T) {
 	reg, registryFolder := crowdedRegistry(t, "megadrive", 2*gamesPerPage+5)
-	h := Handler(reg, registryFolder)
+	h := Handler(reg, registryFolder, nil)
 
 	// The pager is rendered above and below the list, so each target appears
 	// twice: what matters is the set of pages it leads to.
@@ -153,7 +153,7 @@ func TestServeSystem_PagerLinksLeadToPagesThatExist(t *testing.T) {
 func TestServeSystem_SinglePage_RendersNoPager(t *testing.T) {
 	reg, registryFolder := crowdedRegistry(t, "megadrive", 3)
 
-	body := get(t, Handler(reg, registryFolder), "/system/megadrive").Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), "/system/megadrive").Body.String()
 
 	if strings.Contains(body, `<nav class="pager"`) {
 		t.Errorf("a system fitting on one page still renders a pager, got: %s", body)
@@ -162,7 +162,7 @@ func TestServeSystem_SinglePage_RendersNoPager(t *testing.T) {
 
 func TestServeSystem_UnusablePageNumber_ReturnsNotFound(t *testing.T) {
 	reg, registryFolder := crowdedRegistry(t, "megadrive", gamesPerPage+5)
-	h := Handler(reg, registryFolder)
+	h := Handler(reg, registryFolder, nil)
 
 	// A page out of bounds is a wrong URL, not an empty page: answering 200
 	// with nothing on it would hide a broken link.
@@ -184,7 +184,7 @@ func TestServeSystem_UnusablePageNumber_ReturnsNotFound(t *testing.T) {
 func TestServeSystem_ExplicitFirstPage_IsAccepted(t *testing.T) {
 	reg, registryFolder := crowdedRegistry(t, "megadrive", gamesPerPage+5)
 
-	rec := get(t, Handler(reg, registryFolder), "/system/megadrive?page=1")
+	rec := get(t, Handler(reg, registryFolder, nil), "/system/megadrive?page=1")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -199,7 +199,7 @@ func TestServeSystem_SystemNameWithSpecialCharacters_LinksRoundTrip(t *testing.T
 	reg := &registry.Registry{Entries: []registry.Entry{
 		{System: "pc engine cd", Game: gamelist.Game{Path: "./Ys.zip", Name: "Ys Book I & II"}},
 	}}
-	h := Handler(reg, registryFolder)
+	h := Handler(reg, registryFolder, nil)
 
 	link := systemLink(get(t, h, "/").Body.String())
 
@@ -218,7 +218,7 @@ func TestServeSystem_SystemNameWithSpecialCharacters_LinksRoundTrip(t *testing.T
 func TestServeSystem_MarksTheCurrentSystemInTheNavigation(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	body := get(t, Handler(reg, registryFolder), "/system/megadrive").Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), "/system/megadrive").Body.String()
 
 	if !strings.Contains(body, `aria-current="page"`) {
 		t.Errorf("system page does not mark the current system in its navigation, got: %s", body)
@@ -231,7 +231,7 @@ func TestServeSystem_MarksTheCurrentSystemInTheNavigation(t *testing.T) {
 func TestServeSystem_DoesNotEmbedVideoPlayers(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	body := get(t, Handler(reg, registryFolder), "/system/megadrive").Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), "/system/megadrive").Body.String()
 
 	if strings.Contains(body, "<video") {
 		t.Errorf("system page embeds a video player, got: %s", body)
@@ -247,7 +247,7 @@ func TestServeSystem_GameWithoutJaquette_RendersPlaceholderNotABrokenImage(t *te
 		{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic", Image: "images/gone.png"}},
 	}}
 
-	body := get(t, Handler(reg, registryFolder), "/system/megadrive").Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), "/system/megadrive").Body.String()
 
 	if strings.Contains(body, "<img") {
 		t.Errorf("system page renders an <img> for a jaquette missing from disk, got: %s", body)
@@ -262,7 +262,7 @@ func TestServeSystem_IsNotServedWithNoStoreCaching(t *testing.T) {
 	// list after opening a game would jump back to the top of the page.
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	rec := get(t, Handler(reg, registryFolder), "/system/megadrive")
+	rec := get(t, Handler(reg, registryFolder, nil), "/system/megadrive")
 
 	if strings.Contains(rec.Header().Get("Cache-Control"), "no-store") {
 		t.Errorf("Cache-Control = %q, want no no-store directive", rec.Header().Get("Cache-Control"))

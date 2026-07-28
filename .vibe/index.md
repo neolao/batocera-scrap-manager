@@ -4,11 +4,11 @@
 ## Modules
 - [`modules/cli.md`](.vibe/modules/cli.md) — entry point and command-line interface
 - [`modules/config.md`](.vibe/modules/config.md) — persistence of the configured registry folder and ROMs folders
-- [`modules/gamelist.md`](.vibe/modules/gamelist.md) — parsing and writing of EmulationStation/Batocera `gamelist.xml` files
+- [`modules/gamelist.md`](.vibe/modules/gamelist.md) — parsing and all-or-nothing writing of EmulationStation/Batocera `gamelist.xml` files
 - [`modules/registry.md`](.vibe/modules/registry.md) — centralized game index and media (one JSON file per game); imports from ROMs folders into the registry, completes ROMs folders (or a single targeted game) back from the registry, removes a game's entry by ROM filename or by identifier, applies a hand-made metadata correction that later imports must not overwrite, and re-files an entry under a corrected ROM path
 - [`modules/site.md`](.vibe/modules/site.md) — shared presentation layer: turns registry entries into HTML views (grouping, formatting, theme, and the inverse conversions a form needs) and generates the styled static HTML site, with sticky navigation between systems
 - [`modules/store.md`](.vibe/modules/store.md) — the one place committing a registry change: writes the registry and regenerates the consultation site derived from it
-- [`modules/webui.md`](.vibe/modules/webui.md) — serves the registry over HTTP: systems summary, one paginated game list per system, one page per game, the form correcting a game's metadata and the ROM path identifying it, the page confirming a game's deletion, themed error pages, and the media files
+- [`modules/webui.md`](.vibe/modules/webui.md) — serves the registry over HTTP: systems summary, one paginated game list per system, one page per game, the form correcting a game's metadata and the ROM path identifying it, the page confirming a game's deletion, the page completing the ROMs folders from the registry in the background, themed error pages, and the media files
 
 ## Observed patterns
 
@@ -50,6 +50,11 @@
 - What identifies an entry is never given the mechanics of what describes it: the ROM path stays out of `editableFields`, gets its own domain function and its own form control, and is covered by neither the hand-edited marking nor the whole-game protection — see [`decisions/024`](.vibe/decisions/024-the-rom-path-is-an-identity-renamed-write-first-erase-after.md).
 - Two operations that both move files order them by which step *fulfills the intent*, not by a single house rule: a deletion erases first (the erasure is the intent), a rename writes first and erases after (the write is the intent) — so the failure each risks is the recoverable one.
 - A refusal that a caller must word is split in two: the domain names the rule broken with a sentinel per reason, the caller maps sentinels to sentences — neither holds the other's job, and a message is never left empty for an unmapped error.
+- A change is written to a temporary file in the target's **own folder** and renamed over it, so an interruption leaves the previous file intact rather than truncated — applied where the file is the user's only copy and holds fields the tool does not model (see [`decisions/026`](.vibe/decisions/026-a-gamelist-is-written-beside-then-swapped-in.md)). The consequence is accepted rather than worked around: what refuses the write becomes the folder, not the file.
+- An operation too long to run inside its request is detached and followed through one URL holding every state it can be in — including "nothing ran yet" — rather than a page per state; the report of the last run survives it, since the operation writes where nothing can undo it (see [`decisions/025`](.vibe/decisions/025-completing-roms-folders-runs-in-the-background-behind-one-page.md)).
+- A detached run captures the shared snapshot under the read lock and immediately lets the lock go, never holding it for the work — which the "apply to a `Clone()`, swap in" rule is what makes safe. Its exclusion slot is reserved before the redirect, never inside the goroutine, or a replayed submission would find it free.
+- A sentence two entry points must both print is a shared format constant in the package owning the values, not a literal in each caller — naming the vocabulary without moving the printing itself into the domain.
+- A total is suppressed when it repeats the only line it sums: a report of one item states it once.
 - Two failures reported by the same call are worded apart when their recovery differs (a stale site rebuilt by `update` vs. a registry that could not be rewritten), rather than folded into one `%v` — a shared helper is bypassed rather than given a mode parameter when its "a failure means nothing was applied" contract does not hold at that call site (see [`decisions/023`](.vibe/decisions/023-remove-warns-about-persistence-it-never-denies-the-deletion.md)).
 
 ## Other context files

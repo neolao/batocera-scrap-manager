@@ -44,11 +44,12 @@ Every time the registry is updated, a small static website is (re)generated dire
 
 The static site is a snapshot written to disk; the tool can also serve the registry itself over HTTP, which is what makes each game addressable. The server listens on every interface on port 8080 by default — so the registry can be browsed from a phone or another computer on the same network — and both the address and the port can be changed. On startup it prints the address it actually listens on plus a URL usable as-is in a browser, and it stops cleanly when interrupted, letting requests in flight finish.
 
-Three kinds of pages are served, sharing the static site's look:
+Four kinds of pages are served, sharing the static site's look:
 
 - the home page, a summary naming each system and how many games it holds, each leading to its own list. It names no game: a registry of several thousand games would otherwise be written out in full into the very first page a browser opens, which is both slow to produce and unreadable on a phone;
 - one list per system, showing 60 games at a time with "previous"/"next" links, a bar to jump straight to another system, and each game linking to its own page. Only the games actually on the page are prepared, so the cost of a list no longer grows with the size of the system;
-- one page per game, showing the ROM file it stands for, its full description, all of its metadata labels (rating, year, developer, publisher, genre, players) — kept visible even when the game has no value for them — and every medium actually present for it: jaquette, video, marquee, thumbnail. A game with no cover art, no description or no media is presented cleanly rather than showing empty or broken elements, and its rating is written out in words next to the stars so it is not conveyed by symbols alone.
+- one page per game, showing the ROM file it stands for, its full description, all of its metadata labels (rating, year, developer, publisher, genre, players) — kept visible even when the game has no value for them — and every medium actually present for it: jaquette, video, marquee, thumbnail. A game with no cover art, no description or no media is presented cleanly rather than showing empty or broken elements, and its rating is written out in words next to the stars so it is not conveyed by symbols alone;
+- one page for the completion of the ROMs folders, reached from the home page, which confirms the operation before anything is written and then follows it while it runs — see "Completing from the browser" below.
 
 A game is addressed by the same identifier the registry already uses to name its file on disk, so no second matching rule is introduced — which is also why correcting a game's ROM path changes the address of its own page. An address designating an unknown system or an unknown game — or one that is simply malformed, or asks for a page number beyond the last of a system — answers with a "not found" page in the same style, naming what could not be found and offering a link back, rather than a blank page, an empty list or a server error. Media files are read from the registry folder only: no address can reach a file outside it, and the folders themselves are never listed.
 
@@ -122,6 +123,24 @@ The page states the result in words — not protected, partly protected, protect
 ## Completing a ROMs folder from the registry
 
 The registry can also flow back the other way: once it holds richer information about a game (for instance because it was already fully scraped from another ROMs folder), that information can be used to complete a ROMs folder where the same game's local sheet is missing fields. For each system, the local `gamelist.xml` is compared against the matching registry entry; any field left empty locally (description, jaquette, rating, genre, release date...) is filled in from the registry, and any newly referenced media file is copied into the ROMs folder, mirroring its layout. Fields already present locally are always kept as-is — the registry only ever fills gaps, never overwrites existing data. A game with no matching registry entry, or already fully complete, is left untouched. A summary (games processed, completed, failed) is displayed to the user. Instead of processing an entire ROMs folder, a single game can also be targeted directly by its real path on disk: the tool figures out which configured ROMs folder and system it belongs to, and completes only that one game — reporting a clear error if that path is outside any configured ROMs folder or has no matching registry entry.
+
+### Completing from the browser
+
+The same completion is reachable from the served pages, so a session spent correcting metadata can end by sending the result back to Batocera without dropping to a terminal. It is the only flow in the browser that writes **outside** the registry — into the user's own Batocera folders, rewriting `gamelist.xml` files under no version control — which is why it opens on a confirmation page naming every folder concerned and saying plainly that nothing can be undone, the same two-step shape as a deletion.
+
+Unlike every other change made from the browser, it does not run inside the request. It is a batch that can take minutes on a large library, and the interface ships no JavaScript, so a request held open would show a blank tab for that whole time and freeze every other page behind the shared lock. Instead the submission starts the work in the background and redirects to a single address holding four states: nothing configured, nothing running, a run in progress, and the report of the last run. Only the running state reloads itself; the report never does, and stays readable until the next run replaces it — the operation writes to the user's disk with no way back, so its account has to outlive the browser tab that started it.
+
+Three consequences follow from that shape:
+
+- **One run at a time.** The slot is taken before the redirect, not inside the background work, so a double click or a reloaded submission cannot set two runs writing the same `gamelist.xml` at once; the second submission simply lands on the one already going.
+- **The snapshot is captured, not held.** The run reads the registry the server is serving, but takes the read lock only long enough to grab it. Because every change applies to a copy and swaps it in, the copy the run holds stays valid and untouched — so a correction saved meanwhile neither waits for the run nor disturbs it.
+- **A folder that cannot be read stops the run**, exactly as the command line stops: the folders already completed keep their counts, and the report names the one that failed with what went wrong. The alternative — carrying on to the next folder — was rejected so that the two entry points onto one operation never differ in what they mean.
+
+### Writing a game sheet safely
+
+Whichever entry point asks for it, a `gamelist.xml` is never opened and truncated in place. The new document is written to a temporary file **in the same folder**, flushed, given the previous file's permissions, then renamed over it — a rename being atomic only within one filesystem, which is why the temporary file cannot live elsewhere. An interruption at any point therefore leaves the previous file intact and, at worst, a stray temporary beside it.
+
+This matters because that file is the user's only copy, sits outside any version control, and holds fields this tool does not model at all (favourites, play counts) which the rewrite reproduces from what it parsed. One consequence is deliberate: what refuses the write is now the folder, not the file, so a `gamelist.xml` left read-only is replaced all the same.
 
 ## Removing an entry from the registry
 

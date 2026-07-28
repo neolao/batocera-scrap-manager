@@ -215,6 +215,37 @@
 /* Pushed away from the actions it sits next to, so it is not clicked for one
    of them on a wrapped row. */
 .meta__delete { margin-left: auto; }
+/* The completion of the ROMs folders: what it is doing, then what it did. */
+.run { max-width: 40rem; margin-bottom: 2rem; }
+.run__lead { margin: 0 0 0.75rem; }
+.run__current, .run__note { margin: 0 0 0.75rem; font-size: 0.85rem; color: var(--ink-dim); }
+.run__current code { font-family: var(--font-display); font-size: 0.8rem; overflow-wrap: anywhere; }
+.run__folders {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  list-style: none;
+}
+.run__folders li { margin-bottom: 0.75rem; }
+.run__folders li:last-child { margin-bottom: 0; }
+.run__folders code {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+  overflow-wrap: anywhere;
+}
+.run__counts { display: block; font-size: 0.85rem; color: var(--ink); }
+.run__problem { display: block; margin-top: 0.25rem; font-size: 0.85rem; color: var(--magenta); overflow-wrap: anywhere; }
+.run__total {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  color: var(--cyan);
+}
 .confirm { max-width: 40rem; }
 .confirm__lead { margin: 0 0 0.75rem; }
 .confirm__files {
@@ -313,6 +344,9 @@ textarea.field__control { resize: vertical; line-height: 1.6; }
   font-size: 0.9rem;
 }
 .banner:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+/* The home page's own actions, above the systems: the list can run long, and
+   a control sitting under it would be out of reach on a phone. */
+.home__actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0 0 1.5rem; }
 /* The home page: one row per system, sized as a comfortable tap target. */
 .systems {
   display: grid;

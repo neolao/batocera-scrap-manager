@@ -70,6 +70,32 @@ Defined in: `internal/registry/registry.go` (passed to the optional `onProgress`
 | GameName | string | |
 Defined in: `internal/registry/registry.go` (passed to the optional `onProgress` callback of `CompleteRomsFolder`)
 
+## folderReport
+| Field | Type | Notes |
+|---|---|---|
+| Folder | string | the configured ROMs folder this line accounts for |
+| Processed | int | games looked at in that folder |
+| Completed | int | games the registry actually filled |
+| Failed | int | games whose media could not be copied back |
+| Problem | string | empty when the folder was completed to the end; otherwise the sentence naming what stopped it — the counts reached before the failure are kept |
+
+`Summary()` words the three counts through `registry.CompletionSummaryFormat`, the same pattern the `scrape` command prints.
+Defined in: `internal/webui/complete.go`
+
+## completionReport
+| Field | Type | Notes |
+|---|---|---|
+| Running | bool | a run is in flight; the only state emitting the page's auto-reload |
+| StartedAt | string | `15:04:05` of the run's start |
+| Elapsed | string | time since the start while running, total duration once over |
+| Current | string | the folder being processed, plus `— system: game` once the domain reports one |
+| Folders | []folderReport | one line per folder, appended as each finishes |
+| Summary | string | the folders' counts added up, worded like the CLI's |
+| Failed | bool | any folder carries a `Problem` |
+
+A copy taken under `completionState`'s own mutex, so a template never reads a field the run is writing. `Totalled()` reports whether `Summary` says anything the per-folder lines do not — it does not with a single folder.
+Defined in: `internal/webui/complete.go`
+
 ## SystemView / GameView
 | Field | Type | Notes |
 |---|---|---|

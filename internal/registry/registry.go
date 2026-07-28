@@ -541,6 +541,13 @@ type CompletionEvent = ProgressEvent
 // actually had a field filled from the registry (whether or not copying its
 // media then succeeded) — games left untouched because they were already
 // complete, or unknown to the registry, produce no event.
+// CompletionSummaryFormat words the outcome of a completion: how many games
+// were looked at, how many the registry could fill, and how many could not be
+// written back. It is a constant rather than each caller's own literal so the
+// CLI and the web UI report the very same sentence — the wording is part of
+// what the two entry points share, like the operation itself.
+const CompletionSummaryFormat = "%d processed, %d completed, %d failed"
+
 func CompleteRomsFolder(reg *Registry, romsFolder, registryFolder string, onProgress func(CompletionEvent)) (processed, completed, failed int, err error) {
 	dirEntries, err := os.ReadDir(romsFolder)
 	if err != nil {

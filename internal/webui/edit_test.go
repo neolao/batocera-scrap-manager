@@ -75,7 +75,7 @@ func optionValues(t *testing.T, body, name string) []string {
 func TestHandler_EditPage_PrefillsEveryEditableField(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	rec := get(t, Handler(reg, registryFolder), sonicEditURL)
+	rec := get(t, Handler(reg, registryFolder, nil), sonicEditURL)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -103,7 +103,7 @@ func TestHandler_EditPage_PrefillsEveryEditableField(t *testing.T) {
 func TestHandler_EditPage_Rating_PreselectsTheStarCountThePageDisplays(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	body := get(t, Handler(reg, registryFolder), sonicEditURL).Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), sonicEditURL).Body.String()
 
 	if got := selectedOption(t, body, "rating"); got != "4" {
 		t.Errorf("selected rating = %q, want %q: a stored 0.8 is displayed as 4 stars out of 5", got, "4")
@@ -118,7 +118,7 @@ func TestHandler_EditPage_Rating_PreselectsTheStarCountThePageDisplays(t *testin
 func TestHandler_EditPage_ReleaseDate_PrefillsTheYearAlone(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	body := get(t, Handler(reg, registryFolder), sonicEditURL).Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), sonicEditURL).Body.String()
 
 	got, found := inputValue(t, body, "year")
 	if !found {
@@ -138,7 +138,7 @@ func TestHandler_EditPage_GameWithNoRatingNorGenre_RendersEmptyControlsNotPlaceh
 		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}},
 	}}
 
-	body := get(t, Handler(reg, registryFolder), "/game/megadrive/Sonic/edit").Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), "/game/megadrive/Sonic/edit").Body.String()
 
 	if got, _ := inputValue(t, body, "genre"); got != "" {
 		t.Errorf("genre = %q, want an empty control for a game that has no genre", got)
@@ -160,7 +160,7 @@ func TestHandler_EditPage_NeverExposesTheMedia(t *testing.T) {
 	// their own flows rather than typed in.
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	body := get(t, Handler(reg, registryFolder), sonicEditURL).Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), sonicEditURL).Body.String()
 
 	for _, forbidden := range []string{"image", "video", "marquee", "thumbnail"} {
 		if _, found := inputValue(t, body, forbidden); found {
@@ -177,7 +177,7 @@ func TestHandler_EditPage_HandEditedField_OffersToHandItBackToTheScraper(t *test
 		ManualFields: []string{"genre"},
 	}}}
 
-	body := get(t, Handler(reg, registryFolder), "/game/megadrive/Sonic/edit").Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), "/game/megadrive/Sonic/edit").Body.String()
 
 	handBack := regexp.MustCompile(`<input[^>]*name="hand_back"[^>]*value="([^"]*)"`).FindAllStringSubmatch(body, -1)
 	if len(handBack) != 1 {
@@ -191,7 +191,7 @@ func TestHandler_EditPage_HandEditedField_OffersToHandItBackToTheScraper(t *test
 func TestHandler_EditPage_FieldNobodyEdited_HasNoHandBackControl(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	body := get(t, Handler(reg, registryFolder), sonicEditURL).Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), sonicEditURL).Body.String()
 
 	if strings.Contains(body, `name="hand_back"`) {
 		t.Error("the edit form offers to hand a field back to the scraper, want none: nothing was corrected by hand")
@@ -200,7 +200,7 @@ func TestHandler_EditPage_FieldNobodyEdited_HasNoHandBackControl(t *testing.T) {
 
 func TestHandler_EditPage_CancellingLeadsBackToTheGamePage(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
-	h := Handler(reg, registryFolder)
+	h := Handler(reg, registryFolder, nil)
 
 	body := get(t, h, sonicEditURL).Body.String()
 
@@ -216,7 +216,7 @@ func TestHandler_EditPage_CancellingLeadsBackToTheGamePage(t *testing.T) {
 func TestHandler_EditPage_UnknownGame_RendersTheNotFoundPage(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	rec := get(t, Handler(reg, registryFolder), "/game/megadrive/Golden%20Axe/edit")
+	rec := get(t, Handler(reg, registryFolder, nil), "/game/megadrive/Golden%20Axe/edit")
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", rec.Code)
@@ -229,7 +229,7 @@ func TestHandler_EditPage_UnknownGame_RendersTheNotFoundPage(t *testing.T) {
 func TestHandler_EditPage_KnownGameOfAnotherSystem_RendersTheNotFoundPage(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	rec := get(t, Handler(reg, registryFolder), "/game/mastersystem/Sonic%20the%20Hedgehog/edit")
+	rec := get(t, Handler(reg, registryFolder, nil), "/game/mastersystem/Sonic%20the%20Hedgehog/edit")
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", rec.Code)
@@ -240,7 +240,7 @@ func TestHandler_EditURL_UnsupportedMethod_Returns405NamingTheAllowedOnes(t *tes
 	reg, registryFolder := fullyScrapedRegistry(t)
 	rec := httptest.NewRecorder()
 
-	Handler(reg, registryFolder).ServeHTTP(rec, httptest.NewRequest(http.MethodPut, sonicEditURL, nil))
+	Handler(reg, registryFolder, nil).ServeHTTP(rec, httptest.NewRequest(http.MethodPut, sonicEditURL, nil))
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", rec.Code)
@@ -253,7 +253,7 @@ func TestHandler_EditURL_UnsupportedMethod_Returns405NamingTheAllowedOnes(t *tes
 
 func TestHandler_GamePage_LinksToItsEditPage(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
-	h := Handler(reg, registryFolder)
+	h := Handler(reg, registryFolder, nil)
 
 	body := get(t, h, "/game/megadrive/Sonic%20the%20Hedgehog").Body.String()
 
@@ -273,7 +273,7 @@ func TestHandler_GamePage_HandEditedValue_IsMarkedAsSuch(t *testing.T) {
 		ManualFields: []string{"genre"},
 	}}}
 
-	body := get(t, Handler(reg, registryFolder), "/game/megadrive/Sonic").Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), "/game/megadrive/Sonic").Body.String()
 
 	marks := strings.Count(body, `class="meta__manual"`)
 	if marks != 1 {

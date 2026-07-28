@@ -21,7 +21,9 @@ const serveUsage = `Usage:
   batocera-scrap-manager serve [--addr <host:port>]
 
 Serves the registry's content in a web browser: one page listing every game
-grouped by system, and one page per game with its metadata and media.
+grouped by system, and one page per game with its metadata and media. The
+served pages can also complete the configured ROMs folders from the registry,
+which is what 'scrape' does on the command line.
 
 Options:
   --addr <host:port>   Address to listen on (default 0.0.0.0:8080)
@@ -69,7 +71,7 @@ func runServe(args []string, out io.Writer) int {
 
 	fmt.Fprint(out, listeningLines(listener.Addr().String()))
 
-	return serveUntil(ctx, listener, webui.Handler(reg, cfg.RegistryFolder), out)
+	return serveUntil(ctx, listener, webui.Handler(reg, cfg.RegistryFolder, cfg.RomsFolders), out)
 }
 
 // serveArgsOutcome tells runServe what parsing serve's command line

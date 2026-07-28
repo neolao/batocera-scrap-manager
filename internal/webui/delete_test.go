@@ -92,7 +92,7 @@ func blockDeletionOf(t *testing.T, path string) {
 
 func TestHandler_DeletePage_ExistingGame_AsksForConfirmationWithoutDeletingAnything(t *testing.T) {
 	reg, folder := deletableRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	rec := get(t, h, sonicDeleteURL)
 
@@ -115,7 +115,7 @@ func TestHandler_DeletePage_ExistingGame_AsksForConfirmationWithoutDeletingAnyth
 func TestHandler_DeletePage_ListsTheGameFileAndEveryMediumItWillDelete(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 
-	body := get(t, Handler(reg, folder), sonicDeleteURL).Body.String()
+	body := get(t, Handler(reg, folder, nil), sonicDeleteURL).Body.String()
 
 	// Every path is listed relative to the registry folder, the metadata file
 	// included: a list mixing two origins reads as two different places.
@@ -136,7 +136,7 @@ func TestHandler_DeletePage_MediumMissingFromDisk_IsNotAnnouncedAsAboutToBeDelet
 		t.Fatalf("failed to prepare the test fixture: %v", err)
 	}
 
-	body := get(t, Handler(reg, folder), sonicDeleteURL).Body.String()
+	body := get(t, Handler(reg, folder, nil), sonicDeleteURL).Body.String()
 
 	if strings.Contains(body, "videos/sonic.mp4") {
 		t.Errorf("the confirmation promises to delete a file that is not there, got: %s", body)
@@ -149,7 +149,7 @@ func TestHandler_DeletePage_MediumMissingFromDisk_IsNotAnnouncedAsAboutToBeDelet
 func TestHandler_DeletePage_OffersToCancelBackToTheGamePage(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 
-	body := get(t, Handler(reg, folder), sonicDeleteURL).Body.String()
+	body := get(t, Handler(reg, folder, nil), sonicDeleteURL).Body.String()
 
 	var found bool
 	for _, link := range cardLinks(body) {
@@ -164,7 +164,7 @@ func TestHandler_DeletePage_OffersToCancelBackToTheGamePage(t *testing.T) {
 
 func TestHandler_DeletePage_ProtectedGame_SaysProtectionDoesNotPreventDeletion(t *testing.T) {
 	reg, folder := deletableRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	post(t, h, sonicProtectURL, protectForm("on"))
 
 	body := get(t, h, sonicDeleteURL).Body.String()
@@ -177,7 +177,7 @@ func TestHandler_DeletePage_ProtectedGame_SaysProtectionDoesNotPreventDeletion(t
 func TestHandler_DeletePage_UnknownGame_RendersTheNotFoundPage(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 
-	rec := get(t, Handler(reg, folder), "/game/megadrive/Nope/delete")
+	rec := get(t, Handler(reg, folder, nil), "/game/megadrive/Nope/delete")
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404 (body: %s)", rec.Code, rec.Body.String())
@@ -187,7 +187,7 @@ func TestHandler_DeletePage_UnknownGame_RendersTheNotFoundPage(t *testing.T) {
 func TestHandler_Delete_Confirmed_RemovesTheGameFileAndEveryMedium(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 
-	rec := post(t, Handler(reg, folder), sonicDeleteURL, nil)
+	rec := post(t, Handler(reg, folder, nil), sonicDeleteURL, nil)
 
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303 (body: %s)", rec.Code, rec.Body.String())
@@ -199,7 +199,7 @@ func TestHandler_Delete_Confirmed_RemovesTheGameFileAndEveryMedium(t *testing.T)
 
 func TestHandler_Delete_Confirmed_LeadsBackToTheSystemListWithoutTheGame(t *testing.T) {
 	reg, folder := deletableRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	rec := post(t, h, sonicDeleteURL, nil)
 
@@ -229,7 +229,7 @@ func TestHandler_Delete_LastGameOfItsSystem_LeadsBackToTheHomePage(t *testing.T)
 	if err := store.Save(reg, folder); err != nil {
 		t.Fatalf("failed to write the test registry: %v", err)
 	}
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	rec := post(t, h, sonicDeleteURL, nil)
 
@@ -249,7 +249,7 @@ func TestHandler_Delete_LastGameOfItsSystem_LeadsBackToTheHomePage(t *testing.T)
 
 func TestHandler_Delete_Confirmed_ConfirmationNamesTheDeletedGame(t *testing.T) {
 	reg, folder := deletableRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	rec := post(t, h, sonicDeleteURL, nil)
 
@@ -266,7 +266,7 @@ func TestHandler_Delete_Confirmed_ConfirmationNamesTheDeletedGame(t *testing.T) 
 func TestHandler_HomePage_BrowsedTo_ShowsNoDeletionBanner(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 
-	body := get(t, Handler(reg, folder), "/").Body.String()
+	body := get(t, Handler(reg, folder, nil), "/").Body.String()
 
 	if strings.Contains(body, `id="deleted"`) {
 		t.Errorf("the list announces a deletion nobody made, got: %s", body)
@@ -275,7 +275,7 @@ func TestHandler_HomePage_BrowsedTo_ShowsNoDeletionBanner(t *testing.T) {
 
 func TestHandler_Delete_Confirmed_TheGamePageIsGoneToo(t *testing.T) {
 	reg, folder := deletableRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	post(t, h, sonicDeleteURL, nil)
 
@@ -287,7 +287,7 @@ func TestHandler_Delete_Confirmed_TheGamePageIsGoneToo(t *testing.T) {
 func TestHandler_Delete_Confirmed_RegeneratesTheConsultationSiteWithoutTheGame(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 
-	post(t, Handler(reg, folder), sonicDeleteURL, nil)
+	post(t, Handler(reg, folder, nil), sonicDeleteURL, nil)
 
 	site := indexFile(t, folder)
 	if strings.Contains(site, "Sonic the Hedgehog") {
@@ -301,7 +301,7 @@ func TestHandler_Delete_Confirmed_RegeneratesTheConsultationSiteWithoutTheGame(t
 func TestHandler_Delete_Confirmed_LeavesTheOtherSystemsFilesAlone(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 
-	post(t, Handler(reg, folder), sonicDeleteURL, nil)
+	post(t, Handler(reg, folder, nil), sonicDeleteURL, nil)
 
 	present := registryFiles(t, folder, "mastersystem", "Alex Kidd.json", []string{"images/alex.png"})
 	if len(present) != 2 {
@@ -311,7 +311,7 @@ func TestHandler_Delete_Confirmed_LeavesTheOtherSystemsFilesAlone(t *testing.T) 
 
 func TestHandler_Delete_Replayed_SaysTheGameIsNoLongerThereAndChangesNothing(t *testing.T) {
 	reg, folder := deletableRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	post(t, h, sonicDeleteURL, nil)
 
 	rec := post(t, h, sonicDeleteURL, nil)
@@ -331,7 +331,7 @@ func TestHandler_Delete_Replayed_SaysTheGameIsNoLongerThereAndChangesNothing(t *
 func TestHandler_Delete_UnknownGame_Returns404AndChangesNothing(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 
-	rec := post(t, Handler(reg, folder), "/game/megadrive/Nope/delete", nil)
+	rec := post(t, Handler(reg, folder, nil), "/game/megadrive/Nope/delete", nil)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
@@ -344,7 +344,7 @@ func TestHandler_Delete_UnknownGame_Returns404AndChangesNothing(t *testing.T) {
 func TestHandler_Delete_GameRequestedUnderTheWrongSystem_IsNotFound(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 
-	rec := post(t, Handler(reg, folder), "/game/mastersystem/Sonic/delete", nil)
+	rec := post(t, Handler(reg, folder, nil), "/game/mastersystem/Sonic/delete", nil)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
@@ -364,7 +364,7 @@ func TestHandler_Delete_GameIDContainingADot_DeletesThatGameAndNoOther(t *testin
 		t.Fatalf("failed to write the test registry: %v", err)
 	}
 
-	rec := post(t, Handler(reg, folder), "/game/megadrive/"+url.PathEscape("Micro Machines v3.0")+"/delete", nil)
+	rec := post(t, Handler(reg, folder, nil), "/game/megadrive/"+url.PathEscape("Micro Machines v3.0")+"/delete", nil)
 
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303 (body: %s)", rec.Code, rec.Body.String())
@@ -379,7 +379,7 @@ func TestHandler_Delete_GameIDContainingADot_DeletesThatGameAndNoOther(t *testin
 
 func TestHandler_Delete_CrossSiteSubmission_IsRefusedAndChangesNothing(t *testing.T) {
 	reg, folder := deletableRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	r := httptest.NewRequest(http.MethodPost, sonicDeleteURL, strings.NewReader(""))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Set("Sec-Fetch-Site", "cross-site")
@@ -399,7 +399,7 @@ func TestHandler_Delete_WrongMethod_IsRefusedNamingTheAllowedOnes(t *testing.T) 
 	reg, folder := deletableRegistry(t)
 	rec := httptest.NewRecorder()
 
-	Handler(reg, folder).ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, sonicDeleteURL, nil))
+	Handler(reg, folder, nil).ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, sonicDeleteURL, nil))
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405 (body: %s)", rec.Code, rec.Body.String())
@@ -415,7 +415,7 @@ func TestHandler_Delete_WrongMethod_IsRefusedNamingTheAllowedOnes(t *testing.T) 
 func TestHandler_Delete_GameFileCannotBeDeleted_SaysSoAndKeepsTheGame(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 	blockDeletionOf(t, filepath.Join(folder, "megadrive", "Sonic.json"))
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	rec := post(t, h, sonicDeleteURL, nil)
 
@@ -436,7 +436,7 @@ func TestHandler_Delete_GameFileCannotBeDeleted_SaysSoAndKeepsTheGame(t *testing
 func TestHandler_Delete_MediumCannotBeDeleted_StillDeletesTheGameAndSaysWhatIsLeft(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 	blockDeletionOf(t, filepath.Join(folder, "megadrive", "images", "sonic.png"))
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	rec := post(t, h, sonicDeleteURL, nil)
 
@@ -459,7 +459,7 @@ func TestHandler_Delete_MediumCannotBeDeleted_StillDeletesTheGameAndSaysWhatIsLe
 func TestHandler_Delete_SiteCannotBeRegenerated_StillDeletesAndSaysSo(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 	blockDeletionOf(t, filepath.Join(folder, "index.html"))
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	rec := post(t, h, sonicDeleteURL, nil)
 
@@ -478,7 +478,7 @@ func TestHandler_Delete_SiteCannotBeRegenerated_StillDeletesAndSaysSo(t *testing
 
 func TestHandler_Delete_AfterADeletion_AnotherGameSaveDoesNotBringItBack(t *testing.T) {
 	reg, folder := deletableRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	post(t, h, sonicDeleteURL, nil)
 
 	// Any later write rewrites every entry of the served snapshot: a snapshot
@@ -493,7 +493,7 @@ func TestHandler_Delete_AfterADeletion_AnotherGameSaveDoesNotBringItBack(t *test
 func TestHandler_GamePage_LinksToItsDeletePage(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 
-	body := get(t, Handler(reg, folder), sonicGameURL).Body.String()
+	body := get(t, Handler(reg, folder, nil), sonicGameURL).Body.String()
 
 	var found bool
 	for _, link := range cardLinks(body) {

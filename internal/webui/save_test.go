@@ -94,7 +94,7 @@ func TestHandler_Save_Correction_RedirectsBackToTheGamePage(t *testing.T) {
 	form := storedValues()
 	form.Set("name", "Sonic the Hedgehog")
 
-	rec := post(t, Handler(reg, folder), sonicSaveURL, form)
+	rec := post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303 (body: %s)", rec.Code, rec.Body.String())
@@ -110,7 +110,7 @@ func TestHandler_Save_Correction_RedirectsBackToTheGamePage(t *testing.T) {
 
 func TestHandler_Save_Correction_IsVisibleOnThePageAndOnDisk(t *testing.T) {
 	reg, folder := savedRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	form := storedValues()
 	form.Set("name", "Sonic the Hedgehog")
 	form.Set("genre", "Platformer")
@@ -135,7 +135,7 @@ func TestHandler_Save_MarksOnlyTheCorrectedFieldsAsHandEdited(t *testing.T) {
 	form := storedValues()
 	form.Set("genre", "Platformer")
 
-	post(t, Handler(reg, folder), sonicSaveURL, form)
+	post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	stored := gameFile(t, folder)
 	if !strings.Contains(stored, `"genre"`) || !strings.Contains(stored, "manual_fields") {
@@ -165,7 +165,7 @@ func TestHandler_Save_NothingCorrected_LeavesTheGameFileByteIdentical(t *testing
 	reg, folder := savedRegistry(t)
 	before := gameFile(t, folder)
 
-	post(t, Handler(reg, folder), sonicSaveURL, storedValues())
+	post(t, Handler(reg, folder, nil), sonicSaveURL, storedValues())
 
 	if after := gameFile(t, folder); after != before {
 		t.Errorf("the game file changed:\nbefore: %s\nafter:  %s", before, after)
@@ -177,7 +177,7 @@ func TestHandler_Save_Correction_LeavesTheRomPathAndTheMediaUntouched(t *testing
 	form := storedValues()
 	form.Set("name", "Anything else")
 
-	post(t, Handler(reg, folder), sonicSaveURL, form)
+	post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	stored := gameFile(t, folder)
 	for _, want := range []string{
@@ -195,7 +195,7 @@ func TestHandler_Save_Correction_LeavesTheRomPathAndTheMediaUntouched(t *testing
 
 func TestHandler_Save_ClearedFields_ShowTheirPlaceholderOnReload(t *testing.T) {
 	reg, folder := savedRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	form := storedValues()
 	form.Set("desc", "")
 	form.Set("rating", "")
@@ -223,7 +223,7 @@ func TestHandler_Save_FieldHandedBackToTheScraper_LosesItsMark(t *testing.T) {
 	}
 	form := url.Values{"path": {"./Sonic.zip"}, "name": {"Sonic"}, "genre": {"Platformer"}, handBackParam: {"genre"}}
 
-	post(t, Handler(reg, folder), sonicSaveURL, form)
+	post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	if stored := gameFile(t, folder); strings.Contains(stored, "manual_fields") {
 		t.Errorf("the game file still marks a field as hand-edited, got: %s", stored)
@@ -237,7 +237,7 @@ func TestHandler_Save_EmptyName_RefusesAndKeepsWhatWasTyped(t *testing.T) {
 	form.Set("name", "   ")
 	form.Set("genre", "Typed but not saved")
 
-	rec := post(t, Handler(reg, folder), sonicSaveURL, form)
+	rec := post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", rec.Code)
@@ -260,7 +260,7 @@ func TestHandler_Save_YearOutOfRange_Refuses(t *testing.T) {
 	form := storedValues()
 	form.Set("year", "1291")
 
-	rec := post(t, Handler(reg, folder), sonicSaveURL, form)
+	rec := post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", rec.Code)
@@ -279,7 +279,7 @@ func TestHandler_Save_RatingOutsideTheOfferedChoices_Refuses(t *testing.T) {
 	form := storedValues()
 	form.Set("rating", "0.9")
 
-	rec := post(t, Handler(reg, folder), sonicSaveURL, form)
+	rec := post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", rec.Code)
@@ -293,7 +293,7 @@ func TestHandler_Save_UnknownGame_Returns404AndChangesNothing(t *testing.T) {
 	reg, folder := savedRegistry(t)
 	before := gameFile(t, folder)
 
-	rec := post(t, Handler(reg, folder), "/game/megadrive/Golden%20Axe/edit", storedValues())
+	rec := post(t, Handler(reg, folder, nil), "/game/megadrive/Golden%20Axe/edit", storedValues())
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
@@ -307,7 +307,7 @@ func TestHandler_Save_GetOnTheSameURL_ChangesNothing(t *testing.T) {
 	reg, folder := savedRegistry(t)
 	before := gameFile(t, folder)
 
-	get(t, Handler(reg, folder), sonicSaveURL+"?name=Hacked")
+	get(t, Handler(reg, folder, nil), sonicSaveURL+"?name=Hacked")
 
 	if after := gameFile(t, folder); after != before {
 		t.Error("a GET on the edit URL modified the registry, want it read-only")
@@ -320,7 +320,7 @@ func TestHandler_Save_SubmissionLargerThanAllowed_Returns400AndChangesNothing(t 
 	form := storedValues()
 	form.Set("desc", strings.Repeat("a", maxFormBytes+1))
 
-	rec := post(t, Handler(reg, folder), sonicSaveURL, form)
+	rec := post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
@@ -341,7 +341,7 @@ func TestHandler_Save_SubmissionFromAnotherSite_IsRefused(t *testing.T) {
 	r.Header.Set("Sec-Fetch-Site", "cross-site")
 	r.Header.Set("Origin", "http://evil.example")
 	rec := httptest.NewRecorder()
-	Handler(reg, folder).ServeHTTP(rec, r)
+	Handler(reg, folder, nil).ServeHTTP(rec, r)
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rec.Code)
@@ -359,7 +359,7 @@ func TestHandler_Save_RegistryCannotBeWritten_SaysNothingWasSavedAndKeepsTheOldV
 	if err := os.WriteFile(filepath.Join(folder, "megadrive"), []byte("blocker"), 0o644); err != nil {
 		t.Fatalf("failed to prepare the test fixture: %v", err)
 	}
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	form := storedValues()
 	form.Set("name", "Sonic the Hedgehog")
 
@@ -384,7 +384,7 @@ func TestHandler_Save_SiteCannotBeRegenerated_StillConfirmsTheSaveAndSaysSo(t *t
 	if err := os.Mkdir(filepath.Join(folder, "index.html"), 0o755); err != nil {
 		t.Fatalf("failed to prepare the test fixture: %v", err)
 	}
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	form := storedValues()
 	form.Set("name", "Sonic the Hedgehog")
 
@@ -406,7 +406,7 @@ func TestHandler_Save_SiteCannotBeRegenerated_StillConfirmsTheSaveAndSaysSo(t *t
 
 func TestHandler_GamePage_AfterASave_ShowsTheConfirmation(t *testing.T) {
 	reg, folder := savedRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	saved := get(t, h, sonicGameURL+"?saved=1").Body.String()
 	plain := get(t, h, sonicGameURL).Body.String()
@@ -422,7 +422,7 @@ func TestHandler_GamePage_AfterASave_ShowsTheConfirmation(t *testing.T) {
 func TestHandler_Save_ConcurrentWithReads_KeepsTheRegistryConsistent(t *testing.T) {
 	// Run with -race: the served snapshot is shared by every request.
 	reg, folder := savedRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {

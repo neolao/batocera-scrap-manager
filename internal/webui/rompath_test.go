@@ -61,7 +61,7 @@ func TestHandler_GamePage_ShowsTheStoredRomPath(t *testing.T) {
 	// readable — subfolder included, exactly as stored.
 	reg, folder := fullyScrapedRegistry(t)
 
-	rec := get(t, Handler(reg, folder), "/game/megadrive/Sonic%20the%20Hedgehog")
+	rec := get(t, Handler(reg, folder, nil), "/game/megadrive/Sonic%20the%20Hedgehog")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -78,7 +78,7 @@ func TestHandler_GamePage_ShowsTheStoredRomPath(t *testing.T) {
 func TestHandler_EditForm_PreFillsTheRomPathWithTheStoredValue(t *testing.T) {
 	reg, folder := fullyScrapedRegistry(t)
 
-	rec := get(t, Handler(reg, folder), sonicEditURL)
+	rec := get(t, Handler(reg, folder, nil), sonicEditURL)
 
 	value, found := inputValue(t, rec.Body.String(), "path")
 	if !found {
@@ -98,7 +98,7 @@ func TestHandler_EditForm_ProtectedGame_OffersNoHandBackForTheRomPath(t *testing
 		t.Fatalf("Protect() error = %v", err)
 	}
 
-	rec := get(t, Handler(reg, folder), sonicEditURL)
+	rec := get(t, Handler(reg, folder, nil), sonicEditURL)
 
 	body := rec.Body.String()
 	if strings.Contains(body, `value="path"`) {
@@ -114,7 +114,7 @@ func TestHandler_Save_NewRomPath_MovesTheEntryFileAndRedirectsToTheNewURL(t *tes
 	form := storedValues()
 	form.Set("path", "disc1/Sonic 2.zip")
 
-	rec := post(t, Handler(reg, folder), sonicSaveURL, form)
+	rec := post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303 (body: %s)", rec.Code, rec.Body.String())
@@ -132,7 +132,7 @@ func TestHandler_Save_NewRomPath_MovesTheEntryFileAndRedirectsToTheNewURL(t *tes
 
 func TestHandler_Save_NewRomPath_ServesTheGameAtItsNewURLAndNotTheOldOne(t *testing.T) {
 	reg, folder := savedRegistry(t)
-	handler := Handler(reg, folder)
+	handler := Handler(reg, folder, nil)
 	form := storedValues()
 	form.Set("path", "disc1/Sonic 2.zip")
 	post(t, handler, sonicSaveURL, form)
@@ -147,7 +147,7 @@ func TestHandler_Save_NewRomPath_ServesTheGameAtItsNewURLAndNotTheOldOne(t *test
 
 func TestHandler_Save_NewRomPath_ConfirmsTheNewPathAndThatThePageMoved(t *testing.T) {
 	reg, folder := savedRegistry(t)
-	handler := Handler(reg, folder)
+	handler := Handler(reg, folder, nil)
 	form := storedValues()
 	form.Set("path", "disc1/Sonic 2.zip")
 
@@ -168,7 +168,7 @@ func TestHandler_Save_RomPathKeepingTheSameIdentifier_StaysWhereItIs(t *testing.
 	// not claim otherwise — and the freshly written file must not be deleted
 	// as if it were the old one.
 	reg, folder := savedRegistry(t)
-	handler := Handler(reg, folder)
+	handler := Handler(reg, folder, nil)
 	form := storedValues()
 	form.Set("path", "disc1/Sonic.iso")
 
@@ -213,7 +213,7 @@ func TestHandler_Save_RefusedRomPath_RerendersTheFormAndChangesNothing(t *testin
 			form := storedValues()
 			form.Set("path", tc.path)
 
-			rec := post(t, Handler(reg, folder), sonicSaveURL, form)
+			rec := post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 			if rec.Code != http.StatusUnprocessableEntity {
 				t.Fatalf("status = %d, want 422", rec.Code)
@@ -251,7 +251,7 @@ func TestHandler_Save_RomPathTakenByAnotherGame_IsRefusedWithoutOverwritingIt(t 
 	form := storedValues()
 	form.Set("path", "disc2/sor.zip")
 
-	rec := post(t, Handler(reg, folder), sonicSaveURL, form)
+	rec := post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", rec.Code)
@@ -286,7 +286,7 @@ func TestHandler_Save_RomPathTakenByAGameNamedAfterIt_DoesNotSayTheNameTwice(t *
 	form := storedValues()
 	form.Set("path", "disc2/Streets of Rage.zip")
 
-	rec := post(t, Handler(reg, folder), sonicSaveURL, form)
+	rec := post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	message := fieldError(t, rec.Body.String(), "path")
 	if strings.Count(message, "Streets of Rage") != 1 {
@@ -303,7 +303,7 @@ func TestHandler_Save_RefusedRomPath_KeepsTheOtherCorrectionsInTheForm(t *testin
 	form.Set("name", "Sonic the Hedgehog")
 	form.Set("genre", "Run and jump")
 
-	rec := post(t, Handler(reg, folder), sonicSaveURL, form)
+	rec := post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	body := rec.Body.String()
 	if value, _ := inputValue(t, body, "name"); value != "Sonic the Hedgehog" {
@@ -322,7 +322,7 @@ func TestHandler_Save_RefusedRomPath_AssociatesBothItsHintAndItsErrorWithTheCont
 	form := storedValues()
 	form.Set("path", "")
 
-	rec := post(t, Handler(reg, folder), sonicSaveURL, form)
+	rec := post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	body := rec.Body.String()
 	control := regexp.MustCompile(`<input[^>]*name="path"[^>]*>`).FindString(body)
@@ -356,7 +356,7 @@ func TestHandler_Save_RegistryFolderUnwritable_LeavesTheEntryFileWhereItWas(t *t
 	form := storedValues()
 	form.Set("path", "disc1/Sonic 2.zip")
 
-	rec := post(t, Handler(reg, folder), sonicSaveURL, form)
+	rec := post(t, Handler(reg, folder, nil), sonicSaveURL, form)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500: nothing was written", rec.Code)
@@ -381,7 +381,7 @@ func TestHandler_Save_OldEntryFileCannotBeErased_StillSavesAndWarnsAboutIt(t *te
 	if err := os.MkdirAll(filepath.Join(stubborn, "held"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	handler := Handler(reg, folder)
+	handler := Handler(reg, folder, nil)
 	form := storedValues()
 	form.Set("path", "disc1/Sonic 2.zip")
 
@@ -409,7 +409,7 @@ func TestHandler_Save_UnchangedRomPath_LeavesTheEntryFileByteIdentical(t *testin
 	reg, folder := savedRegistry(t)
 	before := gameFile(t, folder)
 
-	rec := post(t, Handler(reg, folder), sonicSaveURL, storedValues())
+	rec := post(t, Handler(reg, folder, nil), sonicSaveURL, storedValues())
 
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303 (body: %s)", rec.Code, rec.Body.String())

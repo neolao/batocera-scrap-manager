@@ -146,7 +146,7 @@ func TestHandler_HomePage_ListsEachSystemWithItsGameCount(t *testing.T) {
 		Path: "./Zelda.zip", Name: "A Link to the Past",
 	}})
 
-	rec := get(t, Handler(reg, registryFolder), "/")
+	rec := get(t, Handler(reg, registryFolder, nil), "/")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -164,7 +164,7 @@ func TestHandler_HomePage_DoesNotRenderIndividualGames(t *testing.T) {
 	// not be serialized into the page a phone opens first.
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	body := get(t, Handler(reg, registryFolder), "/").Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), "/").Body.String()
 
 	for _, unwanted := range []string{"Sonic the Hedgehog", "Alex Kidd in Miracle World", "<img"} {
 		if strings.Contains(body, unwanted) {
@@ -175,7 +175,7 @@ func TestHandler_HomePage_DoesNotRenderIndividualGames(t *testing.T) {
 
 func TestHandler_HomePage_EverySystemLinkLeadsToItsPage(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
-	h := Handler(reg, registryFolder)
+	h := Handler(reg, registryFolder, nil)
 
 	links := systemLinks(get(t, h, "/").Body.String())
 
@@ -190,7 +190,7 @@ func TestHandler_HomePage_EverySystemLinkLeadsToItsPage(t *testing.T) {
 }
 
 func TestHandler_HomePage_EmptyRegistry_ShowsAnEmptyStateNotABlankPage(t *testing.T) {
-	rec := get(t, Handler(&registry.Registry{}, t.TempDir()), "/")
+	rec := get(t, Handler(&registry.Registry{}, t.TempDir(), nil), "/")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -203,7 +203,7 @@ func TestHandler_HomePage_EmptyRegistry_ShowsAnEmptyStateNotABlankPage(t *testin
 func TestHandler_GamePage_FullyScrapedGame_ShowsEveryMetadataAndMedium(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	rec := get(t, Handler(reg, registryFolder), "/game/megadrive/Sonic%20the%20Hedgehog")
+	rec := get(t, Handler(reg, registryFolder, nil), "/game/megadrive/Sonic%20the%20Hedgehog")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -227,7 +227,7 @@ func TestHandler_GamePage_FullyScrapedGame_ShowsEveryMetadataAndMedium(t *testin
 func TestHandler_GamePage_LinksBackToTheListAndToItsSystem(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	body := get(t, Handler(reg, registryFolder), "/game/megadrive/Sonic%20the%20Hedgehog").Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), "/game/megadrive/Sonic%20the%20Hedgehog").Body.String()
 
 	if !strings.Contains(body, `href="/"`) {
 		t.Errorf("game page has no link back to the game list, got: %s", body)
@@ -243,7 +243,7 @@ func TestHandler_GamePage_GameWithoutMetadataOrMedia_KeepsEveryFieldLabel(t *tes
 		{System: "megadrive", Game: gamelist.Game{Path: "Bare Bones.zip", Name: "Bare Bones"}},
 	}}
 
-	rec := get(t, Handler(reg, registryFolder), "/game/megadrive/Bare%20Bones")
+	rec := get(t, Handler(reg, registryFolder, nil), "/game/megadrive/Bare%20Bones")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -280,7 +280,7 @@ func TestHandler_GamePage_MediaReferencedButMissingOnDisk_IsNotLinked(t *testing
 	}}
 	writeMediaFile(t, registryFolder, "megadrive", "images/sonic.png")
 
-	body := get(t, Handler(reg, registryFolder), "/game/megadrive/Sonic").Body.String()
+	body := get(t, Handler(reg, registryFolder, nil), "/game/megadrive/Sonic").Body.String()
 
 	if !strings.Contains(body, "/media/megadrive/images/sonic.png") {
 		t.Errorf("game page does not link the jaquette that exists on disk, got: %s", body)
@@ -292,7 +292,7 @@ func TestHandler_GamePage_MediaReferencedButMissingOnDisk_IsNotLinked(t *testing
 
 func TestHandler_GamePage_UnknownGameSystemOrMalformedPath_Returns404(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
-	h := Handler(reg, registryFolder)
+	h := Handler(reg, registryFolder, nil)
 
 	targets := []string{
 		"/game/megadrive/Does%20Not%20Exist", // unknown game
@@ -314,7 +314,7 @@ func TestHandler_GamePage_UnknownGameSystemOrMalformedPath_Returns404(t *testing
 func TestHandler_NotFoundPage_IsStyledAndOffersAWayBack(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	rec := get(t, Handler(reg, registryFolder), "/game/megadrive/Does%20Not%20Exist")
+	rec := get(t, Handler(reg, registryFolder, nil), "/game/megadrive/Does%20Not%20Exist")
 
 	body := rec.Body.String()
 	if !strings.Contains(body, "<style") {
@@ -331,7 +331,7 @@ func TestHandler_NotFoundPage_IsStyledAndOffersAWayBack(t *testing.T) {
 func TestHandler_Media_ExistingFile_IsServed(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	rec := get(t, Handler(reg, registryFolder), "/media/megadrive/images/sonic.png")
+	rec := get(t, Handler(reg, registryFolder, nil), "/media/megadrive/images/sonic.png")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -347,7 +347,7 @@ func TestHandler_Media_PathOutsideTheRegistryFolder_IsRefused(t *testing.T) {
 	if err := os.WriteFile(secret, []byte("top secret"), 0o644); err != nil {
 		t.Fatalf("failed to set up the file outside the registry: %v", err)
 	}
-	h := Handler(reg, registryFolder)
+	h := Handler(reg, registryFolder, nil)
 
 	for _, target := range []string{
 		"/media/../secret.txt",
@@ -367,7 +367,7 @@ func TestHandler_Media_PathOutsideTheRegistryFolder_IsRefused(t *testing.T) {
 
 func TestHandler_Media_Directory_IsNotListed(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
-	h := Handler(reg, registryFolder)
+	h := Handler(reg, registryFolder, nil)
 
 	for _, target := range []string{"/media/", "/media/megadrive/", "/media/megadrive/images/"} {
 		rec := get(t, h, target)
@@ -388,7 +388,7 @@ func TestHandler_GameWithSpecialCharacters_LinksAndMediaRoundTrip(t *testing.T) 
 		}},
 	}}
 	writeMediaFile(t, registryFolder, "gb", "images/Pokémon Red & Blue #1 [!].png")
-	h := Handler(reg, registryFolder)
+	h := Handler(reg, registryFolder, nil)
 
 	links := cardLinks(get(t, h, systemLink(get(t, h, "/").Body.String())).Body.String())
 
@@ -419,7 +419,7 @@ func TestHandler_Pages_AreNotServedWithNoStoreCaching(t *testing.T) {
 	// the list after opening a game would jump back to the top of the page.
 	reg, registryFolder := fullyScrapedRegistry(t)
 
-	rec := get(t, Handler(reg, registryFolder), "/")
+	rec := get(t, Handler(reg, registryFolder, nil), "/")
 
 	if strings.Contains(rec.Header().Get("Cache-Control"), "no-store") {
 		t.Errorf("Cache-Control = %q, want no no-store directive", rec.Header().Get("Cache-Control"))
@@ -440,7 +440,7 @@ func TestHandler_DotPrefixedMediaPath_IsServedWithoutARedirect(t *testing.T) {
 		}},
 	}}
 	writeMediaFile(t, registryFolder, "megadrive", "images/Sonic [!].png")
-	h := Handler(reg, registryFolder)
+	h := Handler(reg, registryFolder, nil)
 
 	body := get(t, h, "/game/megadrive/Sonic").Body.String()
 

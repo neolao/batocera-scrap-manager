@@ -28,9 +28,11 @@ const mediaURLPrefix = "/media/"
 
 // Handler returns the HTTP handler serving reg's content, reading media
 // files from registryFolder. The registry is a snapshot: the handler
-// renders reg as it was given, it never reloads it from disk.
-func Handler(reg *registry.Registry, registryFolder string) http.Handler {
-	ui := &webUI{reg: reg, registryFolder: registryFolder}
+// renders reg as it was given, it never reloads it from disk. romsFolders is
+// the configured list of Batocera ROMs folders, which the completion writes
+// back to; none configured is a valid state, not an error.
+func Handler(reg *registry.Registry, registryFolder string, romsFolders []string) http.Handler {
+	ui := &webUI{reg: reg, registryFolder: registryFolder, romsFolders: romsFolders}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", ui.serveHome)
@@ -47,20 +49,30 @@ func Handler(reg *registry.Registry, registryFolder string) http.Handler {
 	mux.HandleFunc("GET /game/{system}/{id}/delete", ui.serveDeleteConfirmation)
 	mux.HandleFunc("POST /game/{system}/{id}/delete", ui.deleteGame)
 	mux.HandleFunc("/game/{system}/{id}/delete", ui.serveWrongDeleteMethod)
+	mux.HandleFunc("GET "+completeURL, ui.serveComplete)
+	mux.HandleFunc("POST "+completeURL, ui.startCompletion)
+	mux.HandleFunc(completeURL, ui.serveWrongCompleteMethod)
 	mux.Handle("GET "+mediaURLPrefix, http.StripPrefix(mediaURLPrefix,
 		http.FileServer(fileOnlyFS{http.Dir(registryFolder)})))
 	mux.HandleFunc("/", ui.serveUnknownPage)
 	return mux
 }
 
-// webUI holds what every page needs: the registry snapshot to render, and
-// the folder its media files are read from. Requests are served
-// concurrently and a correction replaces the snapshot, so mu guards every
-// access to reg — the readers as much as the writer.
+// webUI holds what every page needs: the registry snapshot to render, the
+// folder its media files are read from, and the ROMs folders the completion
+// writes back to. Requests are served concurrently and a correction replaces
+// the snapshot, so mu guards every access to reg — the readers as much as the
+// writer. romsFolders is fixed for the process's lifetime (the configuration
+// is read once, when serve starts), so it needs no guarding.
 type webUI struct {
 	mu             sync.RWMutex
 	reg            *registry.Registry
 	registryFolder string
+	romsFolders    []string
+	// completion tracks the one completion of the ROMs folders the server runs
+	// at a time. It guards itself: a run outlives its request and must not hold
+	// mu, which every served page needs.
+	completion completionState
 }
 
 // homeView is the summary of the registry: what systems it holds and how many
@@ -365,6 +377,7 @@ var layout = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{block "title" .}}Registry{{end}}</title>
+{{block "head" .}}{{end}}
 <style>{{stylesheet}}</style>
 </head>
 <body id="top">
@@ -396,6 +409,9 @@ var homeTemplate = newPage("home", `
 {{if not .Systems}}
 <p class="empty-state">No games in the registry yet.</p>
 {{else}}
+<div class="home__actions">
+<a class="button" href="`+completeURL+`">Complete the ROMs folders</a>
+</div>
 <h2 class="system__title">Systems</h2>
 <ul class="systems">
 {{range .Systems}}

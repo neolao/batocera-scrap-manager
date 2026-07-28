@@ -23,9 +23,9 @@
 **Do not confuse with:** the `update` command (`internal/cli/update.go`), which is the CLI command exposing this import mechanism to the user.
 
 ## Completion
-**Definition:** The reverse of Import: filling gaps left in a ROMs folder's own `gamelist.xml` (missing name, description, media, rating, genre, etc.) using the matching entry already known in the registry, without ever overwriting metadata already present locally. The registry is read-only in this flow; the ROMs folder is what gets written to.
-**Code:** `registry.CompleteRomsFolder` in `internal/registry/registry.go`
-**Do not confuse with:** Import, which flows in the opposite direction (ROMs folder → registry); or the `scrape` command (`internal/cli/scrape.go`), which is the CLI command exposing this completion mechanism to the user.
+**Definition:** The reverse of Import: filling gaps left in a ROMs folder's own `gamelist.xml` (missing name, description, media, rating, genre, etc.) using the matching entry already known in the registry, without ever overwriting metadata already present locally. The registry is read-only in this flow; the ROMs folder is what gets written to. It is the one operation of the tool that writes outside the registry, into files under no version control, which is why both of its entry points confirm before writing and why a game sheet is swapped in atomically rather than rewritten in place. A folder that cannot be read stops it, leaving the folders already completed counted and the failing one named.
+**Code:** `registry.CompleteRomsFolder` in `internal/registry/registry.go`; wording shared through `registry.CompletionSummaryFormat`
+**Do not confuse with:** Import, which flows in the opposite direction (ROMs folder → registry); or the `scrape` command (`internal/cli/scrape.go`) and the web UI's `/complete` page (`internal/webui/complete.go`), which are the two entry points exposing this one mechanism to the user — the second running it in the background, since it can take minutes.
 
 ## Game ID
 **Definition:** A game's identifier inside the registry: its ROM file's base name, without directory prefix or extension (e.g. `Sonic.zip` in a subfolder → `Sonic`). One and the same key names the game's metadata file on disk, deduplicates registry entries, and addresses a game in the web UI's URLs — deliberately never re-derived by a second rule. It is derived, never stored: correcting a game's ROM Path from the web UI changes it, which re-files the game and changes the address of its own page.

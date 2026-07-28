@@ -29,7 +29,7 @@ var allEditableMarks = []string{
 func TestHandler_Protect_Game_RedirectsBackAndProtectsEveryField(t *testing.T) {
 	reg, folder := savedRegistry(t)
 
-	rec := post(t, Handler(reg, folder), sonicProtectURL, protectForm("on"))
+	rec := post(t, Handler(reg, folder, nil), sonicProtectURL, protectForm("on"))
 
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303 (body: %s)", rec.Code, rec.Body.String())
@@ -49,7 +49,7 @@ func TestHandler_Protect_Game_ChangesNoStoredValue(t *testing.T) {
 	reg, folder := savedRegistry(t)
 	before := gameFile(t, folder)
 
-	post(t, Handler(reg, folder), sonicProtectURL, protectForm("on"))
+	post(t, Handler(reg, folder, nil), sonicProtectURL, protectForm("on"))
 
 	after := gameFile(t, folder)
 	for _, value := range []string{"Sonic the Hedghog", "Fast.", "0.85", "19910623T000000", "Sonic Team", "Sega", "Platform"} {
@@ -61,7 +61,7 @@ func TestHandler_Protect_Game_ChangesNoStoredValue(t *testing.T) {
 
 func TestHandler_GamePage_ProtectedGame_SaysSoAndOffersToLiftIt(t *testing.T) {
 	reg, folder := savedRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	post(t, h, sonicProtectURL, protectForm("on"))
 
 	body := get(t, h, sonicGameURL).Body.String()
@@ -81,7 +81,7 @@ func TestHandler_GamePage_ProtectedGame_DropsThePerFieldMarks(t *testing.T) {
 	// Six lit badges under a "Protected" line read as noise, or as a
 	// contradiction: the game-level sentence already says it.
 	reg, folder := savedRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	post(t, h, sonicProtectURL, protectForm("on"))
 
 	body := get(t, h, sonicGameURL).Body.String()
@@ -94,7 +94,7 @@ func TestHandler_GamePage_ProtectedGame_DropsThePerFieldMarks(t *testing.T) {
 func TestHandler_GamePage_UnprotectedGame_SaysSoAndOffersToProtectIt(t *testing.T) {
 	reg, folder := savedRegistry(t)
 
-	body := get(t, Handler(reg, folder), sonicGameURL).Body.String()
+	body := get(t, Handler(reg, folder, nil), sonicGameURL).Body.String()
 
 	if !strings.Contains(body, "Not protected — updates can overwrite every field.") {
 		t.Errorf("the game page does not state it is unprotected, got: %s", body)
@@ -108,7 +108,7 @@ func TestHandler_GamePage_PartlyProtectedGame_SaysSoAndKeepsThePerFieldMarks(t *
 	reg, folder := savedRegistry(t)
 	reg.Entries[0].ManualFields = []string{"genre"}
 
-	body := get(t, Handler(reg, folder), sonicGameURL).Body.String()
+	body := get(t, Handler(reg, folder, nil), sonicGameURL).Body.String()
 
 	if !strings.Contains(body, "Partly protected — updates leave the hand-edited fields alone.") {
 		t.Errorf("the game page does not state it is partly protected, got: %s", body)
@@ -123,7 +123,7 @@ func TestHandler_GamePage_PartlyProtectedGame_SaysSoAndKeepsThePerFieldMarks(t *
 
 func TestHandler_Unprotect_ProtectedGame_ClearsEveryMark(t *testing.T) {
 	reg, folder := savedRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	post(t, h, sonicProtectURL, protectForm("on"))
 
 	rec := post(t, h, sonicProtectURL, protectForm("off"))
@@ -144,7 +144,7 @@ func TestHandler_Protect_AlreadyProtectedGameFromAStalePage_StaysProtected(t *te
 	// A page opened before the game was protected elsewhere submits "on", which
 	// must be a no-op — never an accidental lift.
 	reg, folder := savedRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	post(t, h, sonicProtectURL, protectForm("on"))
 
 	rec := post(t, h, sonicProtectURL, protectForm("on"))
@@ -161,7 +161,7 @@ func TestHandler_Protect_AlreadyProtectedGameFromAStalePage_StaysProtected(t *te
 func TestHandler_Unprotect_GameThatWasNotProtected_SucceedsAndChangesNothing(t *testing.T) {
 	reg, folder := savedRegistry(t)
 
-	rec := post(t, Handler(reg, folder), sonicProtectURL, protectForm("off"))
+	rec := post(t, Handler(reg, folder, nil), sonicProtectURL, protectForm("off"))
 
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303 (body: %s)", rec.Code, rec.Body.String())
@@ -173,7 +173,7 @@ func TestHandler_Unprotect_GameThatWasNotProtected_SucceedsAndChangesNothing(t *
 
 func TestHandler_Protect_Confirmation_ReportsTheResultingState(t *testing.T) {
 	reg, folder := savedRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	rec := post(t, h, sonicProtectURL, protectForm("on"))
 
@@ -187,7 +187,7 @@ func TestHandler_Protect_Confirmation_ReportsTheResultingState(t *testing.T) {
 
 func TestHandler_Unprotect_Confirmation_ReportsTheResultingState(t *testing.T) {
 	reg, folder := savedRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	post(t, h, sonicProtectURL, protectForm("on"))
 
 	rec := post(t, h, sonicProtectURL, protectForm("off"))
@@ -203,7 +203,7 @@ func TestHandler_Protect_MissingState_IsRefusedWithoutChangingAnything(t *testin
 	reg, folder := savedRegistry(t)
 	before := gameFile(t, folder)
 
-	rec := post(t, Handler(reg, folder), sonicProtectURL, url.Values{})
+	rec := post(t, Handler(reg, folder, nil), sonicProtectURL, url.Values{})
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 (body: %s)", rec.Code, rec.Body.String())
@@ -217,7 +217,7 @@ func TestHandler_Protect_UnrecognizedState_IsRefusedRatherThanDefaulted(t *testi
 	reg, folder := savedRegistry(t)
 	before := gameFile(t, folder)
 
-	rec := post(t, Handler(reg, folder), sonicProtectURL, protectForm("maybe"))
+	rec := post(t, Handler(reg, folder, nil), sonicProtectURL, protectForm("maybe"))
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 (body: %s)", rec.Code, rec.Body.String())
@@ -235,7 +235,7 @@ func TestHandler_Protect_CrossSiteSubmission_IsRefused(t *testing.T) {
 	r.Header.Set("Sec-Fetch-Site", "cross-site")
 	rec := httptest.NewRecorder()
 
-	Handler(reg, folder).ServeHTTP(rec, r)
+	Handler(reg, folder, nil).ServeHTTP(rec, r)
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rec.Code)
@@ -249,7 +249,7 @@ func TestHandler_Protect_UnknownGame_IsNotFoundAndChangesNothing(t *testing.T) {
 	reg, folder := savedRegistry(t)
 	before := gameFile(t, folder)
 
-	rec := post(t, Handler(reg, folder), "/game/megadrive/Streets/protect", protectForm("on"))
+	rec := post(t, Handler(reg, folder, nil), "/game/megadrive/Streets/protect", protectForm("on"))
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404 (body: %s)", rec.Code, rec.Body.String())
@@ -262,7 +262,7 @@ func TestHandler_Protect_UnknownGame_IsNotFoundAndChangesNothing(t *testing.T) {
 func TestHandler_Protect_GameRequestedUnderTheWrongSystem_IsNotFound(t *testing.T) {
 	reg, folder := savedRegistry(t)
 
-	rec := post(t, Handler(reg, folder), "/game/nes/Sonic/protect", protectForm("on"))
+	rec := post(t, Handler(reg, folder, nil), "/game/nes/Sonic/protect", protectForm("on"))
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404 (body: %s)", rec.Code, rec.Body.String())
@@ -272,7 +272,7 @@ func TestHandler_Protect_GameRequestedUnderTheWrongSystem_IsNotFound(t *testing.
 func TestHandler_Protect_WrongMethod_IsRefusedNamingTheAllowedOne(t *testing.T) {
 	reg, folder := savedRegistry(t)
 
-	rec := get(t, Handler(reg, folder), sonicProtectURL)
+	rec := get(t, Handler(reg, folder, nil), sonicProtectURL)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405 (body: %s)", rec.Code, rec.Body.String())
@@ -290,7 +290,7 @@ func TestHandler_Protect_RegistryCannotBeWritten_SaysSoAndKeepsTheOldState(t *te
 	if err := os.WriteFile(filepath.Join(folder, "megadrive"), []byte("blocker"), 0o644); err != nil {
 		t.Fatalf("failed to prepare the test fixture: %v", err)
 	}
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	rec := post(t, h, sonicProtectURL, protectForm("on"))
 
@@ -313,7 +313,7 @@ func TestHandler_Protect_SiteCannotBeRegenerated_StillAppliesAndSaysSo(t *testin
 	if err := os.Mkdir(filepath.Join(folder, "index.html"), 0o755); err != nil {
 		t.Fatalf("failed to prepare the test fixture: %v", err)
 	}
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 
 	rec := post(t, h, sonicProtectURL, protectForm("on"))
 
@@ -337,7 +337,7 @@ func TestHandler_Protect_ThenTheEditForm_OffersToHandBackEveryField(t *testing.T
 	// Selective lifting stays reachable after a bulk protection: that is what
 	// makes the missing bulk-lift control in the partial state not a dead end.
 	reg, folder := savedRegistry(t)
-	h := Handler(reg, folder)
+	h := Handler(reg, folder, nil)
 	post(t, h, sonicProtectURL, protectForm("on"))
 
 	body := get(t, h, sonicSaveURL).Body.String()
@@ -354,7 +354,7 @@ func TestHandler_Protect_ControlSubmitsAnAbsoluteStateNotTheOppositeOfTheCurrent
 	// while the state changed elsewhere cannot produce the opposite effect.
 	reg, folder := savedRegistry(t)
 
-	body := get(t, Handler(reg, folder), sonicGameURL).Body.String()
+	body := get(t, Handler(reg, folder, nil), sonicGameURL).Body.String()
 
 	if !strings.Contains(body, `name="`+protectedParam+`" value="on"`) {
 		t.Errorf("the control does not carry the state it asks for, got: %s", body)
@@ -373,7 +373,7 @@ func TestHandler_Protect_WhatWasWrittenReadsBackAsFullyProtected(t *testing.T) {
 	// check goes through disk on purpose: the handler protects a clone and only
 	// swaps it in, so the registry it was handed is deliberately left alone.
 	reg, folder := savedRegistry(t)
-	post(t, Handler(reg, folder), sonicProtectURL, protectForm("on"))
+	post(t, Handler(reg, folder, nil), sonicProtectURL, protectForm("on"))
 
 	reloaded, err := registry.Load(folder)
 	if err != nil {

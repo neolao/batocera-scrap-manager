@@ -21,6 +21,8 @@ A command-line tool for managing game scraping data (metadata, box art, etc.) on
 - Declare a whole game good in one go, so later updates leave all of its metadata alone — from the command line, or from the game's own page in the browser, which states whether updates may still refresh it. Protecting changes none of its values, and the protection can be lifted just as easily.
 - Delete a game from the registry straight from the browser, without knowing its exact ROM filename: a confirmation page names the game and lists, file by file, the metadata and media about to be erased. Once confirmed, the consultation site is regenerated without it and its system's list comes back with a banner naming what was deleted.
 - Read and correct the ROM file a game stands for — the filename and its subfolder — from the game's own page and from its edit form. It is offered apart from the described values, since it is what identifies the game rather than something describing it. Correcting it re-files the game and takes you to its new address; a filename already used by another game of the same system, or a path that names no file, is refused with an explanation and changes nothing.
+- Send the registry's metadata back to Batocera from the browser, without dropping to the command line: a confirmation page names every ROMs folder about to be written to and spells out that this cannot be undone, then the completion runs in the background while the page follows it along and settles into a report — counts per folder, plus the same summary the command line prints. The report stays readable afterwards, only one completion runs at a time, and a folder that cannot be found is named without losing what the earlier folders did.
+- A `gamelist.xml` is never left truncated: the new content is written beside the old one and swapped in one go, so a completion cut short by a power cut, a full disk or a stopped server leaves the previous file intact.
 - Get detailed, command-specific help with `--help` on any command (e.g. `update --help`), instead of just the generic top-level help.
 <!-- vibe:end:features -->
 
@@ -142,12 +144,20 @@ Whichever way you protect a game, Batocera keeps displaying what the ROMs folder
 
 A game's page also offers "Delete from the registry", which leads to a confirmation page rather than deleting on the spot: it names the game and lists every file about to be erased — its metadata and each medium actually stored for it — and warns you when the game is protected, since that does not prevent its deletion. Cancelling brings you back to the game untouched; confirming erases those files, regenerates the browsable HTML site without the game, and returns you to the list with a banner naming what was deleted. Only the registry is concerned: the ROM file and the media in your ROMs folders are left as they are, and a later `update` will simply import the game again from there. Deleting a game that is already gone says so instead of failing silently.
 
-The registry is read when the server starts: after an `update`, restart `serve` to see the changes. Corrections and protection changes made from the browser take effect immediately, without restarting.
+The home page offers "Complete the ROMs folders", which does from the browser what `scrape` does from the command line. It leads to a confirmation page first: it names every configured ROMs folder about to be written to, states that each system's `gamelist.xml` is rewritten in place and its media recopied, that the registry folder itself is left untouched, and that none of it can be undone. Cancelling changes nothing.
+
+Once confirmed, the completion runs in the background and the page follows it along: it says when it started, how long it has been going and which folder and game it is on, reloading itself every few seconds until it is over — leaving the page, or closing the browser, stops nothing. It then settles into a report naming each folder with its own `processed / completed / failed` counts, plus the total when several folders are configured. That report stays readable until the next completion replaces it, so a browser closed at the wrong moment does not cost you the account of what was written to your Batocera folders.
+
+Only one completion runs at a time: submitting again while one is going starts nothing and simply shows you the one already in progress. Browsing and correcting the registry stay responsive throughout. A configured folder that cannot be found — an SD card removed, a network share unmounted — stops the completion there, but the folders already done keep their counts and the report names the one that failed along with what went wrong. With no ROMs folder configured, the page names the command that configures one instead of offering a button.
+
+Each `gamelist.xml` is written beside the old one and swapped in as a whole, so a completion interrupted halfway — a power cut, a full disk, a server stopped — leaves the previous file intact rather than truncated. This is also how `scrape` writes them. One consequence: marking a `gamelist.xml` read-only no longer stops it from being rewritten, since it is the folder's permissions that now decide.
+
+The registry is read when the server starts: after an `update`, restart `serve` to see the changes. Corrections, protection changes and completions run from the browser take effect immediately, without restarting.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->
 ## Documentation
 
-- [docs/architecture.md](docs/architecture.md) — How the tool is put together: its main parts, how a ROMs folder's data flows into the registry and back out, how the registry is browsed, corrected and pruned, and how a hand-made correction — or a whole protected game — is kept from being overwritten.
+- [docs/architecture.md](docs/architecture.md) — How the tool is put together: its main parts, how a ROMs folder's data flows into the registry and back out, how the registry is browsed, corrected and pruned, how a completion started from the browser runs alongside the served pages, and how a hand-made correction — or a whole protected game — is kept from being overwritten.
 - [docs/configuration.md](docs/configuration.md) — Where the configuration lives, what it holds, and the environment variable that can relocate it.
 <!-- vibe:end:docs-index -->

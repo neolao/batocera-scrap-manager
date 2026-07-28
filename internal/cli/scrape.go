@@ -51,7 +51,7 @@ func runScrape(args []string, out io.Writer) int {
 		failed += folderFailed
 	}
 
-	fmt.Fprintf(out, "%d processed, %d completed, %d failed\n", processed, completed, failed)
+	fmt.Fprintf(out, registry.CompletionSummaryFormat+"\n", processed, completed, failed)
 	return 0
 }
 
@@ -85,7 +85,7 @@ func runScrapeTargeted(reg *registry.Registry, cfg config.Config, path string, o
 	if failedGame {
 		failed = 1
 	}
-	fmt.Fprintf(out, "%d processed, %d completed, %d failed\n", 1, completed, failed)
+	fmt.Fprintf(out, registry.CompletionSummaryFormat+"\n", 1, completed, failed)
 	return 0
 }
 

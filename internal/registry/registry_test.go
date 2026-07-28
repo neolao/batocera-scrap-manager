@@ -884,17 +884,30 @@ func TestCompleteRomsFolder_LocalGamelistWriteFails_ReturnsError(t *testing.T) {
 	romsFolder := writeIncompleteRomsFolder(t)
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
-	gamelistPath := filepath.Join(romsFolder, "megadrive", "gamelist.xml")
-	if err := os.Chmod(gamelistPath, 0o444); err != nil {
-		t.Fatalf("failed to make gamelist.xml read-only: %v", err)
-	}
-	t.Cleanup(func() { os.Chmod(gamelistPath, 0o644) })
+	makeSystemFolderReadOnly(t, filepath.Join(romsFolder, "megadrive"))
 
 	_, _, _, err := CompleteRomsFolder(reg, romsFolder, registryFolder, nil)
 
 	if err == nil {
 		t.Fatal("CompleteRomsFolder() error = nil, want error when the local gamelist.xml cannot be rewritten")
 	}
+}
+
+// makeSystemFolderReadOnly blocks the rewrite of a system's gamelist.xml. The
+// folder is what has to refuse, not the file: the gamelist is written beside
+// the old one and swapped in (see decisions/026), so a read-only gamelist.xml
+// alone no longer stands in the way. Skipped as root, which ignores folder
+// permissions.
+func makeSystemFolderReadOnly(t *testing.T, folder string) {
+	t.Helper()
+
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores folder permissions, so the write cannot be made to fail this way")
+	}
+	if err := os.Chmod(folder, 0o555); err != nil {
+		t.Fatalf("failed to make %q read-only: %v", folder, err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(folder, 0o755) })
 }
 
 func TestCompleteRomsFolder_MediaDestinationBlockedByFile_CountsGameAsFailedAndContinues(t *testing.T) {
@@ -1432,11 +1445,7 @@ func TestCompleteGame_LocalGamelistWriteFails_ReturnsError(t *testing.T) {
 	romsFolder := writeIncompleteRomsFolder(t)
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
-	gamelistPath := filepath.Join(romsFolder, "megadrive", "gamelist.xml")
-	if err := os.Chmod(gamelistPath, 0o444); err != nil {
-		t.Fatalf("failed to make gamelist.xml read-only: %v", err)
-	}
-	t.Cleanup(func() { os.Chmod(gamelistPath, 0o644) })
+	makeSystemFolderReadOnly(t, filepath.Join(romsFolder, "megadrive"))
 
 	_, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
 

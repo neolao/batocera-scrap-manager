@@ -210,3 +210,117 @@ func TestWriteFile_DirectoryDoesNotExist_ReturnsError(t *testing.T) {
 		t.Errorf("file %q should not have been created", path)
 	}
 }
+
+func TestWriteFile_TargetAlreadyExists_ReplacesItLeavingNoOtherFileBehind(t *testing.T) {
+	folder := t.TempDir()
+	path := filepath.Join(folder, "gamelist.xml")
+	if err := WriteFile(path, []Game{{Path: "./Sonic.zip", Name: "Sonic"}}); err != nil {
+		t.Fatalf("WriteFile() error = %v, want nil", err)
+	}
+
+	if err := WriteFile(path, []Game{{Path: "./Streets.zip", Name: "Streets of Rage"}}); err != nil {
+		t.Fatalf("WriteFile() error = %v, want nil", err)
+	}
+
+	got, err := ParseFile(path)
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v, want nil", err)
+	}
+	if len(got) != 1 || got[0].Name != "Streets of Rage" {
+		t.Errorf("got = %+v, want the single game %q", got, "Streets of Rage")
+	}
+	// The document is written beside the old one before being swapped in: that
+	// intermediate file must not survive, or every run would litter the user's
+	// system folder with copies of their gamelist.
+	if names := fileNames(t, folder); len(names) != 1 || names[0] != "gamelist.xml" {
+		t.Errorf("folder holds %v, want only [gamelist.xml]", names)
+	}
+}
+
+func TestWriteFile_FolderRefusesNewFiles_LeavesTheExistingGamelistUntouched(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions, so the write cannot be made to fail this way")
+	}
+
+	folder := t.TempDir()
+	path := filepath.Join(folder, "gamelist.xml")
+	if err := os.WriteFile(path, []byte(twoGamesXML), 0o644); err != nil {
+		t.Fatalf("preparing the gamelist: %v", err)
+	}
+	if err := os.Chmod(folder, 0o555); err != nil {
+		t.Fatalf("making the folder read-only: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(folder, 0o755) })
+
+	err := WriteFile(path, []Game{{Path: "./Sonic.zip", Name: "Sonic"}})
+
+	if err == nil {
+		t.Fatal("WriteFile() error = nil, want error when the folder refuses new files")
+	}
+	// The stake of the whole feature: the gamelist is the user's only copy and
+	// holds fields the registry never sees. A refused write must leave it as it
+	// was, byte for byte — not emptied, not half-rewritten.
+	content, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("reading the gamelist back: %v", readErr)
+	}
+	if string(content) != twoGamesXML {
+		t.Errorf("gamelist content = %q, want it unchanged at %q", string(content), twoGamesXML)
+	}
+	if names := fileNames(t, folder); len(names) != 1 || names[0] != "gamelist.xml" {
+		t.Errorf("folder holds %v, want only [gamelist.xml]", names)
+	}
+}
+
+func TestWriteFile_TargetAlreadyExists_KeepsItsPermissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gamelist.xml")
+	if err := os.WriteFile(path, []byte(emptyGameListXML), 0o640); err != nil {
+		t.Fatalf("preparing the gamelist: %v", err)
+	}
+
+	if err := WriteFile(path, []Game{{Path: "./Sonic.zip", Name: "Sonic"}}); err != nil {
+		t.Fatalf("WriteFile() error = %v, want nil", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat() error = %v, want nil", err)
+	}
+	if info.Mode().Perm() != 0o640 {
+		t.Errorf("mode = %o, want 0640 — swapping the file in must not change who may read it", info.Mode().Perm())
+	}
+}
+
+func TestWriteFile_TargetIsNew_IsReadableByEveryone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gamelist.xml")
+
+	if err := WriteFile(path, []Game{{Path: "./Sonic.zip", Name: "Sonic"}}); err != nil {
+		t.Fatalf("WriteFile() error = %v, want nil", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat() error = %v, want nil", err)
+	}
+	// A temporary file is created with 0600: left as is, Batocera itself could
+	// no longer read the gamelist this tool just wrote.
+	if info.Mode().Perm() != 0o644 {
+		t.Errorf("mode = %o, want 0644", info.Mode().Perm())
+	}
+}
+
+// fileNames lists what folder holds, so a test can assert no intermediate file
+// was left behind next to the gamelist.
+func fileNames(t *testing.T, folder string) []string {
+	t.Helper()
+
+	dirEntries, err := os.ReadDir(folder)
+	if err != nil {
+		t.Fatalf("reading %q: %v", folder, err)
+	}
+	names := make([]string, len(dirEntries))
+	for i, dirEntry := range dirEntries {
+		names[i] = dirEntry.Name()
+	}
+	return names
+}

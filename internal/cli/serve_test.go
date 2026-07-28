@@ -113,6 +113,23 @@ func TestExecute_Serve_InvalidArguments_ReportTheProblemAndPrintUsage(t *testing
 
 var listeningPattern = regexp.MustCompile(`listening on 127\.0\.0\.1:([1-9][0-9]*)`)
 
+// fetch GETs one page of the running server and returns its body, failing the
+// test on a transport error or on any status other than 200.
+func fetch(t *testing.T, target string) string {
+	t.Helper()
+	resp, err := http.Get(target)
+	if err != nil {
+		t.Fatalf("GET %s on the running server: %v", target, err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s = %d, want 200 (body: %s)", target, resp.StatusCode, body)
+	}
+	return string(body)
+}
+
 func TestExecute_Serve_ServesTheRegistryThenStopsCleanlyOnInterrupt(t *testing.T) {
 	setServeConfig(t)
 	out := &syncBuffer{}
@@ -125,17 +142,13 @@ func TestExecute_Serve_ServesTheRegistryThenStopsCleanlyOnInterrupt(t *testing.T
 		t.Errorf("output = %q, want no localhost hint for an explicit host", out.String())
 	}
 
-	resp, err := http.Get("http://" + address + "/")
-	if err != nil {
-		t.Fatalf("GET / on the running server: %v", err)
+	// The home page summarizes the registry system by system; the games
+	// themselves are one click away, on their system's own page.
+	if body := fetch(t, "http://"+address+"/"); !strings.Contains(body, "megadrive") {
+		t.Errorf("served home page does not list the registry's system, got: %s", body)
 	}
-	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("GET / = %d, want 200", resp.StatusCode)
-	}
-	if !strings.Contains(string(body), "Sonic") {
-		t.Errorf("served page does not list the registry's game, got: %s", body)
+	if body := fetch(t, "http://"+address+"/system/megadrive"); !strings.Contains(body, "Sonic") {
+		t.Errorf("served system page does not list the registry's game, got: %s", body)
 	}
 
 	if err := syscall.Kill(syscall.Getpid(), syscall.SIGINT); err != nil {

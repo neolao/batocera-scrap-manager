@@ -179,7 +179,7 @@ func editForm(entry registry.Entry, values editValues, errs map[string]string) e
 	page := editPage{
 		Name:      entry.Game.Name,
 		System:    entry.System,
-		SystemURL: "/#" + entry.System,
+		SystemURL: systemURL(entry.System),
 		GameURL:   gameURL(entry.System, id),
 		Action:    gameURL(entry.System, id) + "/edit",
 	}

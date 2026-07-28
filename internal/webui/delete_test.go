@@ -22,9 +22,10 @@ const sonicDeleteURL = "/game/megadrive/Sonic/delete"
 var sonicMedia = []string{"images/sonic.png", "videos/sonic.mp4", "images/marquee.png", "images/thumb.png"}
 
 // deletableRegistry writes a registry holding one game of megadrive with all
-// four of its media actually present on disk, plus a game of another system —
-// so a test can watch a deletion erase exactly one game's files and leave the
-// rest of the registry alone.
+// four of its media actually present on disk, a second game of that system so
+// it outlives the deletion, plus a game of another system — so a test can
+// watch a deletion erase exactly one game's files and leave the rest of the
+// registry alone.
 func deletableRegistry(t *testing.T) (*registry.Registry, string) {
 	t.Helper()
 	folder := t.TempDir()
@@ -35,6 +36,9 @@ func deletableRegistry(t *testing.T) (*registry.Registry, string) {
 			Marquee: "images/marquee.png", Thumbnail: "images/thumb.png",
 			Rating: "0.85", ReleaseDate: "19910623T000000",
 			Developer: "Sonic Team", Publisher: "Sega", Genre: "Platform", Players: "1",
+		}},
+		{System: "megadrive", Game: gamelist.Game{
+			Path: "./Ecco.zip", Name: "Ecco the Dolphin",
 		}},
 		{System: "mastersystem", Game: gamelist.Game{
 			Path: "./Alex Kidd.zip", Name: "Alex Kidd in Miracle World", Image: "images/alex.png",
@@ -103,7 +107,7 @@ func TestHandler_DeletePage_ExistingGame_AsksForConfirmationWithoutDeletingAnyth
 	if len(present) != 5 {
 		t.Errorf("files still on disk = %v, want all 5: asking is not deleting", present)
 	}
-	if !strings.Contains(get(t, h, "/").Body.String(), "Sonic the Hedgehog") {
+	if !strings.Contains(get(t, h, "/system/megadrive").Body.String(), "Sonic the Hedgehog") {
 		t.Error("the game left the list although nothing was confirmed")
 	}
 }
@@ -193,7 +197,7 @@ func TestHandler_Delete_Confirmed_RemovesTheGameFileAndEveryMedium(t *testing.T)
 	}
 }
 
-func TestHandler_Delete_Confirmed_LeadsBackToTheListWithoutTheGame(t *testing.T) {
+func TestHandler_Delete_Confirmed_LeadsBackToTheSystemListWithoutTheGame(t *testing.T) {
 	reg, folder := deletableRegistry(t)
 	h := Handler(reg, folder)
 
@@ -201,8 +205,8 @@ func TestHandler_Delete_Confirmed_LeadsBackToTheListWithoutTheGame(t *testing.T)
 
 	location := rec.Header().Get("Location")
 	target, _, _ := strings.Cut(location, "#")
-	if !strings.HasPrefix(location, "/?") {
-		t.Fatalf("Location = %q, want it to lead back to the game list", location)
+	if !strings.HasPrefix(location, "/system/megadrive?") {
+		t.Fatalf("Location = %q, want it to lead back to the system's list", location)
 	}
 	// The banner names the deleted game on purpose, so what must be gone is its
 	// card — the link to a page that no longer exists — not its name.
@@ -210,8 +214,36 @@ func TestHandler_Delete_Confirmed_LeadsBackToTheListWithoutTheGame(t *testing.T)
 	if links := cardLinks(body); slices.Contains(links, sonicGameURL) {
 		t.Errorf("the list still links to the deleted game: %v", links)
 	}
-	if !strings.Contains(body, "Alex Kidd in Miracle World") {
+	if !strings.Contains(body, "Ecco the Dolphin") {
 		t.Errorf("the list lost a game that was not deleted, got: %s", body)
+	}
+}
+
+func TestHandler_Delete_LastGameOfItsSystem_LeadsBackToTheHomePage(t *testing.T) {
+	// Deleting the last game of a system makes the system itself disappear:
+	// landing on its page would answer a 404 to a successful deletion.
+	folder := t.TempDir()
+	reg := &registry.Registry{Entries: []registry.Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic the Hedgehog"}},
+	}}
+	if err := store.Save(reg, folder); err != nil {
+		t.Fatalf("failed to write the test registry: %v", err)
+	}
+	h := Handler(reg, folder)
+
+	rec := post(t, h, sonicDeleteURL, nil)
+
+	location := rec.Header().Get("Location")
+	if !strings.HasPrefix(location, "/?") {
+		t.Fatalf("Location = %q, want it to lead back to the home page", location)
+	}
+	target, _, _ := strings.Cut(location, "#")
+	landing := get(t, h, target)
+	if landing.Code != http.StatusOK {
+		t.Fatalf("GET %s = %d, want 200", target, landing.Code)
+	}
+	if !strings.Contains(landing.Body.String(), "Sonic the Hedgehog") {
+		t.Errorf("the home page does not confirm which game was deleted, got: %s", landing.Body.String())
 	}
 }
 
@@ -393,7 +425,7 @@ func TestHandler_Delete_GameFileCannotBeDeleted_SaysSoAndKeepsTheGame(t *testing
 	if !strings.Contains(rec.Body.String(), "not deleted") {
 		t.Errorf("the page does not say the game was not deleted, got: %s", rec.Body.String())
 	}
-	if !strings.Contains(get(t, h, "/").Body.String(), "Sonic the Hedgehog") {
+	if !strings.Contains(get(t, h, "/system/megadrive").Body.String(), "Sonic the Hedgehog") {
 		t.Error("the served list dropped a game that is still on disk")
 	}
 	if present := registryFiles(t, folder, "megadrive", "", sonicMedia); len(present) != 4 {

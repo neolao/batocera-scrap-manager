@@ -160,6 +160,73 @@ func TestGenerate_EmbeddedStylesheet_IncludesResponsiveRules(t *testing.T) {
 	}
 }
 
+func TestGenerate_EmbeddedStylesheet_TurnsCardsIntoCompactRowsOnSmallScreens(t *testing.T) {
+	// A full-width card with a 4:3 cover fits about one game per phone screen,
+	// which makes a system of several hundred games unbrowsable with a thumb.
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if !strings.Contains(html, "@media (max-width: 640px)") {
+		t.Fatalf("the stylesheet has no compact-row breakpoint, got: %s", html)
+	}
+	for _, rule := range []string{"flex-direction: row", ".card__desc { display: none"} {
+		if !strings.Contains(html, rule) {
+			t.Errorf("the compact-row rules do not contain %q", rule)
+		}
+	}
+}
+
+func TestGenerate_GameCard_ShowsTheReleaseYearNextToTheName(t *testing.T) {
+	// A compact row has no description to tell two releases apart; the year does.
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{
+				Path: "Sonic.zip", Name: "Sonic the Hedgehog", ReleaseDate: "19910623T000000",
+			}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if !strings.Contains(html, `<span class="card__meta">1991</span>`) {
+		t.Errorf("the card does not show the release year, got: %s", html)
+	}
+}
+
+func TestGenerate_GameCardWithoutReleaseYear_ShowsNoEmptyYearSlot(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic the Hedgehog"}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	html := readIndex(t, registryFolder)
+
+	if strings.Contains(html, `class="card__meta"`) {
+		t.Errorf("the card renders an empty year slot, got: %s", html)
+	}
+}
+
 func TestGenerate_EachSystemSection_HasBackToTopLink(t *testing.T) {
 	registryFolder := t.TempDir()
 	reg := &registry.Registry{

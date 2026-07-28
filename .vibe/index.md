@@ -8,7 +8,7 @@
 - [`modules/registry.md`](.vibe/modules/registry.md) — centralized game index and media (one JSON file per game); imports from ROMs folders into the registry, completes ROMs folders (or a single targeted game) back from the registry, removes a game's entry by ROM filename or by identifier, and applies a hand-made metadata correction that later imports must not overwrite
 - [`modules/site.md`](.vibe/modules/site.md) — shared presentation layer: turns registry entries into HTML views (grouping, formatting, theme, and the inverse conversions a form needs) and generates the styled static HTML site, with sticky navigation between systems
 - [`modules/store.md`](.vibe/modules/store.md) — the one place committing a registry change: writes the registry and regenerates the consultation site derived from it
-- [`modules/webui.md`](.vibe/modules/webui.md) — serves the registry over HTTP: game list, one page per game, the form correcting a game's metadata, the page confirming a game's deletion, themed error pages, and the media files
+- [`modules/webui.md`](.vibe/modules/webui.md) — serves the registry over HTTP: systems summary, one paginated game list per system, one page per game, the form correcting a game's metadata, the page confirming a game's deletion, themed error pages, and the media files
 
 ## Observed patterns
 

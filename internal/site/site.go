@@ -75,6 +75,7 @@ var indexTemplate = template.Must(template.New("index").Funcs(template.FuncMap{
 </div>
 <div class="card__body">
 <h3 class="card__name">{{$g.Name}}</h3>
+{{if $g.Year}}<span class="card__meta">{{$g.Year}}</span>{{end}}
 <p class="card__desc">{{$g.Desc}}</p>
 </div>
 </a>

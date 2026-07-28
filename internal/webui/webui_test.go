@@ -93,6 +93,41 @@ func cardLinks(body string) []string {
 	return links
 }
 
+// systemLinks extracts the links to system pages from an HTML document,
+// unescaping them back into requestable URLs.
+func systemLinks(body string) []string {
+	var links []string
+	for _, match := range hrefPattern.FindAllStringSubmatch(body, -1) {
+		link := html.UnescapeString(match[1])
+		if strings.HasPrefix(link, "/system/") {
+			links = append(links, link)
+		}
+	}
+	return links
+}
+
+// systemLink returns the first link to a system page of an HTML document, or
+// an empty string when it holds none.
+func systemLink(body string) string {
+	links := systemLinks(body)
+	if len(links) == 0 {
+		return ""
+	}
+	return links[0]
+}
+
+var pagerPattern = regexp.MustCompile(`rel="(?:prev|next)" href="([^"]*)"`)
+
+// pagerLinks extracts the previous/next links of a paginated list, unescaping
+// them back into requestable URLs.
+func pagerLinks(body string) []string {
+	var links []string
+	for _, match := range pagerPattern.FindAllStringSubmatch(body, -1) {
+		links = append(links, html.UnescapeString(match[1]))
+	}
+	return links
+}
+
 var srcPattern = regexp.MustCompile(`src="([^"]*)"`)
 
 // mediaSources extracts every src attribute of an HTML document, unescaping
@@ -105,8 +140,11 @@ func mediaSources(body string) []string {
 	return sources
 }
 
-func TestHandler_HomePage_ListsEveryGameGroupedBySystem(t *testing.T) {
-	reg, registryFolder := fullyScrapedRegistry(t)
+func TestHandler_HomePage_ListsEachSystemWithItsGameCount(t *testing.T) {
+	reg, registryFolder := crowdedRegistry(t, "megadrive", 3)
+	reg.Entries = append(reg.Entries, registry.Entry{System: "snes", Game: gamelist.Game{
+		Path: "./Zelda.zip", Name: "A Link to the Past",
+	}})
 
 	rec := get(t, Handler(reg, registryFolder), "/")
 
@@ -114,26 +152,35 @@ func TestHandler_HomePage_ListsEveryGameGroupedBySystem(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{
-		"megadrive", "mastersystem",
-		"Sonic the Hedgehog", "A blue hedgehog runs very fast through Green Hill Zone.",
-		"Alex Kidd in Miracle World", "A kid with miracle powers.",
-		`id="megadrive"`, `id="mastersystem"`,
-	} {
+	for _, want := range []string{"megadrive", "snes", ">3<", ">1<"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("home page does not contain %q", want)
+			t.Errorf("home page does not contain %q, got: %s", want, body)
 		}
 	}
 }
 
-func TestHandler_HomePage_EveryGameLinkLeadsToItsPage(t *testing.T) {
+func TestHandler_HomePage_DoesNotRenderIndividualGames(t *testing.T) {
+	// The whole point of the summary: a registry of thousands of games must
+	// not be serialized into the page a phone opens first.
+	reg, registryFolder := fullyScrapedRegistry(t)
+
+	body := get(t, Handler(reg, registryFolder), "/").Body.String()
+
+	for _, unwanted := range []string{"Sonic the Hedgehog", "Alex Kidd in Miracle World", "<img"} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("home page renders %q, want a systems summary only, got: %s", unwanted, body)
+		}
+	}
+}
+
+func TestHandler_HomePage_EverySystemLinkLeadsToItsPage(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 	h := Handler(reg, registryFolder)
 
-	links := cardLinks(get(t, h, "/").Body.String())
+	links := systemLinks(get(t, h, "/").Body.String())
 
 	if len(links) != 2 {
-		t.Fatalf("found %d game links on the home page, want 2 (links: %v)", len(links), links)
+		t.Fatalf("found %d system links on the home page, want 2 (links: %v)", len(links), links)
 	}
 	for _, link := range links {
 		if rec := get(t, h, link); rec.Code != http.StatusOK {
@@ -150,22 +197,6 @@ func TestHandler_HomePage_EmptyRegistry_ShowsAnEmptyStateNotABlankPage(t *testin
 	}
 	if !strings.Contains(rec.Body.String(), "No games in the registry yet") {
 		t.Errorf("empty registry home page does not explain there is nothing to show, got: %s", rec.Body.String())
-	}
-}
-
-func TestHandler_HomePage_GameWithoutJaquette_RendersPlaceholderNotABrokenImage(t *testing.T) {
-	registryFolder := t.TempDir()
-	reg := &registry.Registry{Entries: []registry.Entry{
-		{System: "megadrive", Game: gamelist.Game{Path: "Sonic.zip", Name: "Sonic", Image: "images/gone.png"}},
-	}}
-
-	body := get(t, Handler(reg, registryFolder), "/").Body.String()
-
-	if strings.Contains(body, "<img") {
-		t.Errorf("home page renders an <img> for a game whose jaquette is missing from disk, got: %s", body)
-	}
-	if !strings.Contains(body, "card__art--empty") {
-		t.Errorf("home page does not render the placeholder card art, got: %s", body)
 	}
 }
 
@@ -201,8 +232,8 @@ func TestHandler_GamePage_LinksBackToTheListAndToItsSystem(t *testing.T) {
 	if !strings.Contains(body, `href="/"`) {
 		t.Errorf("game page has no link back to the game list, got: %s", body)
 	}
-	if !strings.Contains(body, `href="/#megadrive"`) {
-		t.Errorf("game page has no link back to its system's section, got: %s", body)
+	if !strings.Contains(body, `href="/system/megadrive"`) {
+		t.Errorf("game page has no link back to its system's page, got: %s", body)
 	}
 }
 
@@ -359,7 +390,7 @@ func TestHandler_GameWithSpecialCharacters_LinksAndMediaRoundTrip(t *testing.T) 
 	writeMediaFile(t, registryFolder, "gb", "images/Pokémon Red & Blue #1 [!].png")
 	h := Handler(reg, registryFolder)
 
-	links := cardLinks(get(t, h, "/").Body.String())
+	links := cardLinks(get(t, h, systemLink(get(t, h, "/").Body.String())).Body.String())
 
 	if len(links) != 1 {
 		t.Fatalf("found %d game links, want 1 (links: %v)", len(links), links)
@@ -428,20 +459,5 @@ func TestHandler_DotPrefixedMediaPath_IsServedWithoutARedirect(t *testing.T) {
 	}
 	if checked != 1 {
 		t.Fatalf("game page references %d media files, want 1", checked)
-	}
-}
-
-func TestHandler_HomePage_DoesNotEmbedVideoPlayers(t *testing.T) {
-	// A registry holding hundreds of games renders as one page: embedding a
-	// player per game would make the browser open that many media streams.
-	reg, registryFolder := fullyScrapedRegistry(t)
-
-	body := get(t, Handler(reg, registryFolder), "/").Body.String()
-
-	if strings.Contains(body, "<video") {
-		t.Errorf("home page embeds a video player, got: %s", body)
-	}
-	if !strings.Contains(body, `loading="lazy"`) {
-		t.Errorf("home page does not defer loading of its cover art, got: %s", body)
 	}
 }

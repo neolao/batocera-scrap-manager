@@ -15,6 +15,7 @@ import (
 	"os"
 	"path"
 	"slices"
+	"sort"
 	"sync"
 
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
@@ -33,6 +34,7 @@ func Handler(reg *registry.Registry, registryFolder string) http.Handler {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", ui.serveHome)
+	mux.HandleFunc("GET /system/{system}", ui.serveSystem)
 	mux.HandleFunc("GET /game/{system}/{id}", ui.serveGame)
 	mux.HandleFunc("GET /game/{system}/{id}/edit", ui.serveEditForm)
 	mux.HandleFunc("POST /game/{system}/{id}/edit", ui.saveGame)
@@ -61,25 +63,29 @@ type webUI struct {
 	registryFolder string
 }
 
-// homeView is the game list: one section per system, and the confirmation of
-// a deletion that redirected here. The list is where a deletion lands — the
-// deleted game's own page is gone — so it is the page that confirms it.
+// homeView is the summary of the registry: what systems it holds and how many
+// games each has, plus the confirmation of a deletion that redirected here.
+// The home page is where a deletion lands when it emptied its system — the
+// deleted game's own page is gone, and so is its system's.
 type homeView struct {
-	Systems []systemListing
+	Systems []systemSummary
 	Deleted string
 }
 
-// systemListing is one system's section of the home page.
-type systemListing struct {
+// systemSummary is one system on the home page, and one entry of the system
+// navigation every list page carries.
+type systemSummary struct {
 	Name  string
-	Games []gameCard
+	Count int
+	URL   string
 }
 
-// gameCard is one game as shown on the home page: enough to recognize it,
+// gameCard is one game as shown on a system's list: enough to recognize it,
 // plus the link to its own page.
 type gameCard struct {
 	Name     string
 	Desc     string
+	Year     string
 	URL      string
 	ImageURL string
 }
@@ -122,31 +128,44 @@ type metadataField struct {
 	HandEdited bool
 }
 
-// serveHome renders every game of the registry, grouped by system.
+// serveHome renders the registry's summary: one entry per system, naming how
+// many games it holds and linking to its own list.
+//
+// It deliberately does not go through site.GroupBySystem: that resolves every
+// media reference of every entry against the disk, which is thousands of
+// os.Stat calls for a page that shows no media at all.
 func (ui *webUI) serveHome(w http.ResponseWriter, r *http.Request) {
 	ui.mu.RLock()
-	systems := site.GroupBySystem(ui.reg.Entries, ui.registryFolder)
+	summaries := systemSummaries(ui.reg.Entries)
 	ui.mu.RUnlock()
-
-	listings := make([]systemListing, len(systems))
-	for i, system := range systems {
-		cards := make([]gameCard, len(system.Games))
-		for j, game := range system.Games {
-			cards[j] = gameCard{
-				Name:     game.Name,
-				Desc:     game.Desc,
-				URL:      gameURL(game.System, game.ID),
-				ImageURL: mediaURL(game.ImagePath),
-			}
-		}
-		listings[i] = systemListing{Name: system.Name, Games: cards}
-	}
 
 	query := r.URL.Query()
 	render(w, http.StatusOK, homeTemplate, homeView{
-		Systems: listings,
+		Systems: summaries,
 		Deleted: deletedConfirmation(query.Get(deletedParam), query.Get(systemParam), query[warningParam]),
 	})
+}
+
+// systemSummaries counts the games of each system, sorted by system name —
+// the same order site.GroupBySystem renders them in, so the summary and the
+// lists agree.
+func systemSummaries(entries []registry.Entry) []systemSummary {
+	counts := map[string]int{}
+	for _, entry := range entries {
+		counts[entry.System]++
+	}
+
+	names := make([]string, 0, len(counts))
+	for name := range counts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	summaries := make([]systemSummary, len(names))
+	for i, name := range names {
+		summaries[i] = systemSummary{Name: name, Count: counts[name], URL: systemURL(name)}
+	}
+	return summaries
 }
 
 // serveGame renders one game's full metadata and media, or the not-found
@@ -197,7 +216,7 @@ func (ui *webUI) gameDetail(entry registry.Entry) gameDetail {
 	detail := gameDetail{
 		Name:       view.Name,
 		System:     view.System,
-		SystemURL:  "/#" + view.System,
+		SystemURL:  systemURL(view.System),
 		EditURL:    gameURL(view.System, view.ID) + "/edit",
 		DeleteURL:  gameURL(view.System, view.ID) + "/delete",
 		Protection: protectionOf(entry, view.System, view.ID),
@@ -241,6 +260,13 @@ func ratingValue(view site.GameView) string {
 // back to the same game.
 func gameURL(system, id string) string {
 	return "/game/" + url.PathEscape(system) + "/" + url.PathEscape(id)
+}
+
+// systemURL builds the URL of one system's paginated game list, percent-
+// encoding its name so a system whose folder holds spaces or non-ASCII
+// characters still produces a valid link routing back to it.
+func systemURL(system string) string {
+	return "/system/" + url.PathEscape(system)
 }
 
 // mediaURL turns an already percent-encoded registry-relative media path (as
@@ -354,46 +380,28 @@ func newPage(name, body string) *template.Template {
 	return template.Must(template.Must(page.Parse(layout)).Parse(body))
 }
 
-// homeTemplate lists every game grouped by system, each card linking to the
-// game's own page.
+// homeTemplate summarizes the registry system by system, each one linking to
+// its own paginated list. It names no game on purpose: a registry of several
+// thousand games would otherwise be serialized into the very first page a
+// browser opens.
 var homeTemplate = newPage("home", `
 {{define "body"}}
+<main>
+{{if .Deleted}}<p class="banner" id="deleted" role="status" tabindex="-1">{{.Deleted}}</p>{{end}}
 {{if not .Systems}}
-<main>
-{{if .Deleted}}<p class="banner" id="deleted" role="status" tabindex="-1">{{.Deleted}}</p>{{end}}
 <p class="empty-state">No games in the registry yet.</p>
-</main>
 {{else}}
-<nav class="console" aria-label="Systems">
-<a class="console__brand" href="#top">Registry</a>
-<div class="console__systems">
-{{range .Systems}}<a href="#{{.Name}}">{{.Name}}</a>
-{{end}}
-</div>
-</nav>
-<main>
-{{if .Deleted}}<p class="banner" id="deleted" role="status" tabindex="-1">{{.Deleted}}</p>{{end}}
+<h2 class="system__title">Systems</h2>
+<ul class="systems">
 {{range .Systems}}
-<section id="{{.Name}}" class="system">
-<h2 class="system__title">{{.Name}}</h2>
-<div class="grid">
-{{range .Games}}
-<a class="card" href="{{.URL}}">
-<div class="card__art{{if not .ImageURL}} card__art--empty{{end}}">
-{{if .ImageURL}}<img src="{{.ImageURL}}" alt="Cover art of {{.Name}}" loading="lazy">{{end}}
-</div>
-<div class="card__body">
-<h3 class="card__name">{{.Name}}</h3>
-<p class="card__desc">{{.Desc}}</p>
-</div>
-</a>
+<li><a class="systems__item" href="{{.URL}}">
+<span class="systems__name">{{.Name}}</span>
+<span class="systems__count">{{.Count}}</span>
+</a></li>
 {{end}}
-</div>
-<a class="back-to-top" href="#top">&#9650; Back to top</a>
-</section>
+</ul>
 {{end}}
 </main>
-{{end}}
 {{end}}
 `)
 

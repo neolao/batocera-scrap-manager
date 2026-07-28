@@ -429,6 +429,7 @@ func TestHandler_Save_ConcurrentWithReads_KeepsTheRegistryConsistent(t *testing.
 		go func() {
 			defer wg.Done()
 			get(t, h, "/")
+			get(t, h, "/system/megadrive")
 			get(t, h, sonicGameURL)
 		}()
 	}

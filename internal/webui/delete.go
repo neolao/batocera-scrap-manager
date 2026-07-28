@@ -128,16 +128,25 @@ func (ui *webUI) deleteGame(w http.ResponseWriter, r *http.Request) {
 	if err := store.Save(candidate, ui.registryFolder); err != nil {
 		warnings = append(warnings, warningStaleSite)
 	}
-	http.Redirect(w, r, deletedURL(entry.Game.Name, system, warnings), http.StatusSeeOther)
+	systemSurvives := len(entriesOfSystem(candidate.Entries, system)) > 0
+	http.Redirect(w, r, deletedURL(entry.Game.Name, system, systemSurvives, warnings), http.StatusSeeOther)
 }
 
-// deletedURL builds the game list's URL confirming the deletion of a game.
-func deletedURL(name, system string, warnings []string) string {
+// deletedURL builds the URL of the list confirming the deletion of a game:
+// the game's own system, or the home page when that game was the last of its
+// system — landing on a system that no longer exists would answer a 404 to a
+// deletion that succeeded.
+func deletedURL(name, system string, systemSurvives bool, warnings []string) string {
 	query := url.Values{deletedParam: {name}, systemParam: {system}}
 	for _, warning := range warnings {
 		query.Add(warningParam, warning)
 	}
-	return "/?" + query.Encode() + deletedAnchor
+
+	landing := "/"
+	if systemSurvives {
+		landing = systemURL(system)
+	}
+	return landing + "?" + query.Encode() + deletedAnchor
 }
 
 // renderGameGone renders the not-found page for a game the deletion flow could
@@ -158,7 +167,7 @@ func deleteForm(entry registry.Entry, registryFolder, problem string) deleteConf
 	return deleteConfirmation{
 		Name:      entry.Game.Name,
 		System:    entry.System,
-		SystemURL: "/#" + entry.System,
+		SystemURL: systemURL(entry.System),
 		GameURL:   gameURL(entry.System, id),
 		Action:    gameURL(entry.System, id) + "/delete",
 		Files:     deletedFiles(entry, registryFolder),

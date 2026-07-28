@@ -284,3 +284,73 @@ textarea.field__control { resize: vertical; line-height: 1.6; }
   font-size: 0.9rem;
 }
 .banner:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+/* The home page: one row per system, sized as a comfortable tap target. */
+.systems {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.systems__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 3.25rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.systems__item:hover, .systems__item:focus-visible {
+  border-color: var(--cyan);
+  box-shadow: 0 0 10px rgba(77, 240, 255, 0.25);
+}
+.systems__name {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  overflow-wrap: anywhere;
+}
+.systems__count { font-family: var(--font-display); font-size: 0.8rem; color: var(--ink-dim); }
+.system__count {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+  text-transform: none;
+}
+/* The system currently being browsed, marked in the bar listing them all. */
+.console__systems a.is-current {
+  color: var(--bg);
+  background: var(--cyan);
+  border-color: var(--cyan);
+}
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+.pager__state {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+/* An edge of the list keeps its control in place rather than dropping it, so
+   the pager does not shift under the thumb between two pages. */
+.button--disabled { opacity: 0.35; pointer-events: none; }
+@media (max-width: 640px) {
+  /* Every control of the served pages, pagination included, is reached with a
+     thumb rather than a mouse pointer. */
+  .button { display: inline-flex; align-items: center; min-height: 2.75rem; }
+  .pager__state { order: 3; width: 100%; text-align: center; }
+}

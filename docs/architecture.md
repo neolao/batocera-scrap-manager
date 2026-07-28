@@ -22,7 +22,7 @@ The heart of the tool: a centralized index of all already-known games, along wit
 Turns the registry's content into HTML, so it can be browsed in a web browser without opening individual metadata files. It is the shared presentation layer: it both writes the static site regenerated on every update, and provides the theme, the grouping by system and the formatting (rating stars, release year, safely encoded media links) reused by the web server, so both renderings stay consistent.
 
 **Web server**
-Serves the registry's content over HTTP on demand: the game list, one page per game, the form correcting a game's metadata, the page confirming a game's deletion, and the media files themselves. Unlike the static site, each game has its own address, which is what makes a game reachable, linkable, editable and deletable.
+Serves the registry's content over HTTP on demand: a summary of the systems, one paginated list of games per system, one page per game, the form correcting a game's metadata, the page confirming a game's deletion, and the media files themselves. Unlike the static site, each game and each system has its own address, which is what makes a game reachable, linkable, editable and deletable.
 
 **Commit of a registry change**
 Writing the registry and regenerating the consultation site derived from it always go together, so the two never drift apart. Both the commands and the web server go through the same single place to do it, which also tells apart the case where the registry itself was written but only the site could not be regenerated.
@@ -44,12 +44,15 @@ Every time the registry is updated, a small static website is (re)generated dire
 
 The static site is a snapshot written to disk; the tool can also serve the registry itself over HTTP, which is what makes each game addressable. The server listens on every interface on port 8080 by default — so the registry can be browsed from a phone or another computer on the same network — and both the address and the port can be changed. On startup it prints the address it actually listens on plus a URL usable as-is in a browser, and it stops cleanly when interrupted, letting requests in flight finish.
 
-Two kinds of pages are served, sharing the static site's look:
+Three kinds of pages are served, sharing the static site's look:
 
-- the game list, grouped by system, where each game links to its own page;
+- the home page, a summary naming each system and how many games it holds, each leading to its own list. It names no game: a registry of several thousand games would otherwise be written out in full into the very first page a browser opens, which is both slow to produce and unreadable on a phone;
+- one list per system, showing 60 games at a time with "previous"/"next" links, a bar to jump straight to another system, and each game linking to its own page. Only the games actually on the page are prepared, so the cost of a list no longer grows with the size of the system;
 - one page per game, showing its full description, all of its metadata labels (rating, year, developer, publisher, genre, players) — kept visible even when the game has no value for them — and every medium actually present for it: jaquette, video, marquee, thumbnail. A game with no cover art, no description or no media is presented cleanly rather than showing empty or broken elements, and its rating is written out in words next to the stars so it is not conveyed by symbols alone.
 
-A game is addressed by the same identifier the registry already uses to name its file on disk, so no second matching rule is introduced. An address designating an unknown system or an unknown game — or one that is simply malformed — answers with a "not found" page in the same style, naming what could not be found and offering a link back to the list, rather than a blank page or a server error. Media files are read from the registry folder only: no address can reach a file outside it, and the folders themselves are never listed.
+A game is addressed by the same identifier the registry already uses to name its file on disk, so no second matching rule is introduced. An address designating an unknown system or an unknown game — or one that is simply malformed, or asks for a page number beyond the last of a system — answers with a "not found" page in the same style, naming what could not be found and offering a link back, rather than a blank page, an empty list or a server error. Media files are read from the registry folder only: no address can reach a file outside it, and the folders themselves are never listed.
+
+On a small screen, a game is shown as a compact row — thumbnail, name, release year — rather than a full-width card, so about a dozen games fit on screen instead of roughly one; the same applies to the static site. Every link and button stays large enough to be tapped, and no page overflows sideways.
 
 The registry is read once, when the server starts: after an `update`, the server must be restarted to reflect the changes. Changes made from the server's own pages are the exception — a correction, protecting or unprotecting a game, and deleting one are applied to what the server serves as well as to the disk, so they show immediately.
 

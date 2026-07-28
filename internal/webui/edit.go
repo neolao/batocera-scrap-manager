@@ -69,8 +69,11 @@ var editableFields = []editableField{
 
 // editValues holds the eight editable values as the form shows them: a star
 // count out of five and a year, not the decimal rating and full timestamp the
-// registry stores (see decisions/019).
+// registry stores (see decisions/019). Path travels with them because it is
+// submitted by the same form, but it is not one of them: it identifies the
+// entry rather than describing it (see decisions/024).
 type editValues struct {
+	Path      string
 	Name      string
 	Desc      string
 	Rating    string
@@ -88,6 +91,7 @@ func displayedValues(g gamelist.Game) editValues {
 		rating = starCount(filled)
 	}
 	return editValues{
+		Path:      g.Path,
 		Name:      g.Name,
 		Desc:      g.Desc,
 		Rating:    rating,
@@ -107,6 +111,10 @@ type editPage struct {
 	SystemURL string
 	GameURL   string
 	Action    string
+	// PathField is the ROM file control, kept apart from Fields: it corrects
+	// the game's identity, not one of its values, so it carries neither the
+	// hand-edited mark nor the hand-back checkbox.
+	PathField formControl
 	Fields    []formControl
 	Errors    []formError
 	// Problem states what went wrong when the correction itself was fine but
@@ -128,6 +136,24 @@ type formControl struct {
 	Stars      []starOption
 	MinYear    int
 	MaxYear    int
+}
+
+// DescribedBy names every element describing the control, error first — the
+// reason it was refused is what the user needs before the advice. A control
+// carrying both a hint and an error must name both, or a screen reader
+// announces only one of them and the refusal goes unheard.
+func (c formControl) DescribedBy() string {
+	var ids string
+	if c.Error != "" {
+		ids = "error-" + c.Key
+	}
+	if c.Hint != "" {
+		if ids != "" {
+			ids += " "
+		}
+		ids += "hint-" + c.Key
+	}
+	return ids
 }
 
 // starOption is one choice of the rating control: "Not rated" plus the six
@@ -182,6 +208,12 @@ func editForm(entry registry.Entry, values editValues, errs map[string]string) e
 		SystemURL: systemURL(entry.System),
 		GameURL:   gameURL(entry.System, id),
 		Action:    gameURL(entry.System, id) + "/edit",
+		PathField: pathControl(values.Path, errs[pathKey]),
+	}
+	if page.PathField.Error != "" {
+		page.Errors = append(page.Errors, formError{
+			Key: pathKey, Label: pathLabel, Message: page.PathField.Error,
+		})
 	}
 
 	for _, field := range editableFields {
@@ -260,6 +292,17 @@ var editTemplate = newPage("edit", `
 {{end}}
 <form class="form" method="post" action="{{.Action}}">
 <fieldset class="form__fields">
+<legend>`+pathLabel+`</legend>
+{{with .PathField}}
+<div class="field{{if .Error}} field--invalid{{end}}">
+<label class="field__label" for="field-{{.Key}}">{{.Label}} <span class="field__required">(required)</span></label>
+{{if .Error}}<p class="field__error" id="error-{{.Key}}">{{.Error}}</p>{{end}}
+<p class="field__hint" id="hint-{{.Key}}">{{.Hint}}</p>
+<input class="field__control field__control--path" type="text" id="field-{{.Key}}" name="{{.Key}}" value="{{.Value}}" required spellcheck="false" autocapitalize="none" aria-describedby="{{.DescribedBy}}"{{if .Error}} aria-invalid="true"{{end}}>
+</div>
+{{end}}
+</fieldset>
+<fieldset class="form__fields">
 <legend>Metadata</legend>
 {{range .Fields}}
 <div class="field{{if .Error}} field--invalid{{end}}">
@@ -267,16 +310,16 @@ var editTemplate = newPage("edit", `
 {{if .Error}}<p class="field__error" id="error-{{.Key}}">{{.Error}}</p>{{end}}
 {{if .Hint}}<p class="field__hint" id="hint-{{.Key}}">{{.Hint}}</p>{{end}}
 {{if eq .Kind "textarea"}}
-<textarea class="field__control" id="field-{{.Key}}" name="{{.Key}}" rows="10"{{if .Error}} aria-invalid="true" aria-describedby="error-{{.Key}}"{{end}}>{{.Value}}</textarea>
+<textarea class="field__control" id="field-{{.Key}}" name="{{.Key}}" rows="10"{{if .DescribedBy}} aria-describedby="{{.DescribedBy}}"{{end}}{{if .Error}} aria-invalid="true"{{end}}>{{.Value}}</textarea>
 {{else if eq .Kind "stars"}}
-<select class="field__control" id="field-{{.Key}}" name="{{.Key}}"{{if .Error}} aria-invalid="true" aria-describedby="error-{{.Key}}"{{end}}>
+<select class="field__control" id="field-{{.Key}}" name="{{.Key}}"{{if .DescribedBy}} aria-describedby="{{.DescribedBy}}"{{end}}{{if .Error}} aria-invalid="true"{{end}}>
 {{range .Stars}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
 {{end}}
 </select>
 {{else if eq .Kind "year"}}
-<input class="field__control" type="number" id="field-{{.Key}}" name="{{.Key}}" value="{{.Value}}" min="{{.MinYear}}" max="{{.MaxYear}}" step="1" inputmode="numeric"{{if .Hint}} aria-describedby="hint-{{.Key}}"{{end}}{{if .Error}} aria-invalid="true"{{end}}>
+<input class="field__control" type="number" id="field-{{.Key}}" name="{{.Key}}" value="{{.Value}}" min="{{.MinYear}}" max="{{.MaxYear}}" step="1" inputmode="numeric"{{if .DescribedBy}} aria-describedby="{{.DescribedBy}}"{{end}}{{if .Error}} aria-invalid="true"{{end}}>
 {{else}}
-<input class="field__control" type="text" id="field-{{.Key}}" name="{{.Key}}" value="{{.Value}}"{{if .Required}} required{{end}}{{if .Hint}} aria-describedby="hint-{{.Key}}"{{end}}{{if .Error}} aria-invalid="true"{{end}}>
+<input class="field__control" type="text" id="field-{{.Key}}" name="{{.Key}}" value="{{.Value}}"{{if .Required}} required{{end}}{{if .DescribedBy}} aria-describedby="{{.DescribedBy}}"{{end}}{{if .Error}} aria-invalid="true"{{end}}>
 {{end}}
 {{if .HandEdited}}
 <p class="field__manual">

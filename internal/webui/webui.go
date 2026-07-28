@@ -101,11 +101,15 @@ type gameDetail struct {
 	EditURL   string
 	DeleteURL string
 	Saved     string
-	Desc      string
-	CoverURL  string
-	VideoURL  string
-	Extras    []extraMedium
-	Fields    []metadataField
+	// RomPath is the game's ROM path as stored, subfolder included. It sits
+	// outside Fields because it is not scraped metadata: it is what identifies
+	// the entry, and nothing shields it from a later update.
+	RomPath  string
+	Desc     string
+	CoverURL string
+	VideoURL string
+	Extras   []extraMedium
+	Fields   []metadataField
 	// Protection states, in words, whether updates may refresh this game, and
 	// offers the one control that state allows.
 	Protection protectionControl
@@ -183,7 +187,7 @@ func (ui *webUI) serveGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	detail := ui.gameDetail(entry)
-	detail.Saved = savedConfirmation(r.URL.Query().Get(savedParam))
+	detail.Saved = savedConfirmation(r.URL.Query())
 	render(w, http.StatusOK, gameTemplate, detail)
 }
 
@@ -220,6 +224,7 @@ func (ui *webUI) gameDetail(entry registry.Entry) gameDetail {
 		EditURL:    gameURL(view.System, view.ID) + "/edit",
 		DeleteURL:  gameURL(view.System, view.ID) + "/delete",
 		Protection: protectionOf(entry, view.System, view.ID),
+		RomPath:    entry.Game.Path,
 		Desc:       view.Desc,
 		CoverURL:   mediaURL(view.ImagePath),
 		VideoURL:   mediaURL(view.VideoPath),
@@ -417,6 +422,7 @@ var gameTemplate = newPage("game", `
 {{if .Saved}}<p class="banner" id="saved" role="status" tabindex="-1">{{.Saved}}</p>{{end}}
 <article class="game">
 <h2 class="game__title">{{.Name}}</h2>
+<p class="game__file"><span class="game__file-label">`+pathLabel+`</span> <code>{{.RomPath}}</code></p>
 <div class="game__layout">
 <div class="game__art{{if not .CoverURL}} game__art--empty{{end}}">
 {{if .CoverURL}}<img src="{{.CoverURL}}" alt="Cover art of {{.Name}}">{{else}}No cover art{{end}}

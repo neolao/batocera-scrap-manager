@@ -80,7 +80,8 @@ func (ui *webUI) saveGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	values := submittedValues(r)
-	if errs := validate(values); len(errs) > 0 {
+	errs := validate(values, pathError(ui.reg, system, id, values.Path))
+	if len(errs) > 0 {
 		render(w, http.StatusUnprocessableEntity, editTemplate, editForm(entry, values, errs))
 		return
 	}
@@ -92,6 +93,22 @@ func (ui *webUI) saveGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The path is applied after the metadata: correcting it moves the entry
+	// under a new identifier, and UpdateMetadata addresses it by the old one.
+	// The domain refuses on its own terms even though pathError just checked
+	// the same rules — it owns them, and a rule added there must not slip
+	// through here silently.
+	renamed := values.Path != entry.Game.Path
+	if renamed {
+		if err := registry.ChangePath(candidate, system, id, values.Path); err != nil {
+			render(w, http.StatusUnprocessableEntity, editTemplate,
+				editForm(entry, values, map[string]string{pathKey: pathRefusal(err)}))
+			return
+		}
+	}
+	newID := registry.GameID(values.Path)
+	moved := newID != id
+
 	err := store.Save(candidate, ui.registryFolder)
 	if err != nil && !errors.Is(err, store.ErrSiteNotRegenerated) {
 		page := editForm(entry, values, nil)
@@ -101,27 +118,58 @@ func (ui *webUI) saveGame(w http.ResponseWriter, r *http.Request) {
 	}
 	ui.reg = candidate
 
+	// From here the change is committed: the registry on disk holds it, so the
+	// served snapshot must too. Erasing the file the game was stored under is
+	// what keeps it from loading twice on the next start — but a failure there
+	// is a caveat on a change that did happen, never a refusal (decisions/024).
+	leftBehind := ""
+	if moved {
+		if err := registry.RemoveGameFile(ui.registryFolder, system, id); err != nil {
+			leftBehind = registry.EntryFileName(id)
+		}
+	}
+
 	outcome := savedFully
 	if err != nil {
 		outcome = savedNoSite
 	}
-	http.Redirect(w, r, gameURL(system, id)+"?"+savedParam+"="+outcome+savedAnchor, http.StatusSeeOther)
+	query := url.Values{}
+	if renamed {
+		query = renameQuery(values.Path, moved, leftBehind)
+		outcome = savedPath
+		if err != nil {
+			outcome = savedPath + staleSuffix
+		}
+	}
+	query.Set(savedParam, outcome)
+	http.Redirect(w, r, gameURL(system, newID)+"?"+query.Encode()+savedAnchor, http.StatusSeeOther)
 }
 
-// savedConfirmation turns the outcome a change redirected with into the
-// sentence the game page confirms it with — nothing at all when the page was
-// simply browsed to. An outcome carrying the stale suffix confirms what did
-// happen, then adds what did not.
-func savedConfirmation(outcome string) string {
+// savedConfirmation turns what a change redirected with into the sentence the
+// game page confirms it with — nothing at all when the page was simply browsed
+// to. An outcome carrying the stale suffix confirms what did happen, then adds
+// what did not. It reads the whole query rather than the outcome alone,
+// because a path change names the path it resulted in, which no table holds.
+func savedConfirmation(query url.Values) string {
+	outcome := query.Get(savedParam)
 	if message, found := savedConfirmations[outcome]; found {
 		return message
 	}
-	if base, stale := strings.CutSuffix(outcome, staleSuffix); stale {
-		if message, found := savedConfirmations[base]; found {
-			return message + staleCaveat
-		}
+
+	base, stale := strings.CutSuffix(outcome, staleSuffix)
+	message := ""
+	if base == savedPath {
+		message = pathConfirmation(query)
+	} else if known, found := savedConfirmations[base]; found && stale {
+		message = known
 	}
-	return ""
+	if message == "" {
+		return ""
+	}
+	if stale {
+		message += staleCaveat
+	}
+	return message
 }
 
 // crossSite reports whether a submission came from somewhere other than the
@@ -156,6 +204,7 @@ func submittedValues(r *http.Request) editValues {
 	}
 
 	return editValues{
+		Path:      line(pathKey),
 		Name:      line("name"),
 		Desc:      text("desc"),
 		Rating:    line("rating"),
@@ -168,10 +217,15 @@ func submittedValues(r *http.Request) editValues {
 }
 
 // validate checks what the form's own constraints only suggest — a client is
-// free to ignore them — and returns one message per refused field.
-func validate(values editValues) map[string]string {
+// free to ignore them — and returns one message per refused field. The ROM
+// path's own refusal is passed in rather than computed here: it is the only
+// one needing the registry, to tell which game already holds an identifier.
+func validate(values editValues, pathRefused string) map[string]string {
 	errs := map[string]string{}
 
+	if pathRefused != "" {
+		errs[pathKey] = pathRefused
+	}
 	if values.Name == "" {
 		errs["name"] = "Give the game a name: it is how it appears everywhere else."
 	}

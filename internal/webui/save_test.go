@@ -46,6 +46,7 @@ func savedRegistry(t *testing.T) (*registry.Registry, string) {
 // stored game exactly as the form displays it.
 func storedValues() url.Values {
 	return url.Values{
+		"path":      {"./Sonic.zip"},
 		"name":      {"Sonic the Hedghog"},
 		"desc":      {"Fast."},
 		"rating":    {"4"},
@@ -220,7 +221,7 @@ func TestHandler_Save_FieldHandedBackToTheScraper_LosesItsMark(t *testing.T) {
 	if err := store.Save(reg, folder); err != nil {
 		t.Fatalf("failed to write the test registry: %v", err)
 	}
-	form := url.Values{"name": {"Sonic"}, "genre": {"Platformer"}, handBackParam: {"genre"}}
+	form := url.Values{"path": {"./Sonic.zip"}, "name": {"Sonic"}, "genre": {"Platformer"}, handBackParam: {"genre"}}
 
 	post(t, Handler(reg, folder), sonicSaveURL, form)
 

@@ -154,14 +154,17 @@ func TestHandler_EditPage_GameWithNoRatingNorGenre_RendersEmptyControlsNotPlaceh
 	}
 }
 
-func TestHandler_EditPage_NeverExposesTheRomPathNorTheMedia(t *testing.T) {
+func TestHandler_EditPage_NeverExposesTheMedia(t *testing.T) {
+	// The ROM path is editable since backlog item 021 — it identifies the
+	// entry, and correcting it is a repair. Media are not: they are managed by
+	// their own flows rather than typed in.
 	reg, registryFolder := fullyScrapedRegistry(t)
 
 	body := get(t, Handler(reg, registryFolder), sonicEditURL).Body.String()
 
-	for _, forbidden := range []string{"path", "image", "video", "marquee", "thumbnail"} {
+	for _, forbidden := range []string{"image", "video", "marquee", "thumbnail"} {
 		if _, found := inputValue(t, body, forbidden); found {
-			t.Errorf("the edit form carries a control named %q, want the ROM path and media kept out of it", forbidden)
+			t.Errorf("the edit form carries a control named %q, want the media kept out of it", forbidden)
 		}
 	}
 }

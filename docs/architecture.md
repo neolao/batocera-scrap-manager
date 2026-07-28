@@ -22,7 +22,7 @@ The heart of the tool: a centralized index of all already-known games, along wit
 Turns the registry's content into HTML, so it can be browsed in a web browser without opening individual metadata files. It is the shared presentation layer: it both writes the static site regenerated on every update, and provides the theme, the grouping by system and the formatting (rating stars, release year, safely encoded media links) reused by the web server, so both renderings stay consistent.
 
 **Web server**
-Serves the registry's content over HTTP on demand: a summary of the systems, one paginated list of games per system, one page per game, the form correcting a game's metadata, the page confirming a game's deletion, and the media files themselves. Unlike the static site, each game and each system has its own address, which is what makes a game reachable, linkable, editable and deletable.
+Serves the registry's content over HTTP on demand: a summary of the systems, one paginated list of games per system, one page per game, the form correcting a game's metadata and the ROM file identifying it, the page confirming a game's deletion, and the media files themselves. Unlike the static site, each game and each system has its own address, which is what makes a game reachable, linkable, editable and deletable.
 
 **Commit of a registry change**
 Writing the registry and regenerating the consultation site derived from it always go together, so the two never drift apart. Both the commands and the web server go through the same single place to do it, which also tells apart the case where the registry itself was written but only the site could not be regenerated.
@@ -48,9 +48,9 @@ Three kinds of pages are served, sharing the static site's look:
 
 - the home page, a summary naming each system and how many games it holds, each leading to its own list. It names no game: a registry of several thousand games would otherwise be written out in full into the very first page a browser opens, which is both slow to produce and unreadable on a phone;
 - one list per system, showing 60 games at a time with "previous"/"next" links, a bar to jump straight to another system, and each game linking to its own page. Only the games actually on the page are prepared, so the cost of a list no longer grows with the size of the system;
-- one page per game, showing its full description, all of its metadata labels (rating, year, developer, publisher, genre, players) — kept visible even when the game has no value for them — and every medium actually present for it: jaquette, video, marquee, thumbnail. A game with no cover art, no description or no media is presented cleanly rather than showing empty or broken elements, and its rating is written out in words next to the stars so it is not conveyed by symbols alone.
+- one page per game, showing the ROM file it stands for, its full description, all of its metadata labels (rating, year, developer, publisher, genre, players) — kept visible even when the game has no value for them — and every medium actually present for it: jaquette, video, marquee, thumbnail. A game with no cover art, no description or no media is presented cleanly rather than showing empty or broken elements, and its rating is written out in words next to the stars so it is not conveyed by symbols alone.
 
-A game is addressed by the same identifier the registry already uses to name its file on disk, so no second matching rule is introduced. An address designating an unknown system or an unknown game — or one that is simply malformed, or asks for a page number beyond the last of a system — answers with a "not found" page in the same style, naming what could not be found and offering a link back, rather than a blank page, an empty list or a server error. Media files are read from the registry folder only: no address can reach a file outside it, and the folders themselves are never listed.
+A game is addressed by the same identifier the registry already uses to name its file on disk, so no second matching rule is introduced — which is also why correcting a game's ROM path changes the address of its own page. An address designating an unknown system or an unknown game — or one that is simply malformed, or asks for a page number beyond the last of a system — answers with a "not found" page in the same style, naming what could not be found and offering a link back, rather than a blank page, an empty list or a server error. Media files are read from the registry folder only: no address can reach a file outside it, and the folders themselves are never listed.
 
 On a small screen, a game is shown as a compact row — thumbnail, name, release year — rather than a full-width card, so about a dozen games fit on screen instead of roughly one; the same applies to the static site. Every link and button stays large enough to be tapped, and no page overflows sideways.
 
@@ -64,6 +64,8 @@ flowchart LR
   SRV --> LIST["Game list page"]
   SRV --> GAME["One page per game"]
   SRV --> EDIT["Edit form + save"]
+  EDIT --> PATH["ROM path change: re-file, erase the old file"]
+  PATH --> COMMIT
   SRV --> PROT["Protect / unprotect"]
   PROT --> COMMIT
   SRV --> DEL["Delete: confirm then erase"]
@@ -76,13 +78,23 @@ flowchart LR
 
 ## Correcting a game by hand
 
-A game that was badly scraped can be corrected from its own page, without editing any file or re-running anything. The page links to a form of its own, pre-filled with the eight values a user may fix: name, description, rating, release year, developer, publisher, genre and number of players. The ROM file's path and the game's media are deliberately absent from it — the path is what identifies the entry, and no correction may reach it.
+A game that was badly scraped can be corrected from its own page, without editing any file or re-running anything. The page links to a form of its own, pre-filled with the eight values a user may fix: name, description, rating, release year, developer, publisher, genre and number of players. The game's media are deliberately absent from it: they are managed by their own flows rather than typed in. The ROM path is present, but as a control of its own — see "Correcting the ROM path" below.
 
 Two of those values are stored in Batocera's own conventions but displayed in a friendlier, lossier form: the rating as five stars, the release date as its year alone. The form edits what is displayed — a star count, a year — and a value whose displayed form the user did not change keeps its stored value untouched, down to the byte: a rating stored as `0.85` is not degraded to `0.8` just because the form was opened and saved, and a release date keeps its month and day.
 
 Saving is a POST answered by a redirect back to the game's page, which then shows a confirmation: reloading that page can never re-submit the correction. Nothing is committed to what the server serves until the write to disk succeeded, so a failure leaves the served pages and the registry agreeing with each other. If the registry was written but the consultation site could not be regenerated, the confirmation says so instead of claiming a failure — the registry is the source of truth, and the correction did apply. A submission that cannot be accepted (an empty name, an implausible year, a rating outside the offered choices) is not a redirect: the form comes back with the submitted values kept, a summary of what was refused and a message on each offending field, and nothing is written.
 
 Since the web server has no accounts to authenticate and is meant for a home network, a submission that did not come from the registry's own pages is refused, and the size of a submission is capped.
+
+## Correcting the ROM path
+
+The ROM path — the filename and its optional subfolder, relative to the system's folder — is not one more value describing a game: it is what identifies it. The identifier derived from it (the filename, stripped of any directory prefix and of its extension) names the game's file in the registry, deduplicates entries against a ROMs folder, and addresses the game in the server's own URLs. It is readable under the game's title and correctable from the edit form, in a control of its own, outside the list of editable values — so it carries neither the hand-edited mark nor the checkbox handing a value back to the scraper, and protecting a game never covers it.
+
+Correcting it moves the game's file inside the registry folder, which is the one change that cannot follow the usual write-then-swap sequence alone: writing the registry only ever writes files, so the file named after the old identifier would survive and load as a second game on the next start. The order is therefore the reverse of a deletion's — write the new file first, erase the old one after — and the commit point is the write, not the erasure. A file that could not be erased is reported as a caveat on a change that did happen, naming the leftover so it can be removed by hand; it is never treated as a failed save. A correction that leaves the identifier unchanged (a new subfolder, another file extension) erases nothing and does not claim the game's page moved.
+
+A path is refused, with the registry left strictly untouched, when it is empty, absolute, reaches outside its system's folder through `..`, names no usable file (a folder, an extension with nothing before it, a Windows separator, a control character, a name too long to write), or derives an identifier that already belongs to another game of the same system — that last refusal names both the clashing filename and the game holding it. The duplicate check compares positions rather than identifiers, so a game is never refused its own path.
+
+The media a game references are never renamed or moved along with it: their paths are stored in their own right, relative to the system's folder, and are never derived from the ROM path. Two consequences are deliberately left standing: the ROMs folder is not consulted, so nothing verifies that the corrected path names a file that really exists; and since the path is not protectable, a later update reading a `gamelist.xml` that still holds the old one will overwrite the correction when the identifier is unchanged, or add a second entry beside it when it changed.
 
 ## Keeping a hand-made correction
 

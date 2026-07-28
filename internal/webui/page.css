@@ -14,11 +14,36 @@
 .crumbs__current { color: var(--ink); }
 .game { padding-top: 1.5rem; }
 .game__title {
-  margin: 0 0 1.25rem;
+  margin: 0 0 0.5rem;
   font-family: var(--font-display);
   font-size: clamp(1.1rem, 3vw, 1.6rem);
   letter-spacing: 0.05em;
   color: var(--cyan);
+}
+/* The ROM path sits under the title rather than among the metadata rows: it
+   identifies the game instead of describing it, and carries none of the
+   correction marks those rows do. A long one wraps anywhere rather than
+   scrolling, so no page overflows sideways on a phone. */
+.game__file {
+  margin: 0 0 1.25rem;
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+.game__file-label {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.game__file code {
+  font-family: var(--font-display);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .game__layout {
   display: grid;
@@ -250,8 +275,11 @@
 }
 .field__control:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
 textarea.field__control { resize: vertical; line-height: 1.6; }
-.field__hint { margin: 0 0 0.35rem; font-size: 0.75rem; color: var(--ink-dim); }
-.field__error { margin: 0 0 0.35rem; font-size: 0.8rem; color: var(--magenta); }
+.field__hint { margin: 0 0 0.35rem; font-size: 0.75rem; color: var(--ink-dim); overflow-wrap: anywhere; }
+.field__error { margin: 0 0 0.35rem; font-size: 0.8rem; color: var(--magenta); overflow-wrap: anywhere; }
+/* A path is read character by character, and a proportional serif makes a
+   double space or a stray dot invisible. */
+.field__control--path { font-family: var(--font-display); font-size: 0.85rem; }
 .field--invalid .field__control { border-color: var(--magenta); }
 .field__manual { display: flex; align-items: center; gap: 0.4rem; margin: 0.4rem 0 0; }
 .field__manual label { font-size: 0.8rem; color: var(--ink-dim); }
@@ -272,6 +300,7 @@ textarea.field__control { resize: vertical; line-height: 1.6; }
   color: var(--magenta);
 }
 .errors ul { margin: 0; padding-left: 1.2rem; }
+.errors li { overflow-wrap: anywhere; }
 .errors a { color: var(--ink); }
 .banner {
   margin: 1.25rem 0 0;

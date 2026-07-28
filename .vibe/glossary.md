@@ -28,9 +28,14 @@
 **Do not confuse with:** Import, which flows in the opposite direction (ROMs folder → registry); or the `scrape` command (`internal/cli/scrape.go`), which is the CLI command exposing this completion mechanism to the user.
 
 ## Game ID
-**Definition:** A game's identifier inside the registry: its ROM file's base name, without directory prefix or extension (e.g. `Sonic.zip` in a subfolder → `Sonic`). One and the same key names the game's metadata file on disk, deduplicates registry entries, and addresses a game in the web UI's URLs — deliberately never re-derived by a second rule.
+**Definition:** A game's identifier inside the registry: its ROM file's base name, without directory prefix or extension (e.g. `Sonic.zip` in a subfolder → `Sonic`). One and the same key names the game's metadata file on disk, deduplicates registry entries, and addresses a game in the web UI's URLs — deliberately never re-derived by a second rule. It is derived, never stored: correcting a game's ROM Path from the web UI changes it, which re-files the game and changes the address of its own page.
 **Code:** `registry.GameID`, `(*Registry).FindByID` in `internal/registry/registry.go`
 **Do not confuse with:** a ROM filename (which still carries its extension, and possibly a subfolder prefix) — several ROM filenames can share one game ID, and the registry then treats them as the same game (see [`decisions/014`](decisions/014-dedupe-by-extension-stripped-filename-too.md)).
+
+## ROM path
+**Definition:** Where a game's ROM file sits relative to its Batocera system folder — the filename plus any subfolder — as `gamelist.xml` writes it and as the registry stores it, byte for byte. It is what a game *is* to Batocera, not one of the values describing it: the Game ID derives from it, so it decides the game's file on disk, its dedup key and its web UI address. It is therefore the one thing a correction can change that moves the entry, and the one field no Hand-edited field mark and no Protected game ever covers — a later Import from a ROMs folder still holding the old path will undo the correction or add the game a second time.
+**Code:** `registry.ChangePath`, `registry.ValidatePath`, `registry.RemoveGameFile` in `internal/registry/rompath.go`; `pathError`, `pathConfirmation` in `internal/webui/rompath.go`
+**Do not confuse with:** the Game ID it derives (which drops the subfolder and the extension, so several ROM paths yield one Game ID), or a media reference (also relative to the system folder, but stored in its own right and never derived from this one — a path correction never renames a medium).
 
 ## Consultation site
 **Definition:** The static HTML site (re)generated from the registry's content, letting a user browse games grouped by system (name, description, jaquette) in a web browser instead of opening individual metadata files.

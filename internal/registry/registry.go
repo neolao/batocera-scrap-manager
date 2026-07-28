@@ -149,7 +149,7 @@ func GameID(path string) string {
 // gameFileName derives the name of the JSON file storing g's metadata, from
 // the base name of its ROM path.
 func gameFileName(g gamelist.Game) string {
-	return GameID(g.Path) + ".json"
+	return EntryFileName(GameID(g.Path))
 }
 
 // mediaFields lists accessors for a game's four media references (cover

@@ -14,8 +14,8 @@
 **Code:** `registry.Entry.System` in `internal/registry/registry.go`
 
 ## Gamelist
-**Definition:** A `gamelist.xml` file (EmulationStation/Batocera convention) listing a system's games with their already-scraped metadata and media.
-**Code:** `gamelist.Game`, `gamelist.Parse` in `internal/gamelist/gamelist.go`
+**Definition:** A `gamelist.xml` file (EmulationStation/Batocera convention) listing a system's games with their already-scraped metadata and media. It also holds things this tool does not manage and has no opinion on — the user's favourites, play counts and last-played dates, the attributes a scraper leaves on a game — which a Completion reads back and writes out untouched rather than dropping: the file is the user's only copy of them, and they never enter the Registry.
+**Code:** `gamelist.Game`, `gamelist.Parse`, `gamelist.UpdateFile` in `internal/gamelist/gamelist.go`
 
 ## Import
 **Definition:** The action of populating the registry from the `gamelist.xml` files already present in the ROMs folders, without duplicating already-known entries (deduplication key: system + ROM filename, ignoring any subfolder prefix — see [`decisions/005`](decisions/005-match-registry-entries-by-rom-filename-not-full-path.md)), while also detecting metadata that changed since the last import. A game with neither a description nor a jaquette locally — meaning it has not actually been scraped yet — is not imported (see [`decisions/007`](decisions/007-skip-empty-games-only-on-import-not-retroactively.md)). A Hand-edited field is the one thing an import never overwrites.

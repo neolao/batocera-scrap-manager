@@ -126,7 +126,7 @@ func romsFolderNeedingCompletion(t *testing.T) (*registry.Registry, string, stri
 		{Path: "./Sonic.zip", Name: "Sonic the Hedgehog"},
 		{Path: "./Streets.zip", Name: "Streets of Rage", Desc: "Three fighters clean up the city."},
 	}
-	if err := gamelist.WriteFile(filepath.Join(system, "gamelist.xml"), localGames); err != nil {
+	if err := gamelist.UpdateFile(filepath.Join(system, "gamelist.xml"), localGames); err != nil {
 		t.Fatalf("failed to write the gamelist: %v", err)
 	}
 

@@ -4,6 +4,7 @@ package gamelist
 
 import (
 	"encoding/xml"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -26,13 +27,52 @@ type Game struct {
 	Players     string `xml:"players,omitempty" json:"players"`
 }
 
+// unmodelledElement is one child of a `<game>` this package does not know
+// about — a favourite mark, a play count, a last-played date, or whatever else
+// Batocera and its scrapers write there. It is captured whole (name,
+// attributes, raw inner content) so a rewrite can put it back exactly as it
+// was found, markup included.
+type unmodelledElement struct {
+	XMLName xml.Name
+	Attrs   []xml.Attr `xml:",any,attr"`
+	Inner   string     `xml:",innerxml"`
+}
+
+// documentGame is a `<game>` as this package round-trips it: the fields Game
+// models, plus everything else the element carried. It stays unexported on
+// purpose — Game itself must remain a plain comparable struct the registry can
+// test with `==`, and must never start carrying values that belong to the
+// user's ROMs folder rather than to the registry (see backlog item 024).
+type documentGame struct {
+	Game
+	Attrs      []xml.Attr          `xml:",any,attr"`
+	Unmodelled []unmodelledElement `xml:",any"`
+}
+
 type gameListXML struct {
-	XMLName xml.Name `xml:"gameList"`
-	Games   []Game   `xml:"game"`
+	XMLName xml.Name       `xml:"gameList"`
+	Games   []documentGame `xml:"game"`
 }
 
 // Parse reads a gamelist.xml document from r and returns its game entries.
+// What the document holds beyond those fields is dropped here: only a rewrite
+// through UpdateFile has any use for it.
 func Parse(r io.Reader) ([]Game, error) {
+	parsed, err := parseDocument(r)
+	if err != nil {
+		return nil, err
+	}
+
+	games := make([]Game, len(parsed))
+	for i, game := range parsed {
+		games[i] = game.Game
+	}
+	return games, nil
+}
+
+// parseDocument reads a gamelist.xml document from r, keeping what this
+// package does not model alongside what it does.
+func parseDocument(r io.Reader) ([]documentGame, error) {
 	var gl gameListXML
 	if err := xml.NewDecoder(r).Decode(&gl); err != nil {
 		return nil, err
@@ -51,8 +91,16 @@ func ParseFile(path string) ([]Game, error) {
 	return Parse(f)
 }
 
-// Write encodes games as a gamelist.xml document to w.
+// Write encodes games as a gamelist.xml document to w. It writes exactly what
+// Game models — use UpdateFile to rewrite an existing document without
+// discarding the rest of it.
 func Write(w io.Writer, games []Game) error {
+	return writeDocument(w, documentGames(games, nil))
+}
+
+// writeDocument encodes games — modelled fields and preserved remainder alike
+// — as a gamelist.xml document to w.
+func writeDocument(w io.Writer, games []documentGame) error {
 	if _, err := io.WriteString(w, xml.Header); err != nil {
 		return err
 	}
@@ -65,19 +113,76 @@ func Write(w io.Writer, games []Game) error {
 	return err
 }
 
+// documentGames pairs each game with whatever preserved was holding for its
+// ROM path, so a rewrite puts it back on the game it came from. A nil
+// preserved — or a game the document did not hold — simply carries nothing.
+func documentGames(games []Game, preserved map[string]documentGame) []documentGame {
+	document := make([]documentGame, len(games))
+	for i, game := range games {
+		document[i] = documentGame{
+			Game:       game,
+			Attrs:      preserved[game.Path].Attrs,
+			Unmodelled: preserved[game.Path].Unmodelled,
+		}
+	}
+	return document
+}
+
+// preservedOf indexes, by ROM path, what each game of the document at path
+// carries that this package does not model. A file that is not there yet
+// yields nothing to preserve and no error — the caller is then simply
+// creating it. A ROM path listed twice keeps the last entry's remainder, a
+// case a game sheet should not present in the first place.
+func preservedOf(path string) (map[string]documentGame, error) {
+	f, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	games, err := parseDocument(f)
+	if err != nil {
+		return nil, err
+	}
+
+	preserved := make(map[string]documentGame, len(games))
+	for _, game := range games {
+		if len(game.Attrs) > 0 || len(game.Unmodelled) > 0 {
+			preserved[game.Path] = game
+		}
+	}
+	return preserved, nil
+}
+
 // defaultFileMode is what a gamelist.xml gets when it did not exist yet. A
 // temporary file is created private to its owner, which would leave Batocera
 // unable to read the list this tool just wrote.
 const defaultFileMode = 0o644
 
-// WriteFile writes games as a gamelist.xml document to the file at path,
-// creating it if needed or replacing it if it already exists. The document is
-// written to a temporary file in the same folder and only then swapped in, so
-// an interrupted or failed write leaves the previous gamelist.xml untouched
-// rather than truncated — it is the user's only copy, under no version
-// control, and it holds fields this tool does not know about (see
-// decisions/026). The file's existing permissions are kept.
-func WriteFile(path string, games []Game) error {
+// UpdateFile rewrites the gamelist.xml at path with games, creating it if it
+// does not exist yet.
+//
+// It reads the document already in place first, and puts back on each game
+// everything that document held which this package does not model — the
+// favourite mark, the play count, the last-played date, the attributes the
+// scraper left on the element. Rebuilding the file from Game alone would erase
+// all of it, and none of it is this tool's to erase: it is the user's, and
+// their game sheet is its only copy (see backlog item 024). Games are matched
+// by ROM path, so one dropped from the list takes its own remainder with it.
+//
+// The document is written to a temporary file in the same folder and only then
+// swapped in, so an interrupted or failed write leaves the previous
+// gamelist.xml untouched rather than truncated (see decisions/026). The file's
+// existing permissions are kept.
+func UpdateFile(path string, games []Game) error {
+	preserved, err := preservedOf(path)
+	if err != nil {
+		return err
+	}
+
 	mode := os.FileMode(defaultFileMode)
 	if info, err := os.Stat(path); err == nil {
 		mode = info.Mode().Perm()
@@ -95,7 +200,7 @@ func WriteFile(path string, games []Game) error {
 		os.Remove(tmpPath)
 	}()
 
-	if err := Write(tmp, games); err != nil {
+	if err := writeDocument(tmp, documentGames(games, preserved)); err != nil {
 		return err
 	}
 	// Flushed before the swap, or a crash right after the rename could leave

@@ -576,7 +576,7 @@ func CompleteRomsFolder(reg *Registry, romsFolder, registryFolder string, onProg
 		failed += systemFailed
 
 		if needsRewrite {
-			if writeErr := gamelist.WriteFile(gamelistPath, games); writeErr != nil {
+			if writeErr := gamelist.UpdateFile(gamelistPath, games); writeErr != nil {
 				return processed, completed, failed, writeErr
 			}
 		}
@@ -689,7 +689,7 @@ func CompleteGame(reg *Registry, romsFolder, registryFolder, system, romFilename
 
 	copyErr := copyFilledMedia(before, games[i], registryFolder, romsFolder, system)
 
-	if writeErr := gamelist.WriteFile(gamelistPath, games); writeErr != nil {
+	if writeErr := gamelist.UpdateFile(gamelistPath, games); writeErr != nil {
 		return false, false, writeErr
 	}
 

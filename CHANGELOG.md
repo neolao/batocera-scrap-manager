@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Completing a ROMs folder no longer erases what Batocera itself wrote into its `gamelist.xml`. Favourites, play counts, last-played dates, and anything else the tool does not manage — including the attributes a scraper leaves on a game — are now read back and written out untouched, instead of disappearing when the file was rebuilt. This applies to `batocera-scrap-manager scrape` and to the completion started from the browser alike. Those values stay in the ROMs folder where they belong: the registry still ignores them entirely.
 - Removing a game whose filename contains a dot before its extension (e.g. `Micro Machines v3.0.zip`) no longer misses the entry — or, worse, matches a different game.
 - A game's media reference pointing outside the registry folder can no longer make a removal erase a file the registry does not own. A media file that cannot be deleted no longer aborts the removal either: the game is still removed and the leftover files are named.
 - `batocera-scrap-manager remove <system> <rom-filename>` now rebuilds the consultation site straight away, so the removed game stops being listed there — until now it kept showing up, with a jaquette pointing at a file that no longer existed, until the next `update`. Should the site fail to be rebuilt, the command still confirms what was removed and says the site is out of date instead of suggesting nothing happened; a removal that fails because the game is unknown leaves the site untouched.

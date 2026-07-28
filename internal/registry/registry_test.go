@@ -1726,3 +1726,103 @@ func TestClone_EmptyRegistry_ReturnsAnEmptyRegistry(t *testing.T) {
 		t.Errorf("Clone() = %v, want an empty registry", clone)
 	}
 }
+
+// writeRomsFolderWithUserData writes a ROMs folder whose game sheet holds, on
+// top of the scraped metadata, what the user's own play sessions left there —
+// the data no completion has any business erasing. desc is the description
+// already present locally: empty leaves a gap for a completion to fill, while
+// a non-empty one makes the game worth importing (a game with neither
+// description nor cover art is deliberately skipped on import).
+func writeRomsFolderWithUserData(t *testing.T, desc string) string {
+	t.Helper()
+
+	localDesc := ""
+	if desc != "" {
+		localDesc = "\n    <desc>" + desc + "</desc>"
+	}
+
+	root := t.TempDir()
+	megadrive := filepath.Join(root, "megadrive")
+	if err := os.MkdirAll(megadrive, 0o755); err != nil {
+		t.Fatalf("mkdir megadrive: %v", err)
+	}
+	doc := `<?xml version="1.0"?>
+<gameList>
+  <game>
+    <path>./Sonic.zip</path>
+    <name>Sonic</name>` + localDesc + `
+    <favorite>true</favorite>
+    <playcount>17</playcount>
+    <lastplayed>20260101T120000</lastplayed>
+  </game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(megadrive, "gamelist.xml"), []byte(doc), 0o644); err != nil {
+		t.Fatalf("write megadrive gamelist: %v", err)
+	}
+	return root
+}
+
+// registryKnowingSonic returns a registry holding a description for Sonic and
+// nothing else, so completing a ROMs folder from it rewrites the game sheet
+// without involving any media.
+func registryKnowingSonic() *Registry {
+	return &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{
+			Path: "./Sonic.zip",
+			Name: "Sonic",
+			Desc: "A blue hedgehog runs very fast.",
+		}},
+	}}
+}
+
+func TestCompleteRomsFolder_GameSheetHoldsTheUsersOwnData_LeavesItInPlace(t *testing.T) {
+	romsFolder := writeRomsFolderWithUserData(t, "")
+	gamelistPath := filepath.Join(romsFolder, "megadrive", "gamelist.xml")
+
+	_, completed, _, err := CompleteRomsFolder(registryKnowingSonic(), romsFolder, t.TempDir(), nil)
+
+	if err != nil {
+		t.Fatalf("CompleteRomsFolder() error = %v, want nil", err)
+	}
+	if completed != 1 {
+		t.Fatalf("completed = %d, want 1 — the description should have been filled", completed)
+	}
+	content, readErr := os.ReadFile(gamelistPath)
+	if readErr != nil {
+		t.Fatalf("reading the completed gamelist: %v", readErr)
+	}
+	got := string(content)
+	if !strings.Contains(got, "<desc>A blue hedgehog runs very fast.</desc>") {
+		t.Errorf("the completion did not fill the description\n--- file ---\n%s", got)
+	}
+	for _, want := range []string{"<favorite>true</favorite>", "<playcount>17</playcount>", "<lastplayed>20260101T120000</lastplayed>"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("completing the ROMs folder erased %s — the user's play history is not ours to drop\n--- file ---\n%s", want, got)
+		}
+	}
+}
+
+func TestImportFromRomsFolder_GameSheetHoldsTheUsersOwnData_KeepsItOutOfTheRegistry(t *testing.T) {
+	romsFolder := writeRomsFolderWithUserData(t, "Already scraped, so the import keeps it.")
+	registryFolder := t.TempDir()
+	reg := &Registry{}
+
+	if _, _, _, err := ImportFromRomsFolder(reg, romsFolder, registryFolder, nil); err != nil {
+		t.Fatalf("ImportFromRomsFolder() error = %v, want nil", err)
+	}
+	if err := Save(registryFolder, reg); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(registryFolder, "megadrive", EntryFileName(GameID("./Sonic.zip"))))
+	if err != nil {
+		t.Fatalf("reading the stored game: %v", err)
+	}
+	// Those values belong to the ROMs folder. The registry indexes scraped
+	// metadata; it has no use for a play count and must not start carrying one.
+	for _, unwanted := range []string{"favorite", "playcount", "lastplayed"} {
+		if strings.Contains(string(content), unwanted) {
+			t.Errorf("the stored game holds %q — the registry must keep ignoring it\n--- file ---\n%s", unwanted, string(content))
+		}
+	}
+}

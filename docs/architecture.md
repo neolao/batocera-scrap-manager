@@ -140,7 +140,15 @@ Three consequences follow from that shape:
 
 Whichever entry point asks for it, a `gamelist.xml` is never opened and truncated in place. The new document is written to a temporary file **in the same folder**, flushed, given the previous file's permissions, then renamed over it — a rename being atomic only within one filesystem, which is why the temporary file cannot live elsewhere. An interruption at any point therefore leaves the previous file intact and, at worst, a stray temporary beside it.
 
-This matters because that file is the user's only copy, sits outside any version control, and holds fields this tool does not model at all (favourites, play counts) which the rewrite reproduces from what it parsed. One consequence is deliberate: what refuses the write is now the folder, not the file, so a `gamelist.xml` left read-only is replaced all the same.
+This matters because that file is the user's only copy and sits outside any version control. One consequence is deliberate: what refuses the write is now the folder, not the file, so a `gamelist.xml` left read-only is replaced all the same.
+
+### Keeping what the tool does not model
+
+A game sheet holds more than the thirteen fields this tool understands: Batocera writes the user's favourites, play counts and last-played dates there, and scrapers leave attributes on the game element itself. Rebuilding the document from the modelled fields alone silently erased all of it — the user asked for descriptions to be filled and lost their play history in exchange.
+
+So a rewrite reads the document already in place first, indexes by ROM path everything each game carried beyond the modelled fields — child elements captured whole, with their attributes and their raw inner markup, plus the attributes of the game element — and writes it back onto the matching game. A game dropped from the list takes its own remainder with it; a game the previous document did not hold simply carries nothing.
+
+Two boundaries are deliberate. The preserved remainder never leaves the game-sheet layer: the type carrying it is unexported, so the registry's own notion of a game stays a plain comparable value that neither stores nor imports a play count — those belong to the ROMs folder, not to an index of scraped metadata. And the preserved elements are re-emitted after the modelled ones rather than at their original position, which EmulationStation does not care about since it looks children up by name.
 
 ## Removing an entry from the registry
 

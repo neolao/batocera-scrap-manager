@@ -181,12 +181,12 @@ func TestWrite_NameWithSpecialXMLCharacters_EscapesAndRoundTrips(t *testing.T) {
 	}
 }
 
-func TestWriteFile_ThenParseFile_RoundTrips(t *testing.T) {
+func TestUpdateFile_ThenParseFile_RoundTrips(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gamelist.xml")
 	games := []Game{{Path: "./Sonic.zip", Name: "Sonic"}}
 
-	if err := WriteFile(path, games); err != nil {
-		t.Fatalf("WriteFile() error = %v, want nil", err)
+	if err := UpdateFile(path, games); err != nil {
+		t.Fatalf("UpdateFile() error = %v, want nil", err)
 	}
 
 	got, err := ParseFile(path)
@@ -198,28 +198,28 @@ func TestWriteFile_ThenParseFile_RoundTrips(t *testing.T) {
 	}
 }
 
-func TestWriteFile_DirectoryDoesNotExist_ReturnsError(t *testing.T) {
+func TestUpdateFile_DirectoryDoesNotExist_ReturnsError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing-dir", "gamelist.xml")
 
-	err := WriteFile(path, []Game{{Path: "./Sonic.zip"}})
+	err := UpdateFile(path, []Game{{Path: "./Sonic.zip"}})
 
 	if err == nil {
-		t.Fatal("WriteFile() error = nil, want error when parent directory does not exist")
+		t.Fatal("UpdateFile() error = nil, want error when parent directory does not exist")
 	}
 	if _, statErr := os.Stat(path); statErr == nil {
 		t.Errorf("file %q should not have been created", path)
 	}
 }
 
-func TestWriteFile_TargetAlreadyExists_ReplacesItLeavingNoOtherFileBehind(t *testing.T) {
+func TestUpdateFile_TargetAlreadyExists_ReplacesItLeavingNoOtherFileBehind(t *testing.T) {
 	folder := t.TempDir()
 	path := filepath.Join(folder, "gamelist.xml")
-	if err := WriteFile(path, []Game{{Path: "./Sonic.zip", Name: "Sonic"}}); err != nil {
-		t.Fatalf("WriteFile() error = %v, want nil", err)
+	if err := UpdateFile(path, []Game{{Path: "./Sonic.zip", Name: "Sonic"}}); err != nil {
+		t.Fatalf("UpdateFile() error = %v, want nil", err)
 	}
 
-	if err := WriteFile(path, []Game{{Path: "./Streets.zip", Name: "Streets of Rage"}}); err != nil {
-		t.Fatalf("WriteFile() error = %v, want nil", err)
+	if err := UpdateFile(path, []Game{{Path: "./Streets.zip", Name: "Streets of Rage"}}); err != nil {
+		t.Fatalf("UpdateFile() error = %v, want nil", err)
 	}
 
 	got, err := ParseFile(path)
@@ -237,7 +237,7 @@ func TestWriteFile_TargetAlreadyExists_ReplacesItLeavingNoOtherFileBehind(t *tes
 	}
 }
 
-func TestWriteFile_FolderRefusesNewFiles_LeavesTheExistingGamelistUntouched(t *testing.T) {
+func TestUpdateFile_FolderRefusesNewFiles_LeavesTheExistingGamelistUntouched(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores directory permissions, so the write cannot be made to fail this way")
 	}
@@ -252,10 +252,10 @@ func TestWriteFile_FolderRefusesNewFiles_LeavesTheExistingGamelistUntouched(t *t
 	}
 	t.Cleanup(func() { _ = os.Chmod(folder, 0o755) })
 
-	err := WriteFile(path, []Game{{Path: "./Sonic.zip", Name: "Sonic"}})
+	err := UpdateFile(path, []Game{{Path: "./Sonic.zip", Name: "Sonic"}})
 
 	if err == nil {
-		t.Fatal("WriteFile() error = nil, want error when the folder refuses new files")
+		t.Fatal("UpdateFile() error = nil, want error when the folder refuses new files")
 	}
 	// The stake of the whole feature: the gamelist is the user's only copy and
 	// holds fields the registry never sees. A refused write must leave it as it
@@ -272,14 +272,14 @@ func TestWriteFile_FolderRefusesNewFiles_LeavesTheExistingGamelistUntouched(t *t
 	}
 }
 
-func TestWriteFile_TargetAlreadyExists_KeepsItsPermissions(t *testing.T) {
+func TestUpdateFile_TargetAlreadyExists_KeepsItsPermissions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gamelist.xml")
 	if err := os.WriteFile(path, []byte(emptyGameListXML), 0o640); err != nil {
 		t.Fatalf("preparing the gamelist: %v", err)
 	}
 
-	if err := WriteFile(path, []Game{{Path: "./Sonic.zip", Name: "Sonic"}}); err != nil {
-		t.Fatalf("WriteFile() error = %v, want nil", err)
+	if err := UpdateFile(path, []Game{{Path: "./Sonic.zip", Name: "Sonic"}}); err != nil {
+		t.Fatalf("UpdateFile() error = %v, want nil", err)
 	}
 
 	info, err := os.Stat(path)
@@ -291,11 +291,11 @@ func TestWriteFile_TargetAlreadyExists_KeepsItsPermissions(t *testing.T) {
 	}
 }
 
-func TestWriteFile_TargetIsNew_IsReadableByEveryone(t *testing.T) {
+func TestUpdateFile_TargetIsNew_IsReadableByEveryone(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gamelist.xml")
 
-	if err := WriteFile(path, []Game{{Path: "./Sonic.zip", Name: "Sonic"}}); err != nil {
-		t.Fatalf("WriteFile() error = %v, want nil", err)
+	if err := UpdateFile(path, []Game{{Path: "./Sonic.zip", Name: "Sonic"}}); err != nil {
+		t.Fatalf("UpdateFile() error = %v, want nil", err)
 	}
 
 	info, err := os.Stat(path)
@@ -323,4 +323,157 @@ func fileNames(t *testing.T, folder string) []string {
 		names[i] = dirEntry.Name()
 	}
 	return names
+}
+
+// gamelistWithUserData is a system's game sheet as Batocera really leaves it:
+// besides the scraped metadata, it holds what the user's own play sessions
+// wrote there, an element carrying markup of its own, and attributes on the
+// <game> element itself. None of it is anything this package models.
+const gamelistWithUserData = `<?xml version="1.0"?>
+<gameList>
+  <game id="1234" source="ScreenScraper.fr">
+    <path>./Sonic.zip</path>
+    <name>Sonic the Hedgehog</name>
+    <favorite>true</favorite>
+    <playcount>17</playcount>
+    <lastplayed>20260101T120000</lastplayed>
+  </game>
+  <game>
+    <path>./Streets.zip</path>
+    <name>Streets of Rage</name>
+    <desc>Three fighters clean up the city.</desc>
+    <hidden>true</hidden>
+    <scrap><source name="ScreenScraper"/>done</scrap>
+  </game>
+</gameList>
+`
+
+// updatedFrom rewrites gamelistWithUserData through UpdateFile after applying
+// change to the games it holds, and returns the resulting document as text —
+// the preserved elements are deliberately absent from Game, so the file itself
+// is the only place they can be observed.
+func updatedFrom(t *testing.T, change func(games []Game)) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "gamelist.xml")
+	if err := os.WriteFile(path, []byte(gamelistWithUserData), 0o644); err != nil {
+		t.Fatalf("preparing the gamelist: %v", err)
+	}
+
+	games, err := ParseFile(path)
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v, want nil", err)
+	}
+	change(games)
+
+	if err := UpdateFile(path, games); err != nil {
+		t.Fatalf("UpdateFile() error = %v, want nil", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading the rewritten gamelist: %v", err)
+	}
+	return string(content)
+}
+
+func TestUpdateFile_CompletedGameHeldTheUsersOwnData_KeepsItWithItsValues(t *testing.T) {
+	got := updatedFrom(t, func(games []Game) {
+		games[0].Desc = "A blue hedgehog runs very fast."
+	})
+
+	if !strings.Contains(got, "<desc>A blue hedgehog runs very fast.</desc>") {
+		t.Errorf("the completion did not take: %s", got)
+	}
+	for _, want := range []string{
+		"<favorite>true</favorite>",
+		"<playcount>17</playcount>",
+		"<lastplayed>20260101T120000</lastplayed>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rewritten gamelist lost %s — that is the user's own play history\n--- file ---\n%s", want, got)
+		}
+	}
+}
+
+func TestUpdateFile_UntouchedGameHeldAnUnmodelledElement_KeepsItToo(t *testing.T) {
+	got := updatedFrom(t, func(games []Game) {
+		games[0].Desc = "Only the first game is completed."
+	})
+
+	if !strings.Contains(got, "<hidden>true</hidden>") {
+		t.Errorf("rewritten gamelist lost the second game's <hidden>, which nothing even asked to change\n--- file ---\n%s", got)
+	}
+}
+
+func TestUpdateFile_UnmodelledElementCarriesMarkup_KeepsItVerbatim(t *testing.T) {
+	got := updatedFrom(t, func(games []Game) {
+		games[0].Desc = "A blue hedgehog runs very fast."
+	})
+
+	if !strings.Contains(got, `<scrap><source name="ScreenScraper"/>done</scrap>`) {
+		t.Errorf("an unmodelled element holding markup of its own was not written back as it was\n--- file ---\n%s", got)
+	}
+}
+
+func TestUpdateFile_GameElementCarriesAttributes_KeepsThem(t *testing.T) {
+	got := updatedFrom(t, func(games []Game) {
+		games[0].Desc = "A blue hedgehog runs very fast."
+	})
+
+	if !strings.Contains(got, `id="1234"`) || !strings.Contains(got, `source="ScreenScraper.fr"`) {
+		t.Errorf("the <game> element lost the attributes it carried\n--- file ---\n%s", got)
+	}
+}
+
+func TestUpdateFile_GameDroppedFromTheList_TakesItsUnmodelledElementsWithIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gamelist.xml")
+	if err := os.WriteFile(path, []byte(gamelistWithUserData), 0o644); err != nil {
+		t.Fatalf("preparing the gamelist: %v", err)
+	}
+	games, err := ParseFile(path)
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v, want nil", err)
+	}
+
+	// Only the first game is written back — the second leaves the document.
+	if err := UpdateFile(path, games[:1]); err != nil {
+		t.Fatalf("UpdateFile() error = %v, want nil", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading the rewritten gamelist: %v", err)
+	}
+	got := string(content)
+	if strings.Contains(got, "<hidden>true</hidden>") {
+		t.Errorf("the dropped game's own elements survived it, re-attached to nothing\n--- file ---\n%s", got)
+	}
+	if !strings.Contains(got, "<playcount>17</playcount>") {
+		t.Errorf("the game that stayed lost what it carried\n--- file ---\n%s", got)
+	}
+}
+
+func TestUpdateFile_RewrittenTwice_DoesNotDuplicateWhatItPreserves(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gamelist.xml")
+	if err := os.WriteFile(path, []byte(gamelistWithUserData), 0o644); err != nil {
+		t.Fatalf("preparing the gamelist: %v", err)
+	}
+	games, err := ParseFile(path)
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v, want nil", err)
+	}
+
+	for range 2 {
+		if err := UpdateFile(path, games); err != nil {
+			t.Fatalf("UpdateFile() error = %v, want nil", err)
+		}
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading the rewritten gamelist: %v", err)
+	}
+	if count := strings.Count(string(content), "<playcount>17</playcount>"); count != 1 {
+		t.Errorf("<playcount> appears %d times after two rewrites, want 1\n--- file ---\n%s", count, string(content))
+	}
 }

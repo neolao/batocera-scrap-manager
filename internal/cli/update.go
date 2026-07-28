@@ -53,7 +53,7 @@ func runUpdate(args []string, out io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(out, "%d added, %d updated, %d unchanged\n", added, updated, unchanged)
+	fmt.Fprintf(out, registry.ImportSummaryFormat+"\n", added, updated, unchanged)
 	return 0
 }
 
@@ -87,6 +87,6 @@ func runUpdateTargeted(reg *registry.Registry, cfg config.Config, path string, o
 		return 1
 	}
 
-	fmt.Fprintf(out, "%d added, %d updated, %d unchanged\n", added, updated, unchanged)
+	fmt.Fprintf(out, registry.ImportSummaryFormat+"\n", added, updated, unchanged)
 	return 0
 }

@@ -74,27 +74,38 @@ Defined in: `internal/registry/registry.go` (passed to the optional `onProgress`
 | Field | Type | Notes |
 |---|---|---|
 | Folder | string | the configured ROMs folder this line accounts for |
-| Processed | int | games looked at in that folder |
-| Completed | int | games the registry actually filled |
-| Failed | int | games whose media could not be copied back |
-| Problem | string | empty when the folder was completed to the end; otherwise the sentence naming what stopped it — the counts reached before the failure are kept |
+| Counts | [3]int | the three counts of whichever job produced it — `processed/completed/failed` for a completion, `added/updated/unchanged` for an import |
+| Problem | string | empty when the folder was gone through to the end; otherwise the sentence naming what stopped it — the counts reached before the failure are kept |
 
-`Summary()` words the three counts through `registry.CompletionSummaryFormat`, the same pattern the `scrape` command prints.
-Defined in: `internal/webui/complete.go`
+The counts are positional because the two jobs count different things under the same shape; each job's `jobDescription.Format` (`registry.CompletionSummaryFormat` or `registry.ImportSummaryFormat`) is what words them, so no line of a page can drift from what the CLI prints.
+Defined in: `internal/webui/job.go`
 
-## completionReport
+## jobReport
 | Field | Type | Notes |
 |---|---|---|
 | Running | bool | a run is in flight; the only state emitting the page's auto-reload |
 | StartedAt | string | `15:04:05` of the run's start |
 | Elapsed | string | time since the start while running, total duration once over |
 | Current | string | the folder being processed, plus `— system: game` once the domain reports one |
-| Folders | []folderReport | one line per folder, appended as each finishes |
-| Summary | string | the folders' counts added up, worded like the CLI's |
-| Failed | bool | any folder carries a `Problem` |
+| Folders | []folderLine | one line per folder (`Folder`, `Summary`, `Problem`), its counts already worded |
+| Totals | [3]int | the folders' counts added up, for a page that has to word its own verdict |
+| Summary | string | those same totals, already worded |
+| Totalled | bool | whether the totals say anything the per-folder lines do not — they do not with a single folder |
+| Failed | bool | the run itself failed, or any folder carries a `Problem` |
+| Problem | string | a failure of the run as a whole, beyond any one folder (a registry that could not be written) |
+| Caveat | string | a reservation on a run that did apply (a consultation site left stale) — never counted as a failure |
 
-A copy taken under `completionState`'s own mutex, so a template never reads a field the run is writing. `Totalled()` reports whether `Summary` says anything the per-folder lines do not — it does not with a single folder.
-Defined in: `internal/webui/complete.go`
+A copy taken under `jobs`' own mutex, so a template never reads a field the run is writing.
+Defined in: `internal/webui/job.go`
+
+## jobView
+| Field | Type | Notes |
+|---|---|---|
+| Report | *jobReport | this job kind's own last (or current) run, nil until one happened |
+| Other | jobKind | the opposite kind when it is holding the shared slot, empty otherwise |
+
+Both come from a single lock, or a run ending between two reads would leave the page contradicting itself. One slot is shared by the import and the completion — see [`decisions/027`](decisions/027-one-background-job-at-a-time-whichever-direction-it-goes.md).
+Defined in: `internal/webui/job.go`
 
 ## SystemView / GameView
 | Field | Type | Notes |

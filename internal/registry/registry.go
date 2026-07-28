@@ -341,6 +341,13 @@ type ProgressEvent struct {
 	GameName  string
 }
 
+// ImportSummaryFormat words the outcome of an import: how many games the
+// registry gained, how many it refreshed, and how many it already held as
+// they are. Like CompletionSummaryFormat, it is a constant rather than each
+// caller's own literal, so the update command and the web UI report the very
+// same sentence for the very same operation.
+const ImportSummaryFormat = "%d added, %d updated, %d unchanged"
+
 // ImportFromRomsFolder scans the immediate subdirectories of romsFolder (each
 // one a Batocera system) for a gamelist.xml file, parses it, and imports its
 // entries into reg. Subdirectories without a gamelist.xml are skipped
@@ -521,6 +528,13 @@ func findGameByFilename(games []gamelist.Game, romFilename string) int {
 	return -1
 }
 
+// CompletionSummaryFormat words the outcome of a completion: how many games
+// were looked at, how many the registry could fill, and how many could not be
+// written back. It is a constant rather than each caller's own literal so the
+// CLI and the web UI report the very same sentence — the wording is part of
+// what the two entry points share, like the operation itself.
+const CompletionSummaryFormat = "%d processed, %d completed, %d failed"
+
 // CompletionEvent describes one game being examined by CompleteRomsFolder,
 // for callers that want to report progress to the user as it runs. It has
 // the same shape as ProgressEvent (both describe a game's position within
@@ -541,13 +555,6 @@ type CompletionEvent = ProgressEvent
 // actually had a field filled from the registry (whether or not copying its
 // media then succeeded) — games left untouched because they were already
 // complete, or unknown to the registry, produce no event.
-// CompletionSummaryFormat words the outcome of a completion: how many games
-// were looked at, how many the registry could fill, and how many could not be
-// written back. It is a constant rather than each caller's own literal so the
-// CLI and the web UI report the very same sentence — the wording is part of
-// what the two entry points share, like the operation itself.
-const CompletionSummaryFormat = "%d processed, %d completed, %d failed"
-
 func CompleteRomsFolder(reg *Registry, romsFolder, registryFolder string, onProgress func(CompletionEvent)) (processed, completed, failed int, err error) {
 	dirEntries, err := os.ReadDir(romsFolder)
 	if err != nil {

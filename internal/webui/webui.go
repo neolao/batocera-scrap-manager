@@ -27,10 +27,12 @@ import (
 const mediaURLPrefix = "/media/"
 
 // Handler returns the HTTP handler serving reg's content, reading media
-// files from registryFolder. The registry is a snapshot: the handler
-// renders reg as it was given, it never reloads it from disk. romsFolders is
-// the configured list of Batocera ROMs folders, which the completion writes
-// back to; none configured is a valid state, not an error.
+// files from registryFolder. The registry is a snapshot: the handler renders
+// reg as it was given and never reloads it from disk, but a change made
+// through the web UI — a correction, a deletion, an import — replaces it, so
+// the result shows straight away. romsFolders is the configured list of
+// Batocera ROMs folders the two long operations read from and write back to;
+// none configured is a valid state, not an error.
 func Handler(reg *registry.Registry, registryFolder string, romsFolders []string) http.Handler {
 	ui := &webUI{reg: reg, registryFolder: registryFolder, romsFolders: romsFolders}
 
@@ -49,9 +51,12 @@ func Handler(reg *registry.Registry, registryFolder string, romsFolders []string
 	mux.HandleFunc("GET /game/{system}/{id}/delete", ui.serveDeleteConfirmation)
 	mux.HandleFunc("POST /game/{system}/{id}/delete", ui.deleteGame)
 	mux.HandleFunc("/game/{system}/{id}/delete", ui.serveWrongDeleteMethod)
+	mux.HandleFunc("GET "+importURL, ui.serveImport)
+	mux.HandleFunc("POST "+importURL, ui.startImport)
+	mux.HandleFunc(importURL, serveWrongJobMethod)
 	mux.HandleFunc("GET "+completeURL, ui.serveComplete)
 	mux.HandleFunc("POST "+completeURL, ui.startCompletion)
-	mux.HandleFunc(completeURL, ui.serveWrongCompleteMethod)
+	mux.HandleFunc(completeURL, serveWrongJobMethod)
 	mux.Handle("GET "+mediaURLPrefix, http.StripPrefix(mediaURLPrefix,
 		http.FileServer(fileOnlyFS{http.Dir(registryFolder)})))
 	mux.HandleFunc("/", ui.serveUnknownPage)
@@ -59,29 +64,35 @@ func Handler(reg *registry.Registry, registryFolder string, romsFolders []string
 }
 
 // webUI holds what every page needs: the registry snapshot to render, the
-// folder its media files are read from, and the ROMs folders the completion
-// writes back to. Requests are served concurrently and a correction replaces
-// the snapshot, so mu guards every access to reg — the readers as much as the
-// writer. romsFolders is fixed for the process's lifetime (the configuration
-// is read once, when serve starts), so it needs no guarding.
+// folder its media files are read from, and the ROMs folders the import reads
+// and the completion writes back to. Requests are served concurrently and a
+// change replaces the snapshot, so mu guards every access to reg — the readers
+// as much as the writers. romsFolders is fixed for the process's lifetime (the
+// configuration is read once, when serve starts), so it needs no guarding.
 type webUI struct {
 	mu             sync.RWMutex
 	reg            *registry.Registry
 	registryFolder string
 	romsFolders    []string
-	// completion tracks the one completion of the ROMs folders the server runs
-	// at a time. It guards itself: a run outlives its request and must not hold
-	// mu, which every served page needs.
-	completion completionState
+	// jobs tracks the one long operation the server runs at a time, whichever
+	// direction it goes. It guards itself: a run outlives its request and must
+	// not hold mu, which every served page needs.
+	jobs jobs
 }
 
 // homeView is the summary of the registry: what systems it holds and how many
 // games each has, plus the confirmation of a deletion that redirected here.
 // The home page is where a deletion lands when it emptied its system — the
 // deleted game's own page is gone, and so is its system's.
+//
+// Configured reports whether there is any ROMs folder at all, which is what
+// decides between offering the two maintenance flows and naming the command
+// that configures one: a button leading to a dead end is worse than a
+// sentence.
 type homeView struct {
-	Systems []systemSummary
-	Deleted string
+	Systems    []systemSummary
+	Deleted    string
+	Configured bool
 }
 
 // systemSummary is one system on the home page, and one entry of the system
@@ -157,8 +168,9 @@ func (ui *webUI) serveHome(w http.ResponseWriter, r *http.Request) {
 
 	query := r.URL.Query()
 	render(w, http.StatusOK, homeTemplate, homeView{
-		Systems: summaries,
-		Deleted: deletedConfirmation(query.Get(deletedParam), query.Get(systemParam), query[warningParam]),
+		Systems:    summaries,
+		Deleted:    deletedConfirmation(query.Get(deletedParam), query.Get(systemParam), query[warningParam]),
+		Configured: len(ui.romsFolders) > 0,
 	})
 }
 
@@ -402,16 +414,34 @@ func newPage(name, body string) *template.Template {
 // its own paginated list. It names no game on purpose: a registry of several
 // thousand games would otherwise be serialized into the very first page a
 // browser opens.
+//
+// The two maintenance flows are offered above that summary, and outside the
+// "is the registry empty" branch: an empty registry is exactly when importing
+// matters most. Each is named by the direction it goes rather than by its verb
+// alone — "import" and "complete" are equally opaque, and only one of the two
+// writes into the user's own Batocera files.
 var homeTemplate = newPage("home", `
 {{define "body"}}
 <main>
 {{if .Deleted}}<p class="banner" id="deleted" role="status" tabindex="-1">{{.Deleted}}</p>{{end}}
+<h2 class="system__title">Maintenance</h2>
+{{if .Configured}}
+<div class="home__actions">
+<div class="home__action">
+<a class="button" href="`+importURL+`">Import from the ROMs folders</a>
+<p class="home__note">Brings what Batocera already scraped into the registry.</p>
+</div>
+<div class="home__action">
+<a class="button" href="`+completeURL+`">Complete the ROMs folders</a>
+<p class="home__note">Writes what the registry knows back into Batocera.</p>
+</div>
+</div>
+{{else}}
+<p class="home__note">No ROMs folder is configured yet. Add one with <code>batocera-scrap-manager config add-roms-folder &lt;path&gt;</code>, then restart the server.</p>
+{{end}}
 {{if not .Systems}}
 <p class="empty-state">No games in the registry yet.</p>
 {{else}}
-<div class="home__actions">
-<a class="button" href="`+completeURL+`">Complete the ROMs folders</a>
-</div>
 <h2 class="system__title">Systems</h2>
 <ul class="systems">
 {{range .Systems}}

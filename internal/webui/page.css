@@ -215,7 +215,7 @@
 /* Pushed away from the actions it sits next to, so it is not clicked for one
    of them on a wrapped row. */
 .meta__delete { margin-left: auto; }
-/* The completion of the ROMs folders: what it is doing, then what it did. */
+/* A long operation on the ROMs folders: what it is doing, then what it did. */
 .run { max-width: 40rem; margin-bottom: 2rem; }
 .run__lead { margin: 0 0 0.75rem; }
 .run__current, .run__note { margin: 0 0 0.75rem; font-size: 0.85rem; color: var(--ink-dim); }
@@ -239,6 +239,9 @@
 }
 .run__counts { display: block; font-size: 0.85rem; color: var(--ink); }
 .run__problem { display: block; margin-top: 0.25rem; font-size: 0.85rem; color: var(--magenta); overflow-wrap: anywhere; }
+/* A reservation on a run that did apply — deliberately not the colour a
+   failure is given, or it would be read as one. */
+.run__caveat { margin: 0.75rem 0 0; font-size: 0.85rem; color: var(--ink-dim); overflow-wrap: anywhere; }
 .run__total {
   margin: 0;
   font-family: var(--font-display);
@@ -346,7 +349,12 @@ textarea.field__control { resize: vertical; line-height: 1.6; }
 .banner:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 /* The home page's own actions, above the systems: the list can run long, and
    a control sitting under it would be out of reach on a phone. */
-.home__actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0 0 1.5rem; }
+.home__actions { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; margin: 0 0 1.5rem; }
+/* Each action carries the direction it goes under it: the two verbs alone are
+   equally opaque, and only one of them writes into the user's own files. */
+.home__action { display: flex; flex-direction: column; align-items: flex-start; gap: 0.4rem; max-width: 20rem; }
+.home__note { margin: 0 0 1.5rem; font-size: 0.85rem; color: var(--ink-dim); }
+.home__action .home__note { margin: 0; }
 /* The home page: one row per system, sized as a comfortable tap target. */
 .systems {
   display: grid;

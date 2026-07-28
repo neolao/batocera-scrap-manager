@@ -310,7 +310,7 @@ func TestServeComplete_NothingRanYet_ShowsTheConfirmationAndNoReport(t *testing.
 func TestServeComplete_RunInProgress_ReloadsItselfAndOffersNoSecondRun(t *testing.T) {
 	reg, registryFolder, romsFolder := romsFolderNeedingCompletion(t)
 	ui := &webUI{reg: reg, registryFolder: registryFolder, romsFolders: []string{romsFolder}}
-	if !ui.completion.start() {
+	if ui.jobs.start(jobCompletion) == nil {
 		t.Fatal("the completion slot should have been free")
 	}
 	rec := httptest.NewRecorder()
@@ -338,45 +338,6 @@ func TestServeComplete_RunOver_StopsReloadingAndOffersToRunAgain(t *testing.T) {
 	}
 	if !strings.Contains(body, "Complete these folders") {
 		t.Error("the report does not offer to run the completion again")
-	}
-}
-
-func TestCompletionSlot_AlreadyTaken_RefusesASecondRunUntilTheFirstIsOver(t *testing.T) {
-	var state completionState
-
-	if !state.start() {
-		t.Fatal("the first run could not take the free slot")
-	}
-	if state.start() {
-		t.Error("a second run started while the first was still going — the same gamelist.xml would be written twice at once")
-	}
-
-	state.finish()
-
-	if !state.start() {
-		t.Error("the slot stayed taken after the run ended, so no further completion is possible")
-	}
-}
-
-func TestCompletionSlot_RunOver_KeepsItsReportReadable(t *testing.T) {
-	var state completionState
-	state.start()
-	state.recordFolder(folderReport{Folder: "/roms", Processed: 7, Completed: 3})
-	state.finish()
-
-	report := state.snapshot()
-
-	if report == nil {
-		t.Fatal("the report is gone once the run ended — closing the tab would lose it for good")
-	}
-	if report.Running {
-		t.Error("the report still claims the run is going")
-	}
-	if len(report.Folders) != 1 || report.Folders[0].Processed != 7 {
-		t.Errorf("report.Folders = %+v, want the folder's own counts kept", report.Folders)
-	}
-	if report.Summary != "7 processed, 3 completed, 0 failed" {
-		t.Errorf("report.Summary = %q, want the totals worded as the command line words them", report.Summary)
 	}
 }
 

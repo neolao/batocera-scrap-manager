@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 depends_on: [015]
 ---
 # View And Edit The ROM Path

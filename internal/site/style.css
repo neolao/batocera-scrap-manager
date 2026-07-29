@@ -147,14 +147,6 @@ main { max-width: 72rem; margin: 0 auto; padding: 0 1.25rem 2rem; }
   letter-spacing: 0.03em;
   color: var(--ink);
 }
-.card__meta {
-  display: block;
-  margin: 0 0 0.4rem;
-  font-family: var(--font-display);
-  font-size: 0.65rem;
-  letter-spacing: 0.1em;
-  color: var(--ink-dim);
-}
 .card__desc {
   margin: 0;
   font-size: 0.9rem;
@@ -209,7 +201,6 @@ main { max-width: 72rem; margin: 0 auto; padding: 0 1.25rem 2rem; }
     padding: 0.5rem 0.85rem 0.5rem 0;
   }
   .card__name { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-  .card__meta { margin: 0 0 0 auto; flex: 0 0 auto; }
   .card__desc { display: none; }
 }
 @media (max-width: 480px) {

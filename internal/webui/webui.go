@@ -108,7 +108,6 @@ type systemSummary struct {
 type gameCard struct {
 	Name     string
 	Desc     string
-	Year     string
 	URL      string
 	ImageURL string
 }

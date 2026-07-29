@@ -53,7 +53,9 @@ Four kinds of pages are served, sharing the static site's look:
 
 A game is addressed by the same identifier the registry already uses to name its file on disk, so no second matching rule is introduced — which is also why correcting a game's ROM path changes the address of its own page. An address designating an unknown system or an unknown game — or one that is simply malformed, or asks for a page number beyond the last of a system — answers with a "not found" page in the same style, naming what could not be found and offering a link back, rather than a blank page, an empty list or a server error. Media files are read from the registry folder only: no address can reach a file outside it, and the folders themselves are never listed.
 
-On a small screen, a game is shown as a compact row — thumbnail, name, release year — rather than a full-width card, so about a dozen games fit on screen instead of roughly one; the same applies to the static site. Every link and button stays large enough to be tapped, and no page overflows sideways.
+On a small screen, a game is shown as a compact row — thumbnail and name — rather than a full-width card, so about a dozen games fit on screen instead of roughly one; the same applies to the static site. Every link and button stays large enough to be tapped, and no page overflows sideways.
+
+A list identifies a game by its name and its cover art alone: neither the served list nor the static site's grid repeats the release year, which the game's own page and the static site's detail view already carry. On a compact row the year had taken the right-hand end of the line, which now goes to the game's name.
 
 The registry is read once, when the server starts: after an `update` run from the command line, the server must be restarted to reflect the changes. Changes made from the server's own pages are the exception — a correction, protecting or unprotecting a game, deleting one, and importing the ROMs folders are applied to what the server serves as well as to the disk, so they show immediately.
 

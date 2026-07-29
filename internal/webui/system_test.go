@@ -257,6 +257,33 @@ func TestServeSystem_GameWithoutJaquette_RendersPlaceholderNotABrokenImage(t *te
 	}
 }
 
+func TestServeSystem_GameCards_DoNotShowTheReleaseYear(t *testing.T) {
+	// The list is browsed by name and cover art; the game's own page carries
+	// the year for whoever wants it.
+	reg, registryFolder := fullyScrapedRegistry(t)
+
+	body := get(t, Handler(reg, registryFolder, nil), "/system/megadrive").Body.String()
+
+	if strings.Contains(body, "1991") {
+		t.Errorf("system page still shows the release year, got: %s", body)
+	}
+	if strings.Contains(body, "card__meta") {
+		t.Errorf("system page still renders a year slot on its cards, got: %s", body)
+	}
+}
+
+func TestServeSystem_GameCards_StillNameTheGamesTheyLinkTo(t *testing.T) {
+	reg, registryFolder := fullyScrapedRegistry(t)
+
+	body := get(t, Handler(reg, registryFolder, nil), "/system/megadrive").Body.String()
+
+	for _, want := range []string{"Sonic the Hedgehog", "A blue hedgehog runs very fast through Green Hill Zone."} {
+		if !strings.Contains(body, want) {
+			t.Errorf("system page does not contain %q, got: %s", want, body)
+		}
+	}
+}
+
 func TestServeSystem_IsNotServedWithNoStoreCaching(t *testing.T) {
 	// no-store defeats the browser's scroll restoration, so going back to the
 	// list after opening a game would jump back to the top of the page.

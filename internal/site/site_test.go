@@ -186,8 +186,9 @@ func TestGenerate_EmbeddedStylesheet_TurnsCardsIntoCompactRowsOnSmallScreens(t *
 	}
 }
 
-func TestGenerate_GameCard_ShowsTheReleaseYearNextToTheName(t *testing.T) {
-	// A compact row has no description to tell two releases apart; the year does.
+func TestGenerate_GameCard_DoesNotShowTheReleaseYear(t *testing.T) {
+	// The list is browsed by name and cover art; the year only crowds the card,
+	// and the modal still carries it for whoever wants it.
 	registryFolder := t.TempDir()
 	reg := &registry.Registry{
 		Entries: []registry.Entry{
@@ -201,14 +202,41 @@ func TestGenerate_GameCard_ShowsTheReleaseYearNextToTheName(t *testing.T) {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
-	html := readIndex(t, registryFolder)
+	card := extractCard(t, readIndex(t, registryFolder))
 
-	if !strings.Contains(html, `<span class="card__meta">1991</span>`) {
-		t.Errorf("the card does not show the release year, got: %s", html)
+	if strings.Contains(card, "1991") {
+		t.Errorf("the card still shows the release year, got: %s", card)
+	}
+	if strings.Contains(card, "card__meta") {
+		t.Errorf("the card still renders a year slot, got: %s", card)
 	}
 }
 
-func TestGenerate_GameCardWithoutReleaseYear_ShowsNoEmptyYearSlot(t *testing.T) {
+func TestGenerate_GameCard_WithoutTheYear_StillShowsNameAndDescription(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{
+		Entries: []registry.Entry{
+			{System: "megadrive", Game: gamelist.Game{
+				Path: "Sonic.zip", Name: "Sonic the Hedgehog",
+				Desc: "A blue hedgehog runs fast.", ReleaseDate: "19910623T000000",
+			}},
+		},
+	}
+
+	if err := Generate(reg, registryFolder); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	card := extractCard(t, readIndex(t, registryFolder))
+
+	for _, want := range []string{"Sonic the Hedgehog", "A blue hedgehog runs fast."} {
+		if !strings.Contains(card, want) {
+			t.Errorf("the card does not contain %q, got: %s", want, card)
+		}
+	}
+}
+
+func TestGenerate_GameCardOfAGameWithoutReleaseDate_RendersLikeTheOthers(t *testing.T) {
 	registryFolder := t.TempDir()
 	reg := &registry.Registry{
 		Entries: []registry.Entry{
@@ -220,10 +248,13 @@ func TestGenerate_GameCardWithoutReleaseYear_ShowsNoEmptyYearSlot(t *testing.T) 
 		t.Fatalf("Generate() error = %v", err)
 	}
 
-	html := readIndex(t, registryFolder)
+	card := extractCard(t, readIndex(t, registryFolder))
 
-	if strings.Contains(html, `class="card__meta"`) {
-		t.Errorf("the card renders an empty year slot, got: %s", html)
+	if !strings.Contains(card, "Sonic the Hedgehog") {
+		t.Errorf("the card does not name the game, got: %s", card)
+	}
+	if strings.Contains(card, "card__meta") {
+		t.Errorf("the card renders a year slot, got: %s", card)
 	}
 }
 
@@ -798,6 +829,19 @@ func extractTag(t *testing.T, html, tagName string) string {
 	match := re.FindString(html)
 	if match == "" {
 		t.Fatalf("index.html does not contain a <%s> element, got: %s", tagName, html)
+	}
+	return match
+}
+
+// extractCard returns the markup of the first game card of the page — the
+// modals repeat the same values further down, so an assertion about what a
+// card shows has to be scoped to the card itself.
+func extractCard(t *testing.T, html string) string {
+	t.Helper()
+	re := regexp.MustCompile(`(?s)<a class="card"[^>]*>.*?</a>`)
+	match := re.FindString(html)
+	if match == "" {
+		t.Fatalf("index.html does not contain a game card, got: %s", html)
 	}
 	return match
 }

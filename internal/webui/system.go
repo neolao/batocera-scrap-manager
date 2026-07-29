@@ -145,7 +145,6 @@ func gameCards(games []site.GameView) []gameCard {
 		cards[i] = gameCard{
 			Name:     game.Name,
 			Desc:     game.Desc,
-			Year:     game.Year,
 			URL:      gameURL(game.System, game.ID),
 			ImageURL: mediaURL(game.ImagePath),
 		}
@@ -182,7 +181,6 @@ var systemTemplate = newPage("system", `
 </div>
 <div class="card__body">
 <h3 class="card__name">{{.Name}}</h3>
-{{if .Year}}<span class="card__meta">{{.Year}}</span>{{end}}
 <p class="card__desc">{{.Desc}}</p>
 </div>
 </a>

@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # Send One Game To A Chosen ROMs Folder
 
@@ -18,3 +18,5 @@ The domain operation already exists: `registry.CompleteGame` (`internal/registry
 Open question to settle when implementing: `CompleteGame` returns `ErrGameNotFound` when the game is absent from the target folder's `gamelist.xml` — completion fills gaps, it never adds a game to a folder that does not hold the ROM. The page must state that outcome plainly rather than claiming a success; whether sending should instead *add* the game is deliberately out of scope here.
 
 Unlike the whole-folder import and completion, this touches one game and runs in milliseconds, so it needs neither the background job slot nor the shared job page (see `decisions/025` and `decisions/027`) — a plain form post on the game's own page is enough. It writes outside the registry into files under no version control, so it confirms before writing, like the other completion entry points.
+
+**Scope added while implementing (2026-07-29):** the Product Owner asked for the choice between filling the folder's gaps and *replacing* what it holds. The fourth acceptance criterion above therefore describes the **fill** rule alone — the replace rule overwrites deliberately, which is the whole point of offering it. Replacing turned out to be a new domain operation rather than a setting of the existing one, since Completion is defined everywhere in this codebase as the flow that never overwrites; see `decisions/030`.

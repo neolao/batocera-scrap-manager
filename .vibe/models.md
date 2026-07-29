@@ -107,6 +107,26 @@ Defined in: `internal/webui/job.go`
 Both come from a single lock, or a run ending between two reads would leave the page contradicting itself. One slot is shared by the import and the completion — see [`decisions/027`](decisions/027-one-background-job-at-a-time-whichever-direction-it-goes.md).
 Defined in: `internal/webui/job.go`
 
+## sendMode
+| Field | Type | Notes |
+|---|---|---|
+| Value | string | what the form submits and what the query carries: `fill` or `replace` |
+| Label | string | how the game page and the confirmation both name the rule |
+| Note | string | the one sentence saying what the rule does to a value the folder already holds — the only difference that matters between the two, never left to be inferred from the verb |
+
+`sendModes` is the table of the two, in the order the game page offers them: filling first, since it cannot lose anything. It is what maps a submitted value to `registry.CompleteGame` or `registry.ReplaceGame`, and what a request's rule is validated against.
+Defined in: `internal/webui/send.go`
+
+## sendConfirmation
+| Field | Type | Notes |
+|---|---|---|
+| Name, System, SystemURL, GameURL, Action | string | the game being sent and where the page leads |
+| Folder | string | the one chosen ROMs folder, already checked against the configured list |
+| Mode | sendMode | the chosen rule, carried whole so the page words it from the same table the control did |
+| Replaces | bool | `Mode.Value == "replace"`; what the template branches on for the warning wording and the danger styling |
+| Problem | string | empty on the first attempt; otherwise why the folder could not be written to, the page being shown again rather than a dead-end error |
+Defined in: `internal/webui/send.go`
+
 ## SystemView / GameView
 | Field | Type | Notes |
 |---|---|---|

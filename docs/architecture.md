@@ -22,7 +22,7 @@ The heart of the tool: a centralized index of all already-known games, along wit
 Turns the registry's content into HTML, so it can be browsed in a web browser without opening individual metadata files. It is the shared presentation layer: it both writes the static site regenerated on every update, and provides the theme, the grouping by system and the formatting (rating stars, release year, safely encoded media links) reused by the web server, so both renderings stay consistent.
 
 **Web server**
-Serves the registry's content over HTTP on demand: a summary of the systems, one paginated list of games per system, one page per game, the form correcting a game's metadata and the ROM file identifying it, the page confirming a game's deletion, one page per long operation on the ROMs folders (importing them into the registry, completing them from it), and the media files themselves. Unlike the static site, each game and each system has its own address, which is what makes a game reachable, linkable, editable and deletable.
+Serves the registry's content over HTTP on demand: a summary of the systems, one paginated list of games per system, one page per game, the form correcting a game's metadata and the ROM file identifying it, the page confirming a game's deletion, the page confirming that one game be sent to one chosen ROMs folder, one page per long operation on the ROMs folders (importing them into the registry, completing them from it), and the media files themselves. Unlike the static site, each game and each system has its own address, which is what makes a game reachable, linkable, editable and deletable.
 
 **Commit of a registry change**
 Writing the registry and regenerating the consultation site derived from it always go together, so the two never drift apart. Both the commands and the web server go through the same single place to do it, which also tells apart the case where the registry itself was written but only the site could not be regenerated.
@@ -75,6 +75,8 @@ flowchart LR
   PROT --> COMMIT
   SRV --> DEL["Delete: confirm then erase"]
   DEL --> COMMIT
+  SRV --> SEND["Send one game: confirm, then fill or replace"]
+  SEND --> ROMS["One chosen ROMs folder"]
   SRV --> JOB["Import / Complete: one background run at a time"]
   JOB --> COMMIT
   SRV --> MEDIA["Media files"]
@@ -111,7 +113,7 @@ Each game therefore records which of its values were corrected by hand. An impor
 
 Marking happens only for the values a correction actually changes: opening the form and saving it untouched freezes nothing. A registry written by an earlier version of the tool, which knows nothing of these marks, keeps loading normally with no value protected, and a game nobody corrected is stored exactly as it was before.
 
-The correction lives in the registry: the ROMs folder keeps its own value, so Batocera itself still shows the badly scraped one until it is fixed there too. Completing a ROMs folder from the registry does not fix it either, since completion only ever fills fields left empty locally.
+The correction lives in the registry: the ROMs folder keeps its own value, so Batocera itself still shows the badly scraped one until it is fixed there too. Completing a ROMs folder from the registry does not fix it, since completion only ever fills fields left empty locally. Sending that one game to a folder and asking for a replacement rather than a fill is what does — see "Sending one game to a chosen ROMs folder".
 
 ## Protecting a whole game
 
@@ -154,6 +156,25 @@ That shape is shared by the import and the completion alike, and so are its cons
 - **The snapshot is captured, not held.** A run reads the registry the server is serving, but takes the read lock only long enough to grab it. Because every change applies to a copy and swaps it in, the copy the run holds stays valid and untouched — so a correction saved meanwhile neither waits for the run nor disturbs it.
 - **A folder that cannot be read stops the run**, exactly as the command line stops: the folders already gone through keep their counts, and the report names the one that failed with what went wrong. The alternative — carrying on to the next folder — was rejected so that the two entry points onto one operation never differ in what they mean.
 - **A page that follows a run says so, and can be told to stop.** The auto-reload is the only way a run can show its own end without JavaScript, but a page resetting itself every five seconds is unreadable to anyone slow to scan it, and to a screen reader. So the interval is stated in words, and a link turns the reloading off while showing the very same page.
+
+### Sending one game to a chosen ROMs folder
+
+Completing every configured folder is all-or-nothing, and the command line's targeted mode derives the folder from the ROM file's real path on disk — which means knowing where that file sits. Neither fits the moment right after a game was corrected in the browser, when one game has to reach one folder. So a game's page offers to send that game to a folder **chosen** among those configured, rather than deduced.
+
+It is deliberately not a background run: one game is a parse, a merge and a rewrite, so it happens inside its own request and needs neither the shared exclusion slot nor a page to follow it. It still confirms first, on a page of its own, for the same reason the whole-folder completion does — it writes outside the registry, into files under no version control.
+
+**Two rules, told apart by name.** The page also asks *what* to write, and this is where a genuinely new operation appears. Completion is defined, everywhere in this tool, as the flow that fills gaps and never overwrites — so overwriting cannot be a setting of it. Replacement is therefore a second operation of the registry, standing beside completion rather than parameterizing it: two things that mean opposite things about the user's files must be nameable apart at the call site, in the tests and in the vocabulary. What the two genuinely share — finding the game in the folder's game sheet, copying the media, rewriting the file — is factored one level below, into a helper neither name leaks into, parameterized by the merge rule alone.
+
+Replacement is bounded by two rules that keep it from destroying more than asked:
+
+- **An empty registry value never blanks the folder's.** The registry not knowing something is no reason to make the user lose what their own folder holds — so a game's genre survives a replacement by a registry entry that has none.
+- **A medium is written only when it differs.** Comparing the bytes before writing costs one read of a file already being copied, and buys two things: a repeat send rewrites nothing, and it can honestly report that nothing changed. Without it, every send after the first would claim to have changed something. It also makes the media the *reason* a replacement can be a real change even when every text value already matched — the folder and the registry can name the same `images/Sonic.png` and hold two different pictures, which the reference alone cannot reveal.
+
+Nothing is ever deleted: a replacement pointing at a differently named medium leaves the folder's previous file in place, unused. Erasing a user's file that nothing asked about is the one thing this flow refuses to do on its own.
+
+**What the folder and the rule are checked against.** This is the flow where a request names a place on the disk to write to, so the folder is accepted only when it appears word for word in the configuration, and the rule only when it is one of the two offered. Either failing is one refusal, not two: the page's own control cannot produce either, so whatever did is not worth telling apart. The usual same-site check and body cap apply as they do to every other submission.
+
+**What comes back.** The registry is only read here — no clone to persist, no snapshot to swap in, no consultation site to regenerate — so the read lock is held just long enough to capture what the run needs. Four outcomes travel back to the game's page, each naming the folder, since the point of the flow is that one was chosen among several: the folder was written to (worded differently for the two rules), it was already up to date, it was written to but a medium could not be copied there, or its game sheet does not list that game at all. That last one is neither a success nor an error: sending fills in what a folder already lists and never adds a game to a folder that does not hold its ROM — whether it *should* be able to is deliberately left out of this flow. A folder that could not be written to at all re-renders the confirmation page with what went wrong, so the send can be retried from where it failed, exactly as a failed deletion does.
 
 ### Writing a game sheet safely
 

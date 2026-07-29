@@ -48,6 +48,9 @@ func Handler(reg *registry.Registry, registryFolder string, romsFolders []string
 	mux.HandleFunc("/game/{system}/{id}/edit", ui.serveWrongMethod)
 	mux.HandleFunc("POST /game/{system}/{id}/protect", ui.setProtection)
 	mux.HandleFunc("/game/{system}/{id}/protect", ui.serveWrongProtectMethod)
+	mux.HandleFunc("GET /game/{system}/{id}/send", ui.serveSendConfirmation)
+	mux.HandleFunc("POST /game/{system}/{id}/send", ui.sendGame)
+	mux.HandleFunc("/game/{system}/{id}/send", ui.serveWrongSendMethod)
 	mux.HandleFunc("GET /game/{system}/{id}/delete", ui.serveDeleteConfirmation)
 	mux.HandleFunc("POST /game/{system}/{id}/delete", ui.deleteGame)
 	mux.HandleFunc("/game/{system}/{id}/delete", ui.serveWrongDeleteMethod)
@@ -135,6 +138,9 @@ type gameDetail struct {
 	// Protection states, in words, whether updates may refresh this game, and
 	// offers the one control that state allows.
 	Protection protectionControl
+	// Send offers to write this game into one of the configured ROMs folders,
+	// under one of the two rules a send may follow.
+	Send sendControl
 }
 
 // extraMedium is a labelled still image of a game beyond its cover art
@@ -247,6 +253,7 @@ func (ui *webUI) gameDetail(entry registry.Entry) gameDetail {
 		EditURL:    gameURL(view.System, view.ID) + "/edit",
 		DeleteURL:  gameURL(view.System, view.ID) + "/delete",
 		Protection: protectionOf(entry, view.System, view.ID),
+		Send:       sendControlOf(view.System, view.ID, ui.romsFolders),
 		RomPath:    entry.Game.Path,
 		Desc:       view.Desc,
 		CoverURL:   mediaURL(view.ImagePath),
@@ -495,6 +502,36 @@ var gameTemplate = newPage("game", `
 </div>
 </div>
 </div>
+<section class="send">
+<h3 class="send__title">Send to a ROMs folder</h3>
+{{if .Send.Folders}}
+<p class="send__lead">Writes what the registry knows about this game into one Batocera folder, this game alone.</p>
+<form class="send__form" method="get" action="{{.Send.Action}}">
+<div class="field">
+<label class="field__label" for="send-folder">ROMs folder</label>
+<select class="field__control field__control--path" id="send-folder" name="`+sendFolderParam+`">
+{{range .Send.Folders}}<option value="{{.}}">{{.}}</option>
+{{end}}
+</select>
+</div>
+<fieldset class="field">
+<legend class="field__label">What to write</legend>
+{{range $index, $mode := .Send.Modes}}
+<label class="send__mode">
+<input type="radio" name="`+sendModeParam+`" value="{{$mode.Value}}"{{if not $index}} checked{{end}}>
+<span class="send__mode-label">{{$mode.Label}}</span>
+<span class="send__mode-note">{{$mode.Note}}</span>
+</label>
+{{end}}
+</fieldset>
+<div class="form__actions">
+<button class="button" type="submit">Choose and confirm</button>
+</div>
+</form>
+{{else}}
+<p class="send__lead">No ROMs folder is configured yet. Add one with <code>batocera-scrap-manager config add-roms-folder &lt;path&gt;</code>, then restart the server.</p>
+{{end}}
+</section>
 {{if or .VideoURL .Extras}}
 <section class="media">
 <h3 class="media__title">Media</h3>

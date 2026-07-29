@@ -5,6 +5,7 @@
 package registry
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -153,14 +154,35 @@ func gameFileName(g gamelist.Game) string {
 }
 
 // mediaFields lists accessors for a game's four media references (cover
-// art, video, marquee, thumbnail), letting Remove, copyGameMedia, and
-// copyFilledMedia iterate a single list instead of separately hardcoding
-// these same four fields.
+// art, video, marquee, thumbnail), letting Remove, copyGameMedia,
+// copyFilledMedia and copyEveryMedium iterate a single list instead of
+// separately hardcoding these same four fields.
 var mediaFields = []func(*gamelist.Game) *string{
 	func(g *gamelist.Game) *string { return &g.Image },
 	func(g *gamelist.Game) *string { return &g.Video },
 	func(g *gamelist.Game) *string { return &g.Marquee },
 	func(g *gamelist.Game) *string { return &g.Thumbnail },
+}
+
+// gameFields lists accessors for every value of a local game entry the
+// registry can write into. Both write rules — filling the gaps and replacing
+// what is there — walk this one table rather than each re-listing the twelve
+// fields, so a field added to Game is never honoured by one and forgotten by
+// the other. The ROM path is deliberately absent: it identifies the entry
+// rather than describing it, and no send ever moves a game.
+var gameFields = []func(*gamelist.Game) *string{
+	func(g *gamelist.Game) *string { return &g.Name },
+	func(g *gamelist.Game) *string { return &g.Desc },
+	func(g *gamelist.Game) *string { return &g.Image },
+	func(g *gamelist.Game) *string { return &g.Video },
+	func(g *gamelist.Game) *string { return &g.Marquee },
+	func(g *gamelist.Game) *string { return &g.Thumbnail },
+	func(g *gamelist.Game) *string { return &g.Rating },
+	func(g *gamelist.Game) *string { return &g.ReleaseDate },
+	func(g *gamelist.Game) *string { return &g.Developer },
+	func(g *gamelist.Game) *string { return &g.Publisher },
+	func(g *gamelist.Game) *string { return &g.Genre },
+	func(g *gamelist.Game) *string { return &g.Players },
 }
 
 // ErrGameNotFound is returned by Remove and RemoveByID when no entry matches
@@ -453,23 +475,42 @@ func copyGameMedia(srcRoot, dstRoot, system string, g gamelist.Game) error {
 // folder, as referenced in gamelist.xml) from srcRoot to dstRoot. An empty
 // relPath, or a referenced file missing on disk, is silently ignored.
 func copyMediaFile(srcRoot, dstRoot, system, relPath string) error {
+	_, err := writeMediaFile(srcRoot, dstRoot, system, relPath)
+	return err
+}
+
+// writeMediaFile does the copying, and reports whether it actually wrote — what
+// callers replacing a folder's media need in order to tell a run that changed
+// something from one that found everything already right.
+//
+// A destination already holding the same bytes is left alone. The folders
+// written here are the user's own, outside any version control, and a rewrite
+// that changes nothing still costs them a file whose timestamp moved for no
+// reason.
+func writeMediaFile(srcRoot, dstRoot, system, relPath string) (written bool, err error) {
 	if relPath == "" {
-		return nil
+		return false, nil
 	}
 
 	data, err := os.ReadFile(filepath.Join(srcRoot, system, relPath))
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		return false, nil
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	dst := filepath.Join(dstRoot, system, relPath)
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
+	if current, readErr := os.ReadFile(dst); readErr == nil && bytes.Equal(current, data) {
+		return false, nil
 	}
-	return os.WriteFile(dst, data, 0o644)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return false, err
+	}
+	if err := os.WriteFile(dst, data, 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // ImportGame imports a single local game entry, identified by system and
@@ -623,24 +664,30 @@ func completeSystemGames(reg *Registry, games []gamelist.Game, romsFolder, regis
 // field of src, reporting whether anything was filled.
 func mergeGame(dst *gamelist.Game, src gamelist.Game) bool {
 	changed := false
-	fill := func(d *string, s string) {
+	for _, field := range gameFields {
+		d, s := field(dst), *field(&src)
 		if *d == "" && s != "" {
 			*d = s
 			changed = true
 		}
 	}
-	fill(&dst.Name, src.Name)
-	fill(&dst.Desc, src.Desc)
-	fill(&dst.Image, src.Image)
-	fill(&dst.Video, src.Video)
-	fill(&dst.Marquee, src.Marquee)
-	fill(&dst.Thumbnail, src.Thumbnail)
-	fill(&dst.Rating, src.Rating)
-	fill(&dst.ReleaseDate, src.ReleaseDate)
-	fill(&dst.Developer, src.Developer)
-	fill(&dst.Publisher, src.Publisher)
-	fill(&dst.Genre, src.Genre)
-	fill(&dst.Players, src.Players)
+	return changed
+}
+
+// overwriteGame writes every value src holds over dst's, reporting whether any
+// of them actually changed. A field src holds empty leaves dst's alone: the
+// registry not knowing something is no reason to make the user lose what their
+// own folder holds (see decisions/030). It is the exact opposite of mergeGame,
+// and is what a Replacement rests on rather than a Completion.
+func overwriteGame(dst *gamelist.Game, src gamelist.Game) bool {
+	changed := false
+	for _, field := range gameFields {
+		d, s := field(dst), *field(&src)
+		if s != "" && *d != s {
+			*d = s
+			changed = true
+		}
+	}
 	return changed
 }
 
@@ -671,6 +718,60 @@ func fillGameFromRegistry(reg *Registry, games []gamelist.Game, i int, system st
 // CompleteRomsFolder's per-game failure handling. If onProgress is
 // non-nil, it is called once, only when a field was actually filled.
 func CompleteGame(reg *Registry, romsFolder, registryFolder, system, romFilename string, onProgress func(CompletionEvent)) (completed, failed bool, err error) {
+	return sendGame(reg, romsFolder, registryFolder, system, romFilename, fillGaps, onProgress)
+}
+
+// ReplaceGame writes what reg knows about a single local game entry over what
+// the folder holds, instead of only filling its gaps: it is the deliberate
+// opposite of CompleteGame, and it is a separate operation rather than a mode
+// of it because the two mean opposite things about the user's own files (see
+// decisions/030). The game is identified the same way, and the same results
+// are reported — replaced tells whether anything actually changed, failed
+// whether writing a medium then failed with the gamelist.xml still rewritten,
+// and ErrGameNotFound whether the folder or the registry does not hold it.
+//
+// Two rules bound what it may destroy: a field reg holds empty never blanks
+// the folder's value, and a medium is written only when the file already there
+// is missing or holds different bytes — so a repeat replacement rewrites
+// nothing and honestly reports that nothing changed.
+func ReplaceGame(reg *Registry, romsFolder, registryFolder, system, romFilename string, onProgress func(CompletionEvent)) (replaced, failed bool, err error) {
+	return sendGame(reg, romsFolder, registryFolder, system, romFilename, overwrite, onProgress)
+}
+
+// writeRule is how one registry entry is written into a local game entry: it
+// mutates dst, copies from srcRoot into dstRoot whatever media doing so brought
+// in, and reports whether anything changed at all — in dst or on disk. It is
+// the single parameter telling CompleteGame's flow from ReplaceGame's, which
+// are otherwise identical step for step.
+type writeRule func(dst *gamelist.Game, src gamelist.Game, srcRoot, dstRoot, system string) (changed bool, copyErr error)
+
+// fillGaps is a Completion's rule: only the empty fields of dst are filled, and
+// only the media those newly filled references brought in are copied.
+func fillGaps(dst *gamelist.Game, src gamelist.Game, srcRoot, dstRoot, system string) (bool, error) {
+	before := *dst
+	if !mergeGame(dst, src) {
+		return false, nil
+	}
+	return true, copyFilledMedia(before, *dst, srcRoot, dstRoot, system)
+}
+
+// overwrite is a Replacement's rule: every value src holds wins over dst's, and
+// every medium dst then refers to is written into dstRoot unless the file
+// already there is identical. A folder whose values all already match can still
+// be changed by this — its cover art file may differ while its reference does
+// not — which is why the copy's own verdict counts as a change.
+func overwrite(dst *gamelist.Game, src gamelist.Game, srcRoot, dstRoot, system string) (bool, error) {
+	changed := overwriteGame(dst, src)
+	copied, err := copyEveryMedium(*dst, srcRoot, dstRoot, system)
+	return changed || copied, err
+}
+
+// sendGame is what CompleteGame and ReplaceGame both do: find the game in the
+// folder's own gamelist.xml, write reg's knowledge of it into that entry under
+// the rule given, and rewrite the file. The media are copied before the
+// rewrite, so a medium that could not be written still leaves the metadata
+// filled — a per-game failure, never a fatal one.
+func sendGame(reg *Registry, romsFolder, registryFolder, system, romFilename string, write writeRule, onProgress func(CompletionEvent)) (changed, failed bool, err error) {
 	gamelistPath := filepath.Join(romsFolder, system, "gamelist.xml")
 	games, parseErr := gamelist.ParseFile(gamelistPath)
 	if parseErr != nil {
@@ -682,19 +783,21 @@ func CompleteGame(reg *Registry, romsFolder, registryFolder, system, romFilename
 		return false, false, ErrGameNotFound
 	}
 
-	found, changed, before := fillGameFromRegistry(reg, games, i, system)
-	if !found {
+	j := reg.indexOf(system, games[i].Path)
+	if j == -1 {
 		return false, false, ErrGameNotFound
 	}
-	if !changed {
-		return false, false, nil
+
+	written, copyErr := write(&games[i], reg.Entries[j].Game, registryFolder, romsFolder, system)
+	if !written {
+		// Nothing to rewrite the file for. A media failure is still reported: it
+		// is the reason nothing changed, not a sign that nothing needed to.
+		return false, copyErr != nil, nil
 	}
 
 	if onProgress != nil {
 		onProgress(CompletionEvent{System: system, GameIndex: i + 1, GameCount: len(games), GameName: games[i].Name})
 	}
-
-	copyErr := copyFilledMedia(before, games[i], registryFolder, romsFolder, system)
 
 	if writeErr := gamelist.UpdateFile(gamelistPath, games); writeErr != nil {
 		return false, false, writeErr
@@ -704,6 +807,25 @@ func CompleteGame(reg *Registry, romsFolder, registryFolder, system, romFilename
 		return false, true, nil
 	}
 	return true, false, nil
+}
+
+// copyEveryMedium writes, from srcRoot into dstRoot, every medium g refers to,
+// over whatever sits there, and reports whether any file was actually written.
+// It is a Replacement's counterpart to copyFilledMedia: the reference alone
+// cannot tell whether the folder holds the right file, since the same relative
+// path names a different image in each of the two folders.
+//
+// A reference srcRoot holds no file for copies nothing, which is not a failure
+// — a gamelist.xml may well name media that were never scraped.
+func copyEveryMedium(g gamelist.Game, srcRoot, dstRoot, system string) (copied bool, err error) {
+	for _, field := range mediaFields {
+		written, err := writeMediaFile(srcRoot, dstRoot, system, *field(&g))
+		if err != nil {
+			return copied, err
+		}
+		copied = copied || written
+	}
+	return copied, nil
 }
 
 // copyFilledMedia copies, from srcRoot into dstRoot, every media file whose

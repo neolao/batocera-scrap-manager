@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Send One Game To A Chosen ROMs Folder
 

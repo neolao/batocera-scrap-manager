@@ -1826,3 +1826,263 @@ func TestImportFromRomsFolder_GameSheetHoldsTheUsersOwnData_KeepsItOutOfTheRegis
 		}
 	}
 }
+
+func TestReplaceGame_LocalValuePresent_OverwritesItWithTheRegistrys(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	replaced, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", nil)
+
+	if err != nil {
+		t.Fatalf("ReplaceGame() error = %v, want nil", err)
+	}
+	if !replaced {
+		t.Error("replaced = false, want true (the local description differs from the registry's)")
+	}
+	if failed {
+		t.Error("failed = true, want false")
+	}
+
+	goldenAxe := localGame(t, romsFolder, "megadrive", "Golden Axe")
+	if goldenAxe.Desc != "A different desc, should not overwrite." {
+		t.Errorf("Golden Axe.Desc = %q, want the registry's value written over the local one", goldenAxe.Desc)
+	}
+}
+
+func TestReplaceGame_RegistryFieldEmpty_LeavesTheLocalValueInPlace(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	if _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", nil); err != nil {
+		t.Fatalf("ReplaceGame() error = %v, want nil", err)
+	}
+
+	// The registry's Golden Axe entry holds no genre at all: not knowing a value
+	// is no reason to make the user lose the one their own folder holds.
+	goldenAxe := localGame(t, romsFolder, "megadrive", "Golden Axe")
+	if goldenAxe.Genre != "Beat 'em up" {
+		t.Errorf("Golden Axe.Genre = %q, want %q kept: the registry holds no genre for it", goldenAxe.Genre, "Beat 'em up")
+	}
+}
+
+func TestReplaceGame_SameMediaReferenceOtherFile_WritesTheRegistrysFileOver(t *testing.T) {
+	romsFolder := writeRomsFolderWithStaleCoverArt(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	replaced, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	if err != nil {
+		t.Fatalf("ReplaceGame() error = %v, want nil", err)
+	}
+	if failed {
+		t.Error("failed = true, want false")
+	}
+	// Every metadata field already matches the registry's: the cover art file is
+	// the only thing that differs, and it is what makes this a real change.
+	if !replaced {
+		t.Error("replaced = false, want true (the folder's cover art file differs from the registry's)")
+	}
+
+	cover, err := os.ReadFile(filepath.Join(romsFolder, "megadrive", "images", "Sonic.png"))
+	if err != nil {
+		t.Fatalf("read the folder's cover art: %v", err)
+	}
+	if string(cover) != "fake-cover-art" {
+		t.Errorf("the folder's cover art = %q, want the registry's %q written over it", string(cover), "fake-cover-art")
+	}
+}
+
+func TestReplaceGame_SecondIdenticalRun_ReportsNothingChangedAndWritesNothing(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	if _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil); err != nil {
+		t.Fatalf("first ReplaceGame() error = %v, want nil", err)
+	}
+
+	// A read-only system folder is what proves nothing is written: rewriting the
+	// gamelist.xml or the cover art would fail outright.
+	makeSystemFolderReadOnly(t, filepath.Join(romsFolder, "megadrive"))
+
+	replaced, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	if err != nil {
+		t.Fatalf("second ReplaceGame() error = %v, want nil: nothing differs, so nothing should be written", err)
+	}
+	if replaced {
+		t.Error("replaced = true, want false (the folder already holds exactly what the registry knows)")
+	}
+	if failed {
+		t.Error("failed = true, want false")
+	}
+}
+
+func TestReplaceGame_OtherGamesOfTheFolder_AreLeftUntouched(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	if _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil); err != nil {
+		t.Fatalf("ReplaceGame() error = %v, want nil", err)
+	}
+
+	sonic := localGame(t, romsFolder, "megadrive", "Sonic")
+	if sonic.Desc != "A classic platformer." {
+		t.Errorf("Sonic.Desc = %q, want the registry's value", sonic.Desc)
+	}
+	goldenAxe := localGame(t, romsFolder, "megadrive", "Golden Axe")
+	if goldenAxe.Desc != "Already complete" {
+		t.Errorf("Golden Axe.Desc = %q, want left untouched: it is not the targeted game", goldenAxe.Desc)
+	}
+	unknown := localGame(t, romsFolder, "megadrive", "Unknown")
+	if unknown.Desc != "" {
+		t.Errorf("Unknown.Desc = %q, want left untouched: it is not the targeted game", unknown.Desc)
+	}
+}
+
+func TestReplaceGame_RomNotInLocalGamelist_ReturnsErrGameNotFound(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	_, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Ghost.zip", nil)
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Errorf("ReplaceGame() error = %v, want ErrGameNotFound (Ghost.zip is not in the local gamelist.xml)", err)
+	}
+}
+
+func TestReplaceGame_NoMatchingRegistryEntry_ReturnsErrGameNotFound(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	_, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Unknown.zip", nil)
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Errorf("ReplaceGame() error = %v, want ErrGameNotFound (Unknown.zip has no registry entry)", err)
+	}
+}
+
+func TestReplaceGame_SystemHasNoLocalGamelist_ReturnsErrGameNotFound(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	_, _, err := ReplaceGame(reg, romsFolder, registryFolder, "mastersystem", "Alex Kidd.zip", nil)
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Errorf("ReplaceGame() error = %v, want ErrGameNotFound (mastersystem has no local gamelist.xml)", err)
+	}
+}
+
+func TestReplaceGame_MediaCopyFails_ReturnsFailedButStillWritesTheGamelist(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	megadrive := filepath.Join(romsFolder, "megadrive")
+	if err := os.WriteFile(filepath.Join(megadrive, "images"), []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write blocking file: %v", err)
+	}
+
+	replaced, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+
+	if err != nil {
+		t.Fatalf("ReplaceGame() error = %v, want nil (a media failure is per-game, not fatal)", err)
+	}
+	if replaced {
+		t.Error("replaced = true, want false (the cover art could not be written)")
+	}
+	if !failed {
+		t.Error("failed = false, want true")
+	}
+
+	sonic := localGame(t, romsFolder, "megadrive", "Sonic")
+	if sonic.Desc != "A classic platformer." {
+		t.Errorf("Sonic.Desc = %q, want written from the registry despite the media failure", sonic.Desc)
+	}
+}
+
+func TestReplaceGame_LocalGamelistWriteFails_ReturnsError(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	// The registry's Golden Axe entry holds no media, so nothing is copied and
+	// rewriting the gamelist.xml is the only write left to fail.
+	makeSystemFolderReadOnly(t, filepath.Join(romsFolder, "megadrive"))
+
+	_, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", nil)
+
+	if err == nil {
+		t.Fatal("ReplaceGame() error = nil, want an error when the local gamelist.xml cannot be rewritten")
+	}
+}
+
+func TestReplaceGame_ProgressCallback_FiresOnceWithTheGamesLocalPosition(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+
+	var events []CompletionEvent
+	_, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", func(e CompletionEvent) {
+		events = append(events, e)
+	})
+
+	if err != nil {
+		t.Fatalf("ReplaceGame() error = %v, want nil", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d progress events, want 1", len(events))
+	}
+	if events[0].System != "megadrive" || events[0].GameName != "Sonic" || events[0].GameIndex != 1 || events[0].GameCount != 3 {
+		t.Errorf("events[0] = %+v, want System=megadrive GameName=Sonic GameIndex=1 GameCount=3", events[0])
+	}
+}
+
+// writeRomsFolderWithStaleCoverArt writes a ROMs folder whose Sonic entry
+// already holds every value the registry knows — including the very same cover
+// art reference — but whose cover art file on disk is another image. It is what
+// tells a replacement that follows the reference from one that follows the
+// bytes.
+func writeRomsFolderWithStaleCoverArt(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+
+	images := filepath.Join(root, "megadrive", "images")
+	if err := os.MkdirAll(images, 0o755); err != nil {
+		t.Fatalf("mkdir megadrive images: %v", err)
+	}
+	xml := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Sonic.zip</path><name>Sonic</name><desc>A classic platformer.</desc><image>./images/Sonic.png</image><genre>Platform</genre></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(root, "megadrive", "gamelist.xml"), []byte(xml), 0o644); err != nil {
+		t.Fatalf("write megadrive gamelist: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(images, "Sonic.png"), []byte("a blurry cover the registry replaces"), 0o644); err != nil {
+		t.Fatalf("write stale cover art: %v", err)
+	}
+
+	return root
+}
+
+// localGame reads one game out of a ROMs folder's own gamelist.xml, by name.
+func localGame(t *testing.T, romsFolder, system, name string) gamelist.Game {
+	t.Helper()
+
+	games, err := gamelist.ParseFile(filepath.Join(romsFolder, system, "gamelist.xml"))
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v, want nil", err)
+	}
+	for _, g := range games {
+		if g.Name == name {
+			return g
+		}
+	}
+	t.Fatalf("no game named %q in the %s gamelist.xml", name, system)
+	return gamelist.Game{}
+}

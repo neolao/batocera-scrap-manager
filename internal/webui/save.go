@@ -155,6 +155,11 @@ func savedConfirmation(query url.Values) string {
 	if message, found := savedConfirmations[outcome]; found {
 		return message
 	}
+	// A send names the folder it wrote to, which no table can hold — and it never
+	// touches the registry, so none of its outcomes has a stale-site variant.
+	if message := sentConfirmation(query); message != "" {
+		return message
+	}
 
 	base, stale := strings.CutSuffix(outcome, staleSuffix)
 	message := ""

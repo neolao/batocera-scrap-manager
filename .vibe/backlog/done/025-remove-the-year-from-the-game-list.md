@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # Remove The Year From The Game List
 

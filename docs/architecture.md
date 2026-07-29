@@ -22,7 +22,7 @@ The heart of the tool: a centralized index of all already-known games, along wit
 Turns the registry's content into HTML, so it can be browsed in a web browser without opening individual metadata files. It is the shared presentation layer: it both writes the static site regenerated on every update, and provides the theme, the grouping by system and the formatting (rating stars, release year, safely encoded media links) reused by the web server, so both renderings stay consistent.
 
 **Web server**
-Serves the registry's content over HTTP on demand: a summary of the systems, one paginated list of games per system, one page per game, the form correcting a game's metadata and the ROM file identifying it, the page confirming a game's deletion, the page confirming that one game be sent to one chosen ROMs folder, one page per long operation on the ROMs folders (importing them into the registry, completing them from it), and the media files themselves. Unlike the static site, each game and each system has its own address, which is what makes a game reachable, linkable, editable and deletable.
+Serves the registry's content over HTTP on demand: a summary of the systems, one paginated list of games per system, one page per game, the form correcting a game's metadata and the ROM file identifying it, the controls managing a game's four media and the page confirming one of them be erased, the page confirming a game's deletion, the page confirming that one game be sent to one chosen ROMs folder, one page per long operation on the ROMs folders (importing them into the registry, completing them from it), and the media files themselves. Unlike the static site, each game and each system has its own address, which is what makes a game reachable, linkable, editable and deletable.
 
 **Commit of a registry change**
 Writing the registry and regenerating the consultation site derived from it always go together, so the two never drift apart. Both the commands and the web server go through the same single place to do it, which also tells apart the case where the registry itself was written but only the site could not be regenerated.
@@ -79,7 +79,8 @@ flowchart LR
   SEND --> ROMS["One chosen ROMs folder"]
   SRV --> JOB["Import / Complete: one background run at a time"]
   JOB --> COMMIT
-  SRV --> MEDIA["Media files"]
+  SRV --> MEDIA["Media: serve the files, upload one, erase one"]
+  MEDIA --> COMMIT
   SRV --> NF["Not-found page"]
   EDIT --> COMMIT["Commit: registry + consultation site"]
   SITE["Consultation site"] -. shared theme and formatting .-> SRV
@@ -87,7 +88,7 @@ flowchart LR
 
 ## Correcting a game by hand
 
-A game that was badly scraped can be corrected from its own page, without editing any file or re-running anything. The page links to a form of its own, pre-filled with the eight values a user may fix: name, description, rating, release year, developer, publisher, genre and number of players. The game's media are deliberately absent from it: they are managed by their own flows rather than typed in. The ROM path is present, but as a control of its own — see "Correcting the ROM path" below.
+A game that was badly scraped can be corrected from its own page, without editing any file or re-running anything. The page links to a form of its own, pre-filled with the eight values a user may fix: name, description, rating, release year, developer, publisher, genre and number of players. The game's media are deliberately absent from it: they are files rather than values, and are managed by their own controls — see "Managing a game's media" below. The ROM path is present, but as a control of its own — see "Correcting the ROM path" below.
 
 Two of those values are stored in Batocera's own conventions but displayed in a friendlier, lossier form: the rating as five stars, the release date as its year alone. The form edits what is displayed — a star count, a year — and a value whose displayed form the user did not change keeps its stored value untouched, down to the byte: a rating stored as `0.85` is not degraded to `0.8` just because the form was opened and saved, and a release date keeps its month and day.
 
@@ -104,6 +105,26 @@ Correcting it moves the game's file inside the registry folder, which is the one
 A path is refused, with the registry left strictly untouched, when it is empty, absolute, reaches outside its system's folder through `..`, names no usable file (a folder, an extension with nothing before it, a Windows separator, a control character, a name too long to write), or derives an identifier that already belongs to another game of the same system — that last refusal names both the clashing filename and the game holding it. The duplicate check compares positions rather than identifiers, so a game is never refused its own path.
 
 The media a game references are never renamed or moved along with it: their paths are stored in their own right, relative to the system's folder, and are never derived from the ROM path. Two consequences are deliberately left standing: the ROMs folder is not consulted, so nothing verifies that the corrected path names a file that really exists; and since the path is not protectable, a later update reading a `gamelist.xml` that still holds the old one will overwrite the correction when the identifier is unchanged, or add a second entry beside it when it changed.
+
+## Managing a game's media
+
+Until a medium could be uploaded, a registry held exactly what the last scrape had copied into it: a missing or poor cover art could only be fixed in the ROMs folder and imported back. A game's page therefore carries all four of its media — cover art, video, marquee, thumbnail — each with a control to store a file and, when there is one, a link to erase it.
+
+All four are rendered whether or not the game has them: a section showing only what exists could not offer to add what does not. Three states are told apart, because they call for different words — a medium really present (shown), one the entry refers to but whose file is not in the registry folder (named, so the dangling reference is visible rather than a broken image), and one the game simply does not have.
+
+**The stored file is named by the registry, never by the client.** This is the first flow of the tool that takes a *file* out of a request, and the decision it turned on is recorded as [`decisions/031`](../.vibe/decisions/031-an-uploaded-medium-is-named-by-the-registry-never-by-the-client.md): the destination is composed from the game's identifier, the medium's own subfolder and suffix, and the extension of the submitted filename — `images/<id>-image.png`, `videos/<id>-video.mp4`, and so on, following what Batocera's own scrapers write beside a ROM. The submitted filename is read for its extension and for nothing else. A name taken from a request is a path to anywhere; deriving one means only what the registry could have named is ever written, so no `../..`, no absolute path and no other game's file is reachable however the upload is crafted. The extension itself is accepted only from a list held per medium, since a video stored as a cover art would render as a broken image on every page showing the game.
+
+The four media are described by a single table — the accessor onto a game, the subfolder, the suffix, the accepted extensions — which is the very table the removal of a game and every media copy of the tool already walk. A medium added later therefore cannot be honoured by one function and forgotten by another.
+
+**Writing comes first; erasing comes after.** An upload writes its file before the registry records it: the file is what fulfills the intent, so the reverse order would leave a page claiming a medium that is not on disk. Deriving the name makes replacement fall out naturally — the same medium re-uploaded under the same extension lands on the same file and overwrites it, while a different extension yields a different file, whose predecessor is erased *after* the registry holds the new reference. That is the write-then-erase order established for a ROM path change, and a leftover file is reported as a caveat, never as a failed upload. The previous reference is compared by the file it resolves to rather than by its text, since `./images/foo.png` and `images/foo.png` name the same file and erasing it would destroy what was just written.
+
+A removal keeps the opposite order, for the same reason a game's deletion does: there, the erasure *is* the intent, so it is the commit point and what the server serves is updated the moment the file is gone. A file that could not be erased is a plain failure that changes nothing and re-renders the confirmation page, so the removal can be retried from where it failed; a reference resolving outside the system's folder is a different matter — it is not the registry's to erase, so the reference is emptied and the file left alone, reported as a caveat.
+
+**Nothing is half-written.** The bytes go to a temporary file in the destination's own folder and are renamed over it only once the copy succeeded — the same technique used for a `gamelist.xml`, and what makes a refused upload leave the registry untouched. An upload is capped, and the cap is enforced while the body is read rather than trusted from a declared length, so an oversized one is cut off; because of the temporary file, that leaves neither a truncated medium nor a stray file behind. The body is read *before* the registry's write lock is taken: a 64 MB upload over a slow network would otherwise queue every other page of the site behind it.
+
+A refusal — the wrong file type, too large, no file chosen, an empty file — is not a redirect. The game's page comes back carrying the sentence saying what did not happen, so the controls needed to retry are right there rather than behind a dead-end error page. A success redirects, and the confirmation names the medium: four of them sit on that page, and a confirmation that does not say which one changed confirms nothing.
+
+Only the registry is concerned throughout. The ROMs folders are never written to here, so a medium removed by mistake comes back with the next import — and, symmetrically, a medium uploaded here reaches Batocera only by sending that game to a folder with the replacement rule.
 
 ## Keeping a hand-made correction
 

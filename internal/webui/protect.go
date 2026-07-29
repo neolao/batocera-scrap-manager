@@ -129,11 +129,3 @@ func requestedProtection(state string) (apply func(*registry.Registry, string, s
 		return nil, "", false
 	}
 }
-
-// serveWrongProtectMethod refuses a method the protect URL does not support.
-// It only ever accepts a submission — there is nothing to read at that URL.
-func (ui *webUI) serveWrongProtectMethod(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Allow", http.MethodPost)
-	renderProblem(w, http.StatusMethodNotAllowed, "Not allowed",
-		r.Method+" is not something this page accepts.")
-}

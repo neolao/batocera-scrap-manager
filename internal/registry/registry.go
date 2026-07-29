@@ -153,17 +153,6 @@ func gameFileName(g gamelist.Game) string {
 	return EntryFileName(GameID(g.Path))
 }
 
-// mediaFields lists accessors for a game's four media references (cover
-// art, video, marquee, thumbnail), letting Remove, copyGameMedia,
-// copyFilledMedia and copyEveryMedium iterate a single list instead of
-// separately hardcoding these same four fields.
-var mediaFields = []func(*gamelist.Game) *string{
-	func(g *gamelist.Game) *string { return &g.Image },
-	func(g *gamelist.Game) *string { return &g.Video },
-	func(g *gamelist.Game) *string { return &g.Marquee },
-	func(g *gamelist.Game) *string { return &g.Thumbnail },
-}
-
 // gameFields lists accessors for every value of a local game entry the
 // registry can write into. Both write rules — filling the gaps and replacing
 // what is there — walk this one table rather than each re-listing the twelve
@@ -232,8 +221,8 @@ func RemoveByID(reg *Registry, registryFolder, system, id string) error {
 	reg.Entries = append(reg.Entries[:i], reg.Entries[i+1:]...)
 
 	var leftBehind []string
-	for _, field := range mediaFields {
-		relPath := *field(&g)
+	for _, kind := range mediaKinds {
+		relPath := *kind.field(&g)
 		if relPath == "" {
 			continue
 		}
@@ -463,8 +452,8 @@ func hasScrapedData(g gamelist.Game) bool {
 // marquee, thumbnail) from its system folder under romsFolder into the same
 // relative location under registryFolder.
 func copyGameMedia(srcRoot, dstRoot, system string, g gamelist.Game) error {
-	for _, field := range mediaFields {
-		if err := copyMediaFile(srcRoot, dstRoot, system, *field(&g)); err != nil {
+	for _, kind := range mediaKinds {
+		if err := copyMediaFile(srcRoot, dstRoot, system, *kind.field(&g)); err != nil {
 			return err
 		}
 	}
@@ -818,8 +807,8 @@ func sendGame(reg *Registry, romsFolder, registryFolder, system, romFilename str
 // A reference srcRoot holds no file for copies nothing, which is not a failure
 // — a gamelist.xml may well name media that were never scraped.
 func copyEveryMedium(g gamelist.Game, srcRoot, dstRoot, system string) (copied bool, err error) {
-	for _, field := range mediaFields {
-		written, err := writeMediaFile(srcRoot, dstRoot, system, *field(&g))
+	for _, kind := range mediaKinds {
+		written, err := writeMediaFile(srcRoot, dstRoot, system, *kind.field(&g))
 		if err != nil {
 			return copied, err
 		}
@@ -832,8 +821,8 @@ func copyEveryMedium(g gamelist.Game, srcRoot, dstRoot, system string) (copied b
 // reference was newly filled between before and after (i.e. empty in
 // before, non-empty in after).
 func copyFilledMedia(before, after gamelist.Game, srcRoot, dstRoot, system string) error {
-	for _, field := range mediaFields {
-		b, a := *field(&before), *field(&after)
+	for _, kind := range mediaKinds {
+		b, a := *kind.field(&before), *kind.field(&after)
 		if b == "" && a != "" {
 			if err := copyMediaFile(srcRoot, dstRoot, system, a); err != nil {
 				return err

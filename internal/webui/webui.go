@@ -26,6 +26,11 @@ import (
 // files are served.
 const mediaURLPrefix = "/media/"
 
+// readAndSubmit is what most of this site's URLs allow: opening a page, and
+// submitting the form on it. The exceptions are the URLs that only ever take a
+// submission, which name their own single method.
+const readAndSubmit = http.MethodGet + ", " + http.MethodPost
+
 // Handler returns the HTTP handler serving reg's content, reading media
 // files from registryFolder. The registry is a snapshot: the handler renders
 // reg as it was given and never reloads it from disk, but a change made
@@ -45,21 +50,26 @@ func Handler(reg *registry.Registry, registryFolder string, romsFolders []string
 	// The methodless pattern is what answers 405: the catch-all below matches
 	// every method, so the mux's own method-not-allowed handling would never
 	// fire for this URL.
-	mux.HandleFunc("/game/{system}/{id}/edit", ui.serveWrongMethod)
+	mux.HandleFunc("/game/{system}/{id}/edit", allowOnly(readAndSubmit))
 	mux.HandleFunc("POST /game/{system}/{id}/protect", ui.setProtection)
-	mux.HandleFunc("/game/{system}/{id}/protect", ui.serveWrongProtectMethod)
+	mux.HandleFunc("/game/{system}/{id}/protect", allowOnly(http.MethodPost))
 	mux.HandleFunc("GET /game/{system}/{id}/send", ui.serveSendConfirmation)
 	mux.HandleFunc("POST /game/{system}/{id}/send", ui.sendGame)
-	mux.HandleFunc("/game/{system}/{id}/send", ui.serveWrongSendMethod)
+	mux.HandleFunc("/game/{system}/{id}/send", allowOnly(readAndSubmit))
+	mux.HandleFunc("POST /game/{system}/{id}/media/{medium}", ui.uploadMedium)
+	mux.HandleFunc("/game/{system}/{id}/media/{medium}", allowOnly(http.MethodPost))
+	mux.HandleFunc("GET /game/{system}/{id}/media/{medium}/delete", ui.serveMediumDeleteConfirmation)
+	mux.HandleFunc("POST /game/{system}/{id}/media/{medium}/delete", ui.removeMedium)
+	mux.HandleFunc("/game/{system}/{id}/media/{medium}/delete", allowOnly(readAndSubmit))
 	mux.HandleFunc("GET /game/{system}/{id}/delete", ui.serveDeleteConfirmation)
 	mux.HandleFunc("POST /game/{system}/{id}/delete", ui.deleteGame)
-	mux.HandleFunc("/game/{system}/{id}/delete", ui.serveWrongDeleteMethod)
+	mux.HandleFunc("/game/{system}/{id}/delete", allowOnly(readAndSubmit))
 	mux.HandleFunc("GET "+importURL, ui.serveImport)
 	mux.HandleFunc("POST "+importURL, ui.startImport)
-	mux.HandleFunc(importURL, serveWrongJobMethod)
+	mux.HandleFunc(importURL, allowOnly(readAndSubmit))
 	mux.HandleFunc("GET "+completeURL, ui.serveComplete)
 	mux.HandleFunc("POST "+completeURL, ui.startCompletion)
-	mux.HandleFunc(completeURL, serveWrongJobMethod)
+	mux.HandleFunc(completeURL, allowOnly(readAndSubmit))
 	mux.Handle("GET "+mediaURLPrefix, http.StripPrefix(mediaURLPrefix,
 		http.FileServer(fileOnlyFS{http.Dir(registryFolder)})))
 	mux.HandleFunc("/", ui.serveUnknownPage)
@@ -132,22 +142,20 @@ type gameDetail struct {
 	RomPath  string
 	Desc     string
 	CoverURL string
-	VideoURL string
-	Extras   []extraMedium
 	Fields   []metadataField
+	// Media is the four media the game may hold, each with what it currently
+	// holds and the controls managing it. All four are always rendered: a page
+	// showing only what exists could not offer to add what does not.
+	Media []mediumControl
+	// Problem states why a change asked for from this page did not happen — a
+	// refused upload has nothing to redirect to, since nothing changed.
+	Problem string
 	// Protection states, in words, whether updates may refresh this game, and
 	// offers the one control that state allows.
 	Protection protectionControl
 	// Send offers to write this game into one of the configured ROMs folders,
 	// under one of the two rules a send may follow.
 	Send sendControl
-}
-
-// extraMedium is a labelled still image of a game beyond its cover art
-// (marquee, thumbnail), listed only when its file exists.
-type extraMedium struct {
-	Label string
-	URL   string
 }
 
 // metadataField is one labelled metadata row of a game's page. An empty
@@ -257,7 +265,6 @@ func (ui *webUI) gameDetail(entry registry.Entry) gameDetail {
 		RomPath:    entry.Game.Path,
 		Desc:       view.Desc,
 		CoverURL:   mediaURL(view.ImagePath),
-		VideoURL:   mediaURL(view.VideoPath),
 		Fields: []metadataField{
 			{Label: "Rating", Value: ratingValue(view), HandEdited: handEdited("rating")},
 			{Label: "Year", Value: view.Year, HandEdited: handEdited("release_date")},
@@ -268,15 +275,25 @@ func (ui *webUI) gameDetail(entry registry.Entry) gameDetail {
 		},
 	}
 
-	for _, medium := range []struct{ label, path string }{
-		{"Marquee", view.MarqueePath},
-		{"Thumbnail", view.ThumbnailPath},
-	} {
-		if medium.path != "" {
-			detail.Extras = append(detail.Extras, extraMedium{Label: medium.label, URL: mediaURL(medium.path)})
-		}
-	}
+	detail.Media = mediaControlsOf(entry, view.System, view.ID, map[registry.Medium]string{
+		registry.MediumImage:     view.ImagePath,
+		registry.MediumVideo:     view.VideoPath,
+		registry.MediumMarquee:   view.MarqueePath,
+		registry.MediumThumbnail: view.ThumbnailPath,
+	})
 	return detail
+}
+
+// allowOnly answers the themed 405 page for a method a URL does not support,
+// naming the ones it does. Every such URL needs it registered under its own
+// methodless pattern: the catch-all route matches every method, so the mux's
+// own method-not-allowed handling would never fire for them.
+func allowOnly(methods string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Allow", methods)
+		renderProblem(w, http.StatusMethodNotAllowed, "Not allowed",
+			r.Method+" is not something this page accepts.")
+	}
 }
 
 // ratingValue renders a game's rating as stars followed by the same value in
@@ -472,6 +489,12 @@ var gameTemplate = newPage("game", `
 </nav>
 <main>
 {{if .Saved}}<p class="banner" id="saved" role="status" tabindex="-1">{{.Saved}}</p>{{end}}
+{{if .Problem}}
+<div class="errors" role="alert" tabindex="-1" id="errors">
+<p class="errors__title">Nothing was changed</p>
+<p>{{.Problem}}</p>
+</div>
+{{end}}
 <article class="game">
 <h2 class="game__title">{{.Name}}</h2>
 <p class="game__file"><span class="game__file-label">`+pathLabel+`</span> <code>{{.RomPath}}</code></p>
@@ -532,25 +555,33 @@ var gameTemplate = newPage("game", `
 <p class="send__lead">No ROMs folder is configured yet. Add one with <code>batocera-scrap-manager config add-roms-folder &lt;path&gt;</code>, then restart the server.</p>
 {{end}}
 </section>
-{{if or .VideoURL .Extras}}
 <section class="media">
 <h3 class="media__title">Media</h3>
+<p class="media__lead">Stored in the registry. Sending this game to a ROMs folder with the replace rule is what carries them to Batocera.</p>
 <div class="media__grid">
-{{if .VideoURL}}
-<div class="media__item">
-<span class="media__label">Video</span>
-<video src="{{.VideoURL}}" controls muted loop playsinline preload="none"></video>
-</div>
-{{end}}
-{{range .Extras}}
+{{range .Media}}
 <div class="media__item">
 <span class="media__label">{{.Label}}</span>
-<img src="{{.URL}}" alt="{{.Label}} of {{$.Name}}" loading="lazy">
+{{if .URL}}
+{{if .Video}}<video src="{{.URL}}" controls muted loop playsinline preload="none"></video>
+{{else}}<img src="{{.URL}}" alt="{{.Label}} of {{$.Name}}" loading="lazy">{{end}}
+{{else if .Reference}}
+<p class="media__missing">Referred to as <code>{{.Reference}}</code>, but that file is not in the registry.</p>
+{{else}}
+<p class="media__missing">None yet.</p>
+{{end}}
+<form class="media__upload" method="post" action="{{.UploadURL}}" enctype="multipart/form-data">
+<label class="media__file" for="media-{{.Medium}}">Choose a {{.Label}} file<span class="media__accept">Accepted: {{.Accept}}</span></label>
+<input class="field__control" type="file" id="media-{{.Medium}}" name="`+mediaFileParam+`" accept="{{.Accept}}" required>
+<div class="media__actions">
+<button class="button" type="submit">Upload</button>
+{{if .DeleteURL}}<a class="button button--quiet" href="{{.DeleteURL}}">Remove</a>{{end}}
+</div>
+</form>
 </div>
 {{end}}
 </div>
 </section>
-{{end}}
 <a class="back-to-top" href="{{.SystemURL}}">&#9650; Back to {{.System}}</a>
 </article>
 </main>

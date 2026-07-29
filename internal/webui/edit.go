@@ -189,14 +189,6 @@ func (ui *webUI) serveEditForm(w http.ResponseWriter, r *http.Request) {
 	render(w, http.StatusOK, editTemplate, editForm(entry, displayedValues(entry.Game), nil))
 }
 
-// serveWrongMethod refuses a method the game's edit URL does not support,
-// naming the ones it does.
-func (ui *webUI) serveWrongMethod(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
-	renderProblem(w, http.StatusMethodNotAllowed, "Not allowed",
-		r.Method+" is not something this page accepts.")
-}
-
 // editForm builds the form's view for entry, filled with values — the stored
 // ones when the form is first opened, the submitted ones when a refused
 // submission is shown again — and the messages of the fields errs refused.

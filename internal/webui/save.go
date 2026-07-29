@@ -155,9 +155,14 @@ func savedConfirmation(query url.Values) string {
 	if message, found := savedConfirmations[outcome]; found {
 		return message
 	}
-	// A send names the folder it wrote to, which no table can hold — and it never
-	// touches the registry, so none of its outcomes has a stale-site variant.
+	// A send names the folder it wrote to, and a media change the medium it
+	// concerned — neither of which a table keyed by the outcome alone can hold.
+	// Both compose their own caveats too, so they are asked before the stale
+	// suffix is looked for.
 	if message := sentConfirmation(query); message != "" {
+		return message
+	}
+	if message := mediaConfirmation(query); message != "" {
 		return message
 	}
 

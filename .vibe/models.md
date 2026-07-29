@@ -117,6 +117,42 @@ Defined in: `internal/webui/job.go`
 `sendModes` is the table of the two, in the order the game page offers them: filling first, since it cannot lose anything. It is what maps a submitted value to `registry.CompleteGame` or `registry.ReplaceGame`, and what a request's rule is validated against.
 Defined in: `internal/webui/send.go`
 
+## mediumKind (the description of one medium)
+| Field | Type | Notes |
+|---|---|---|
+| name | Medium | `image`, `video`, `marquee` or `thumbnail` — what URLs and submissions carry |
+| field | func(*gamelist.Game) *string | the reference this medium is stored in on a game |
+| folder | string | `images` or `videos` — the subfolder of the system folder it is stored under |
+| suffix | string | `-image`, `-video`, `-marquee`, `-thumb`, following what Batocera's own scrapers write beside a ROM |
+| extensions | []string | the dotted lowercase extensions it accepts, and the list a caller words its refusal from |
+
+`mediaKinds` is the single table of the four, in the order a page offering them renders. It is the enriched successor of the old accessor-only `mediaFields`, and the same table `RemoveByID`, `copyGameMedia`, `copyFilledMedia` and `copyEveryMedium` walk — so a medium added later cannot be honoured by one and forgotten by another. The stored file's name is `<folder>/<gameID><suffix><ext>`, composed here and never taken from a submitted filename (see [`decisions/031`](decisions/031-an-uploaded-medium-is-named-by-the-registry-never-by-the-client.md)).
+Defined in: `internal/registry/media.go`
+
+## mediumControl
+| Field | Type | Notes |
+|---|---|---|
+| Label | string | how the medium is named to a user (`Cover art`, not `image`) |
+| Medium | string | the registry's own name, for the form action and the element ids |
+| URL | string | the served URL, **empty when no file is really in the registry folder** |
+| Reference | string | what the entry stores; non-empty with an empty `URL` means a reference pointing at a file that is not there, which the page names rather than showing broken |
+| Video | bool | whether the preview is a `<video>` rather than an `<img>` |
+| UploadURL | string | where the file control submits |
+| DeleteURL | string | empty when there is nothing to remove — gated on `Reference`, not on `URL`, so a dangling reference can still be cleared |
+| Accept | string | the medium's extensions joined for the `accept` attribute and shown under the control |
+
+All four are always built, whether or not the game holds them: a section showing only what exists could not offer to add what does not.
+Defined in: `internal/webui/media.go`
+
+## mediumDeleteConfirmation
+| Field | Type | Notes |
+|---|---|---|
+| Name, System, SystemURL, GameURL, Action | string | the game whose medium is being erased and where the two ways out lead |
+| Label | string | the medium, named as the user reads it |
+| File | string | the reference about to be erased; empty when the entry holds none, which the page words instead of promising to erase a file it cannot name |
+| Problem | string | empty on the first attempt; otherwise why the file could not be erased, the page being shown again rather than a dead-end error |
+Defined in: `internal/webui/media.go`
+
 ## sendConfirmation
 | Field | Type | Notes |
 |---|---|---|

@@ -376,16 +376,6 @@ func (ui *webUI) startJob(kind jobKind, w http.ResponseWriter, r *http.Request) 
 	return run
 }
 
-// serveWrongJobMethod refuses a method a job's URL does not support, naming
-// the ones it does. Each job needs this registered under its own methodless
-// pattern: the catch-all route matches every method, so the mux's own
-// method-not-allowed handling would never fire for these URLs.
-func serveWrongJobMethod(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
-	renderProblem(w, http.StatusMethodNotAllowed, "Not allowed",
-		r.Method+" is not something this page accepts.")
-}
-
 // jobPartials are the parts of a job's page that are the same for both jobs,
 // word for word: the auto-reload, the list of folders with their counts, the
 // run in progress, and the page a run of the other kind leaves. Everything

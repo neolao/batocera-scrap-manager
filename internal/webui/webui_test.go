@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -138,6 +139,20 @@ func mediaSources(body string) []string {
 		sources = append(sources, html.UnescapeString(match[1]))
 	}
 	return sources
+}
+
+// servedMediaOf lists the distinct registry media a page requests. Distinct,
+// because a page may legitimately show one medium in two places — the cover art
+// is both the game's own illustration and one of the four media it manages —
+// and what matters is which files it asks the server for.
+func servedMediaOf(body string) []string {
+	var served []string
+	for _, src := range mediaSources(body) {
+		if strings.HasPrefix(src, mediaURLPrefix) && !slices.Contains(served, src) {
+			served = append(served, src)
+		}
+	}
+	return served
 }
 
 func TestHandler_HomePage_ListsEachSystemWithItsGameCount(t *testing.T) {
@@ -399,18 +414,14 @@ func TestHandler_GameWithSpecialCharacters_LinksAndMediaRoundTrip(t *testing.T) 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET %s = %d, want 200", links[0], rec.Code)
 	}
-	var mediaRequested int
-	for _, src := range mediaSources(rec.Body.String()) {
-		if !strings.HasPrefix(src, "/media/") {
-			continue
-		}
-		mediaRequested++
+	requested := servedMediaOf(rec.Body.String())
+	for _, src := range requested {
 		if mediaRec := get(t, h, src); mediaRec.Code != http.StatusOK {
 			t.Errorf("GET %s = %d, want 200", src, mediaRec.Code)
 		}
 	}
-	if mediaRequested != 1 {
-		t.Errorf("game page references %d media files, want 1", mediaRequested)
+	if len(requested) != 1 {
+		t.Errorf("game page references %d media files, want 1 (files: %v)", len(requested), requested)
 	}
 }
 
@@ -444,12 +455,8 @@ func TestHandler_DotPrefixedMediaPath_IsServedWithoutARedirect(t *testing.T) {
 
 	body := get(t, h, "/game/megadrive/Sonic").Body.String()
 
-	var checked int
-	for _, src := range mediaSources(body) {
-		if !strings.HasPrefix(src, "/media/") {
-			continue
-		}
-		checked++
+	checked := servedMediaOf(body)
+	for _, src := range checked {
 		if strings.Contains(src, "/./") {
 			t.Errorf("media URL %q is not canonical", src)
 		}
@@ -457,7 +464,7 @@ func TestHandler_DotPrefixedMediaPath_IsServedWithoutARedirect(t *testing.T) {
 			t.Errorf("GET %s = %d, want 200 without any redirect", src, rec.Code)
 		}
 	}
-	if checked != 1 {
-		t.Fatalf("game page references %d media files, want 1", checked)
+	if len(checked) != 1 {
+		t.Fatalf("game page references %d media files, want 1 (files: %v)", len(checked), checked)
 	}
 }

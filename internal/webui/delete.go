@@ -70,15 +70,6 @@ func (ui *webUI) serveDeleteConfirmation(w http.ResponseWriter, r *http.Request)
 	render(w, http.StatusOK, deleteTemplate, deleteForm(entry, registryFolder, ""))
 }
 
-// serveWrongDeleteMethod refuses a method the delete URL does not support,
-// naming the ones it does. It needs its own handler because serveWrongMethod
-// is worded for the edit URL.
-func (ui *webUI) serveWrongDeleteMethod(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
-	renderProblem(w, http.StatusMethodNotAllowed, "Not allowed",
-		r.Method+" is not something this page accepts.")
-}
-
 // deleteGame deletes a game from the registry, writes the consultation site
 // without it, then redirects to the game list — the game's own page no longer
 // exists to redirect back to.

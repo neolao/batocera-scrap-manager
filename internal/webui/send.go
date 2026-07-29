@@ -183,14 +183,6 @@ func (ui *webUI) sendGame(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, sentURL(system, id, folder, mode.Value, outcome), http.StatusSeeOther)
 }
 
-// serveWrongSendMethod refuses a method the send URL does not support. It needs
-// its own handler because serveWrongMethod is worded for the edit URL.
-func (ui *webUI) serveWrongSendMethod(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
-	renderProblem(w, http.StatusMethodNotAllowed, "Not allowed",
-		r.Method+" is not something this page accepts.")
-}
-
 // requestedSend reads the folder and the rule a request named, reporting
 // whether both are ones this server offers. A folder is accepted only when the
 // configuration holds it word for word: this is the flow that writes outside the

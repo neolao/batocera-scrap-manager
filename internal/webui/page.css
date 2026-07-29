@@ -139,7 +139,20 @@
 .send__mode input { grid-row: span 2; accent-color: var(--cyan); }
 .send__mode-label { font-size: 0.95rem; }
 .send__mode-note { grid-column: 2; font-size: 0.8rem; color: var(--ink-dim); }
-.media__item { min-width: 0; }
+/* Each medium is one managed slot: what the registry holds for it — or a
+   sentence saying it holds nothing — then the control that changes it. All four
+   are always rendered, since a section showing only what exists could not offer
+   to add what does not. */
+.media__lead { margin: -0.5rem 0 1.25rem; font-size: 0.85rem; color: var(--ink-dim); }
+.media__item {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
 .media__label {
   display: block;
   font-family: var(--font-display);
@@ -147,7 +160,6 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-dim);
-  margin-bottom: 0.4rem;
 }
 .media__item img, .media__item video {
   width: 100%;
@@ -156,6 +168,26 @@
   background: #000;
 }
 .media__item video { aspect-ratio: 4 / 3; }
+/* A medium the registry does not hold, and one whose file went missing, are
+   told apart in words rather than by a broken image. */
+.media__missing {
+  margin: 0;
+  padding: 1.5rem 0.75rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+  border: 1px dashed var(--line);
+  border-radius: calc(var(--radius) - 4px);
+  overflow-wrap: anywhere;
+}
+.media__missing code { font-family: var(--font-display); font-size: 0.8rem; }
+/* Pushed to the bottom of the slot, so the four upload controls line up
+   whatever height the previews above them happen to take. */
+.media__upload { display: flex; flex-direction: column; gap: 0.5rem; margin-top: auto; }
+.media__file { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.85rem; color: var(--ink); }
+.media__accept { font-size: 0.75rem; color: var(--ink-dim); overflow-wrap: anywhere; }
+.media__upload .field__control { font-size: 0.8rem; padding: 0.4rem; }
+.media__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .notfound { text-align: center; padding: 3rem 1rem; }
 .notfound__code {
   font-family: var(--font-display);

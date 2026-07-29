@@ -82,18 +82,18 @@ func sendSubmission(folder, mode string) url.Values {
 	return url.Values{sendFolderParam: {folder}, sendModeParam: {mode}}
 }
 
-// sentBanner follows the redirect a send answered with — dropping the fragment,
+// bannerAfter follows the redirect a change answered with — dropping the fragment,
 // as a browser does — and returns the text of the confirmation banner on the
 // page it lands on. Asserting on the banner rather than on the whole page
 // matters here: the folder a send names also appears in the page's own send
 // control, so a test looking anywhere would pass without any confirmation at
 // all.
-func sentBanner(t *testing.T, h http.Handler, rec *httptest.ResponseRecorder) string {
+func bannerAfter(t *testing.T, h http.Handler, rec *httptest.ResponseRecorder) string {
 	t.Helper()
 
 	location, _, _ := strings.Cut(rec.Header().Get("Location"), "#")
 	if location == "" {
-		t.Fatalf("the send answered no redirect (status %d)", rec.Code)
+		t.Fatalf("the change answered no redirect (status %d)", rec.Code)
 	}
 	body := get(t, h, location).Body.String()
 
@@ -335,7 +335,7 @@ func TestSendGame_Sent_ConfirmsOnTheGamePageNamingTheFolder(t *testing.T) {
 
 	rec := post(t, handler, gameURL("megadrive", "Sonic")+"/send", sendSubmission(romsFolder, sendModeFill))
 
-	banner := sentBanner(t, handler, rec)
+	banner := bannerAfter(t, handler, rec)
 	if !strings.Contains(banner, romsFolder) {
 		t.Errorf("the confirmation %q does not name the folder the game was sent to", banner)
 	}
@@ -351,7 +351,7 @@ func TestSendGame_ReplaceRule_ConfirmsTheFolderNowHoldsWhatTheRegistryKnows(t *t
 
 	rec := post(t, handler, gameURL("megadrive", "Streets")+"/send", sendSubmission(romsFolder, sendModeReplace))
 
-	banner := sentBanner(t, handler, rec)
+	banner := bannerAfter(t, handler, rec)
 	if !strings.Contains(banner, romsFolder) {
 		t.Errorf("the confirmation %q does not name the folder the game was sent to", banner)
 	}
@@ -369,7 +369,7 @@ func TestSendGame_FolderAlreadyUpToDate_SaysSoRatherThanClaimingItWasSent(t *tes
 	post(t, handler, gameURL("megadrive", "Sonic")+"/send", sendSubmission(romsFolder, sendModeFill))
 	rec := post(t, handler, gameURL("megadrive", "Sonic")+"/send", sendSubmission(romsFolder, sendModeFill))
 
-	banner := sentBanner(t, handler, rec)
+	banner := bannerAfter(t, handler, rec)
 	if !strings.Contains(banner, "already") {
 		t.Errorf("the confirmation %q does not state the folder was already up to date", banner)
 	}
@@ -388,7 +388,7 @@ func TestSendGame_GameAbsentFromTheFoldersGamelist_SaysSoRatherThanClaimingSucce
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d — the game exists, the folder simply does not hold it", rec.Code, http.StatusSeeOther)
 	}
-	banner := sentBanner(t, handler, rec)
+	banner := bannerAfter(t, handler, rec)
 	if !strings.Contains(banner, "Not sent") {
 		t.Errorf("the confirmation %q does not say the game was not sent", banner)
 	}

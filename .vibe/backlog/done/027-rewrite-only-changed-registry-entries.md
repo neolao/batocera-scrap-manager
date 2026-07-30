@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # Rewrite Only Changed Registry Entries
 

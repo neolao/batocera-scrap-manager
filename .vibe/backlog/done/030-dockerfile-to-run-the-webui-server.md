@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 # Dockerfile to Run the WebUI Server
 

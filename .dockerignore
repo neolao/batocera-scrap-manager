@@ -1,0 +1,9 @@
+.git
+.vibe
+.claude
+docs
+*.md
+/batocera-scrap-manager
+*.test
+*.out
+*.prof

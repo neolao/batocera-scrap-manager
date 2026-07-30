@@ -10,7 +10,7 @@ The registry location and the list of watched ROMs folders are stored in a confi
 |---|---|---|---|
 | `BATOCERA_SCRAP_MANAGER_CONFIG` | Path to the configuration file to use | The OS user config directory, under `batocera-scrap-manager/config.json` | No |
 
-This variable is mainly useful for isolating a test environment's configuration or running several configurations side by side on the same machine.
+This variable is mainly useful for isolating a test environment's configuration or running several configurations side by side on the same machine. Inside the project's Docker image it is effectively required rather than optional: the image's non-root user has no usable `$HOME`, so the OS-user-config-dir fallback resolves nowhere useful — see the [Dockerfile](../Dockerfile) and the README's installation section.
 
 ## Configuration content
 

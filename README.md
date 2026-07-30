@@ -52,6 +52,21 @@ git clone https://github.com/neolao/batocera-scrap-manager.git
 cd batocera-scrap-manager
 go build -o batocera-scrap-manager .
 ```
+
+To run the web browser interface without installing Go, build and run the provided Docker image instead:
+
+```sh
+docker build -t batocera-scrap-manager .
+docker run -d \
+  -p 8080:8080 \
+  -e BATOCERA_SCRAP_MANAGER_CONFIG=/data/config.json \
+  -v /path/to/registry:/data/registry \
+  -v /path/to/roms:/data/roms \
+  -v /path/to/config.json:/data/config.json:ro \
+  batocera-scrap-manager
+```
+
+The configuration file must set `registry_folder` (and, if roms folders should be watched, `roms_folders`) to paths under the mounted volumes, e.g. `/data/registry` and `/data/roms`. The container runs as a non-root user.
 <!-- vibe:end:install -->
 
 <!-- vibe:begin:usage -->

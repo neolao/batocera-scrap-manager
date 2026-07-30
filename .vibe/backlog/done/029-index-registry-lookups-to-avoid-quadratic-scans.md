@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 # Index Registry Lookups To Avoid Quadratic Scans
 

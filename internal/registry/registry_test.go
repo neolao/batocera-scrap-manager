@@ -58,6 +58,32 @@ func TestSave_WritesRegistryThatCanBeReloaded(t *testing.T) {
 	}
 }
 
+func TestLoad_ThenFindByID_FindsTheReloadedEntry(t *testing.T) {
+	// FindByID's lookup is served by an index built lazily on first use: this
+	// pins that the very first lookup after a real Load() (as opposed to a
+	// struct literal or a Clone(), which take other paths to a populated
+	// Registry) still resolves correctly.
+	path := filepath.Join(t.TempDir(), "registry")
+	if err := Save(path, &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}},
+	}}); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+
+	reloaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+
+	entry, found := reloaded.FindByID("megadrive", "Sonic")
+	if !found {
+		t.Fatal("FindByID() found = false, want true for the just-reloaded entry")
+	}
+	if entry.Game.Name != "Sonic" {
+		t.Errorf("FindByID() entry.Game.Name = %q, want %q", entry.Game.Name, "Sonic")
+	}
+}
+
 func TestSave_SystemDirectoryBlockedByFile_ReturnsError(t *testing.T) {
 	path := t.TempDir()
 	if err := os.WriteFile(filepath.Join(path, "megadrive"), []byte("not a directory"), 0o644); err != nil {
@@ -1446,6 +1472,52 @@ func TestRemoveByID_GameFileThatCannotBeDeleted_ChangesNothing(t *testing.T) {
 	}
 }
 
+func TestRemoveByID_TwiceInARowWithNoLookupBetween_RemainingEntryStillFound(t *testing.T) {
+	// A lookup index invalidated by a removal is rebuilt lazily on the next
+	// lookup: this pins that surviving a second removal before that rebuild
+	// ever happens still leaves the index correct once something finally
+	// asks it a question.
+	registryFolder := t.TempDir()
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}},
+		{System: "megadrive", Game: gamelist.Game{Path: "./Mario.zip", Name: "Mario"}},
+		{System: "megadrive", Game: gamelist.Game{Path: "./Golden Axe.zip", Name: "Golden Axe"}},
+	}}
+
+	if err := RemoveByID(reg, registryFolder, "megadrive", "Sonic"); err != nil {
+		t.Fatalf("first RemoveByID() error = %v, want nil", err)
+	}
+	if err := RemoveByID(reg, registryFolder, "megadrive", "Mario"); err != nil {
+		t.Fatalf("second RemoveByID() error = %v, want nil", err)
+	}
+
+	if _, found := reg.FindByID("megadrive", "Golden Axe"); !found {
+		t.Error("FindByID() found = false for the surviving entry, want true")
+	}
+	if _, found := reg.FindByID("megadrive", "Sonic"); found {
+		t.Error("FindByID() found = true for a removed entry, want false")
+	}
+	if _, found := reg.FindByID("megadrive", "Mario"); found {
+		t.Error("FindByID() found = true for a removed entry, want false")
+	}
+}
+
+func TestRemoveByID_LastEntry_ThenFindByIDOnTheNewLastEntry_StillFound(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}},
+		{System: "megadrive", Game: gamelist.Game{Path: "./Mario.zip", Name: "Mario"}},
+	}}
+
+	if err := RemoveByID(reg, registryFolder, "megadrive", "Mario"); err != nil {
+		t.Fatalf("RemoveByID() error = %v, want nil", err)
+	}
+
+	if _, found := reg.FindByID("megadrive", "Sonic"); !found {
+		t.Error("FindByID() found = false for the entry now last in Entries, want true")
+	}
+}
+
 func TestCompleteGame_IncompleteLocalEntry_FillsFromRegistryAndCopiesMedia(t *testing.T) {
 	romsFolder := writeIncompleteRomsFolder(t)
 	registryFolder := t.TempDir()
@@ -1859,6 +1931,26 @@ func TestFindByID_EmptyRegistry_ReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestFindByID_TwoEntriesSharingTheSameSystemAndID_ReturnsTheFirstOne(t *testing.T) {
+	// Entries can only collide like this through a hand-edited registry
+	// folder (Save names a file after its own entry's ID, so Load cannot
+	// produce this on its own) — but when it happens, a lookup must resolve
+	// the same entry a linear scan of Entries would have: the first one.
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic (first)"}},
+		{System: "megadrive", Game: gamelist.Game{Path: "disc1/Sonic.iso", Name: "Sonic (second)"}},
+	}}
+
+	entry, found := reg.FindByID("megadrive", "Sonic")
+
+	if !found {
+		t.Fatal("FindByID() found = false, want true")
+	}
+	if entry.Game.Name != "Sonic (first)" {
+		t.Errorf("FindByID() entry.Game.Name = %q, want %q (the first match)", entry.Game.Name, "Sonic (first)")
+	}
+}
+
 func TestClone_EditingTheCopy_LeavesTheOriginalUntouched(t *testing.T) {
 	// A caller that must not commit anything until the write to disk succeeded
 	// edits a clone and only then swaps it in.
@@ -1889,6 +1981,32 @@ func TestClone_EmptyRegistry_ReturnsAnEmptyRegistry(t *testing.T) {
 
 	if clone == nil || len(clone.Entries) != 0 {
 		t.Errorf("Clone() = %v, want an empty registry", clone)
+	}
+}
+
+func TestClone_ThenImportOnTheClone_OriginalStillDoesNotFindTheNewGame(t *testing.T) {
+	// A lookup index cached on the original and merely assigned (not copied)
+	// into the clone would let a change applied to the clone's index leak
+	// back into the original — a plain "read the clone back" test would not
+	// catch that, only checking the original stays independent does.
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}},
+	}}
+	if _, found := reg.FindByID("megadrive", "Sonic"); !found {
+		t.Fatal("FindByID() found = false on the original before cloning, want true")
+	}
+
+	clone := reg.Clone()
+	clone.Import("megadrive", []gamelist.Game{{Path: "./Golden Axe.zip", Name: "Golden Axe"}})
+
+	if _, found := clone.FindByID("megadrive", "Golden Axe"); !found {
+		t.Error("FindByID() on the clone found = false, want true: the clone was imported into")
+	}
+	if _, found := reg.FindByID("megadrive", "Golden Axe"); found {
+		t.Error("FindByID() on the original found = true, want false: the import only touched the clone")
+	}
+	if len(reg.Entries) != 1 {
+		t.Errorf("original Entries = %v, want still just Sonic", reg.Entries)
 	}
 }
 

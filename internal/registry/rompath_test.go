@@ -92,6 +92,32 @@ func TestChangePath_IdentifierAlreadyUsedByAnotherGame_IsRefusedWithoutOverwriti
 	}
 }
 
+func TestChangePath_IdentifierFreedByAnEarlierRemoval_Succeeds(t *testing.T) {
+	// A lookup index invalidated by RemoveByID is rebuilt lazily on the next
+	// lookup — this pins that a rename right after such a removal does not
+	// resolve a stale mapping still pointing at the now-gone entry's old
+	// slot, refusing the identifier as a duplicate of a game that left.
+	reg := twoGames()
+	registryFolder := t.TempDir()
+	if err := RemoveByID(reg, registryFolder, "megadrive", "Mario"); err != nil {
+		t.Fatalf("RemoveByID() error = %v, want nil", err)
+	}
+
+	if err := ChangePath(reg, "megadrive", "Sonic", "./Mario.zip"); err != nil {
+		t.Fatalf("ChangePath() error = %v, want nil", err)
+	}
+
+	if _, found := reg.FindByID("megadrive", "Mario"); !found {
+		t.Error("FindByID(megadrive, Mario) found nothing, want the renamed Sonic entry")
+	}
+	if _, found := reg.FindByID("megadrive", "Sonic"); found {
+		t.Error("FindByID(megadrive, Sonic) still finds a game, want the old identifier free")
+	}
+	if len(reg.Entries) != 2 {
+		t.Errorf("Entries = %d, want 2 (Mario removed, Sonic renamed)", len(reg.Entries))
+	}
+}
+
 func TestChangePath_IdentifierUsedByAGameOfAnotherSystem_IsAccepted(t *testing.T) {
 	// snes already holds a "Sonic": identifiers are unique per system, not
 	// registry-wide, since each system has its own folder.

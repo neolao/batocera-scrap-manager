@@ -50,6 +50,16 @@ type Registry struct {
 	// Load or Clone, has no baseline and Save falls back to writing every
 	// entry — the same behaviour as before this field existed.
 	saved []Entry
+
+	// index maps an entry's identity (see entryKey) to its position in
+	// Entries, so indexOfID can resolve a lookup in O(1) instead of scanning
+	// Entries linearly — the cost that made Import/CompleteRomsFolder run in
+	// O(games processed × registry size) on a large registry (backlog item
+	// 029, see decisions/036). Nil until ensureIndex builds it, so a Registry
+	// built directly by a struct literal — as most existing tests, and any
+	// caller with no known index — works with no initialization step, the
+	// same pattern the saved field above already follows.
+	index map[entryKey]int
 }
 
 // Clone returns a copy of the registry that can be modified without touching
@@ -62,6 +72,16 @@ func (r *Registry) Clone() *Registry {
 	clone := &Registry{Entries: make([]Entry, len(r.Entries)), saved: make([]Entry, len(r.saved))}
 	copy(clone.Entries, r.Entries)
 	copy(clone.saved, r.saved)
+	// copy(clone.Entries, r.Entries) preserves every entry's position, so the
+	// index built for r is still valid for clone — but it must be a genuine
+	// copy, not a shared reference: applying a change to clone must never let
+	// its index mutations leak back into r's.
+	if r.index != nil {
+		clone.index = make(map[entryKey]int, len(r.index))
+		for k, v := range r.index {
+			clone.index[k] = v
+		}
+	}
 	return clone
 }
 
@@ -270,6 +290,12 @@ func RemoveByID(reg *Registry, registryFolder, system, id string) error {
 		return err
 	}
 	reg.Entries = append(reg.Entries[:i], reg.Entries[i+1:]...)
+	// The splice shifts every later entry's position down by one: rather
+	// than rewrite up to len(Entries) map values, drop the index and let the
+	// next lookup rebuild it — RemoveByID is not in Import/CompleteRomsFolder's
+	// per-game loop, so this does not reintroduce the quadratic cost the
+	// index exists to remove.
+	reg.index = nil
 
 	var leftBehind []string
 	for _, kind := range mediaKinds {
@@ -338,6 +364,8 @@ func (r *Registry) mergeGameEntry(system string, g gamelist.Game) importStatus {
 		return statusUpdated
 	}
 	r.Entries = append(r.Entries, Entry{System: system, Game: g})
+	// r.index is already built: the indexOf call above ensured it.
+	r.index[entryKey{system: system, id: GameID(g.Path)}] = len(r.Entries) - 1
 	return statusAdded
 }
 
@@ -374,12 +402,31 @@ func (r *Registry) indexOf(system, path string) int {
 // truncate an id whose game name contains a dot (e.g. "Micro Machines
 // v3.0") and lose the entry.
 func (r *Registry) indexOfID(system, id string) int {
-	for i, e := range r.Entries {
-		if e.System == system && GameID(e.Game.Path) == id {
-			return i
-		}
+	r.ensureIndex()
+	if i, ok := r.index[entryKey{system: system, id: id}]; ok {
+		return i
 	}
 	return -1
+}
+
+// ensureIndex builds index from Entries if it has not been built yet, so a
+// Registry populated by a struct literal or by Load — neither of which
+// maintains index as it goes — still resolves indexOfID in O(1) once built.
+// First match wins, the same as indexOfID's own former linear scan: Entries
+// is not deduplicated by construction (a hand-edited registry folder could
+// hand Load two files whose stored paths derive the same GameID), so two
+// entries sharing an identity must resolve to the same one either way.
+func (r *Registry) ensureIndex() {
+	if r.index != nil {
+		return
+	}
+	r.index = make(map[entryKey]int, len(r.Entries))
+	for i, e := range r.Entries {
+		k := keyOf(e)
+		if _, exists := r.index[k]; !exists {
+			r.index[k] = i
+		}
+	}
 }
 
 // FindByID returns the entry of system whose game ID (see GameID) is id,

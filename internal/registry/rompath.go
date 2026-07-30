@@ -126,6 +126,12 @@ func ChangePath(reg *Registry, system, id, newPath string) error {
 	}
 
 	reg.Entries[i].Game.Path = newPath
+	// The rename changes the entry's identity (its GameID) but not its
+	// position: rekey it in place rather than dropping the whole index, since
+	// reg.index is already guaranteed built and accurate here (indexOfID ran
+	// twice just above, for i and for the duplicate check).
+	delete(reg.index, entryKey{system: system, id: id})
+	reg.index[entryKey{system: system, id: GameID(newPath)}] = i
 	return nil
 }
 

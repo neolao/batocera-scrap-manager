@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # Mark Protected Games In The Game List
 

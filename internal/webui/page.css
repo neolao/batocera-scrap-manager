@@ -228,6 +228,39 @@
   color: var(--magenta);
   text-transform: uppercase;
 }
+/* .card__title wraps the name and the protected badge in their own flex row,
+   rather than letting the badge sit on .card__name itself, so the name alone
+   can shrink to an ellipsis on the dense mobile row while the badge stays
+   full size — see decisions/033. */
+.card__title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-width: 0;
+  margin: 0 0 0.4rem;
+}
+.card__title .card__name { margin: 0; }
+.card__protected {
+  display: inline-block;
+  flex-shrink: 0;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--magenta);
+  border-radius: 999px;
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  color: var(--magenta);
+  text-transform: uppercase;
+}
+@media (max-width: 640px) {
+  .card__title { flex-wrap: nowrap; }
+  .card__title .card__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
 .meta__state {
   margin: 1.25rem 0 0;
   color: var(--ink-dim);

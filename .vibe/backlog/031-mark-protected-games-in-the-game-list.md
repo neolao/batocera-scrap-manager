@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Mark Protected Games In The Game List
 

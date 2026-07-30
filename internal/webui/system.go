@@ -81,7 +81,7 @@ func (ui *webUI) serveSystem(w http.ResponseWriter, r *http.Request) {
 	render(w, http.StatusOK, systemTemplate, systemPage{
 		Name:      system,
 		Systems:   summaries,
-		Games:     gameCards(games),
+		Games:     gameCards(games, entries[first:last]),
 		Page:      page,
 		PageCount: pageCount,
 		PrevURL:   pageURL(system, page-1, 1, page),
@@ -138,15 +138,24 @@ func pageURL(system string, page, low, high int) string {
 }
 
 // gameCards turns the views of one page's games into the cards the list
-// renders, each linking to the game's own page.
-func gameCards(games []site.GameView) []gameCard {
+// renders, each linking to the game's own page. entries is that same page's
+// slice of registry entries — site.GameView drops FullyProtected along with
+// everything else registry.Entry carries beyond the gamelist.Game itself, so
+// it is looked up here instead, keyed by the same GameID both slices share.
+func gameCards(games []site.GameView, entries []registry.Entry) []gameCard {
+	protected := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		protected[registry.GameID(entry.Game.Path)] = entry.FullyProtected()
+	}
+
 	cards := make([]gameCard, len(games))
 	for i, game := range games {
 		cards[i] = gameCard{
-			Name:     game.Name,
-			Desc:     game.Desc,
-			URL:      gameURL(game.System, game.ID),
-			ImageURL: mediaURL(game.ImagePath),
+			Name:      game.Name,
+			Desc:      game.Desc,
+			URL:       gameURL(game.System, game.ID),
+			ImageURL:  mediaURL(game.ImagePath),
+			Protected: protected[game.ID],
 		}
 	}
 	return cards
@@ -180,7 +189,10 @@ var systemTemplate = newPage("system", `
 {{if .ImageURL}}<img src="{{.ImageURL}}" alt="Cover art of {{.Name}}" loading="lazy">{{end}}
 </div>
 <div class="card__body">
+<div class="card__title">
 <h3 class="card__name">{{.Name}}</h3>
+{{if .Protected}}<span class="card__protected" title="Protected — updates leave every field alone.">Protected</span>{{end}}
+</div>
 <p class="card__desc">{{.Desc}}</p>
 </div>
 </a>

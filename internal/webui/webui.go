@@ -135,10 +135,11 @@ type systemSummary struct {
 // gameCard is one game as shown on a system's list: enough to recognize it,
 // plus the link to its own page.
 type gameCard struct {
-	Name     string
-	Desc     string
-	URL      string
-	ImageURL string
+	Name      string
+	Desc      string
+	URL       string
+	ImageURL  string
+	Protected bool
 }
 
 // gameDetail is one game's own page. Every media URL is empty when the file

@@ -78,6 +78,7 @@
 - Several byte-identical handlers differing only by one value are collapsed into one taking that value (`allowOnly(methods)` over five `serveWrong*Method` copies) as soon as a new feature would have added a sixth — the duplication is tolerated while it is small and closed when it grows.
 - A control's absence is gated on the state that makes it *meaningful*, not on the state that makes it pretty: a medium's "Remove" link is gated on the entry holding a reference, not on the file being on disk, so a dangling reference can still be cleared.
 - Two failures reported by the same call are worded apart when their recovery differs (a stale site rebuilt by `update` vs. a registry that could not be rewritten), rather than folded into one `%v` — a shared helper is bypassed rather than given a mode parameter when its "a failure means nothing was applied" contract does not hold at that call site (see [`decisions/023`](.vibe/decisions/023-remove-warns-about-persistence-it-never-denies-the-deletion.md)).
+- A shared view type (`site.GameView`) is not grown for a field only one consumer needs: the consuming package looks the missing state up itself from the entries it already holds, keyed by the same identifier (`registry.GameID`), rather than leaking a registry-specific concern into the presentation layer both the static site and the served UI share.
 
 ## Other context files
 - [`models.md`](.vibe/models.md) — data models

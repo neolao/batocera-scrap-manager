@@ -295,3 +295,42 @@ func TestServeSystem_IsNotServedWithNoStoreCaching(t *testing.T) {
 		t.Errorf("Cache-Control = %q, want no no-store directive", rec.Header().Get("Cache-Control"))
 	}
 }
+
+func TestServeSystem_FullyProtectedGame_ShowsProtectedBadge(t *testing.T) {
+	reg, registryFolder := fullyScrapedRegistry(t)
+	if err := registry.Protect(reg, "megadrive", "Sonic the Hedgehog"); err != nil {
+		t.Fatalf("Protect() error = %v", err)
+	}
+
+	body := get(t, Handler(reg, registryFolder, nil), "/system/megadrive").Body.String()
+
+	if !strings.Contains(body, `<span class="card__protected"`) {
+		t.Errorf("system page does not mark the fully protected game, got: %s", body)
+	}
+	if !strings.Contains(body, ">Protected<") {
+		t.Errorf("system page does not carry an accessible \"Protected\" label, got: %s", body)
+	}
+}
+
+func TestServeSystem_PartlyProtectedGame_DoesNotShowProtectedBadge(t *testing.T) {
+	registryFolder := t.TempDir()
+	reg := &registry.Registry{Entries: []registry.Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}, ManualFields: []string{"name"}},
+	}}
+
+	body := get(t, Handler(reg, registryFolder, nil), "/system/megadrive").Body.String()
+
+	if strings.Contains(body, `<span class="card__protected"`) {
+		t.Errorf("system page marks a partly protected game as fully protected, got: %s", body)
+	}
+}
+
+func TestServeSystem_UnprotectedGame_DoesNotShowProtectedBadge(t *testing.T) {
+	reg, registryFolder := fullyScrapedRegistry(t)
+
+	body := get(t, Handler(reg, registryFolder, nil), "/system/megadrive").Body.String()
+
+	if strings.Contains(body, `<span class="card__protected"`) {
+		t.Errorf("system page marks an unprotected game as protected, got: %s", body)
+	}
+}

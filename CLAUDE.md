@@ -94,8 +94,20 @@ Active agents for `/vibe:review` on this project:
 
 | Agent | Active | Reason |
 |---|---|---|
-| `review-coverage` | ✅ | always active |
+| `review-tests` | ✅ | always active (replaces the former `review-coverage`) |
 | `review-naming` | ✅ | always active |
 | `review-complexity` | ✅ | always active |
-| `review-solid` | ✅ | modular architecture by packages (`internal/cli`), expected to grow |
+| `review-security` | ✅ | always active |
+| `review-dependencies` | ✅ | always active |
+| `review-robustness` | ✅ | always active |
+| `review-hygiene` | ✅ | always active |
+| `review-antipatterns` | ✅ | always active |
+| `review-simplicity` | ✅ | always active |
+| `review-overengineering` | ✅ | always active |
+| `review-solid` | ✅ | modular architecture by packages (`internal/cli`, `internal/registry`, `internal/webui`, …) |
+| `review-architecture` | ✅ | `.vibe/` exists — modules, models and 30+ ADRs to check drift against |
+| `review-performance` | ✅ | the `serve` command runs an HTTP server over the whole registry |
+| `review-web-security` | ✅ | `internal/webui` exposes HTTP endpoints (uploads, deletions, path parameters) |
+| `review-pentest` | ✅ | `serve` is a runnable networked app, testable locally |
+| `review-hexagonal` | ❌ | no hexagonal architecture declared (no ports/adapters, no ADR stating it) |
 | `review-ddd` | ❌ | no explicit domain layer (no `domain/`, `entities/`, etc.) |

@@ -468,3 +468,35 @@ func TestHandler_DotPrefixedMediaPath_IsServedWithoutARedirect(t *testing.T) {
 		t.Fatalf("game page references %d media files, want 1 (files: %v)", len(checked), checked)
 	}
 }
+
+func TestHandler_AnyResponse_CarriesTheBaselineSecurityHeaders(t *testing.T) {
+	// This is an HTTP surface with no accounts to authenticate (decisions/032):
+	// the one control it can offer against being framed by another site is
+	// telling the browser itself to refuse it.
+	reg, registryFolder := fullyScrapedRegistry(t)
+
+	rec := get(t, Handler(reg, registryFolder, nil), "/")
+
+	if got := rec.Header().Get("X-Frame-Options"); got != "DENY" {
+		t.Errorf("X-Frame-Options = %q, want %q", got, "DENY")
+	}
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want %q", got, "nosniff")
+	}
+	if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-ancestors 'none'") {
+		t.Errorf("Content-Security-Policy = %q, want it to deny framing", got)
+	}
+	if got := rec.Header().Get("Referrer-Policy"); got == "" {
+		t.Error("Referrer-Policy is not set")
+	}
+}
+
+func TestHandler_MediaResponse_CarriesTheBaselineSecurityHeadersToo(t *testing.T) {
+	reg, registryFolder := fullyScrapedRegistry(t)
+
+	rec := get(t, Handler(reg, registryFolder, nil), mediaURLPrefix+"megadrive/images/sonic.png")
+
+	if got := rec.Header().Get("X-Frame-Options"); got != "DENY" {
+		t.Errorf("X-Frame-Options = %q, want %q — the media file server is reached through the same handler", got, "DENY")
+	}
+}

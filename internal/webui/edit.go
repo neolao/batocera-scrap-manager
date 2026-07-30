@@ -49,21 +49,21 @@ type editableField struct {
 // editableFields is the form, in the order the read-only page lists the same
 // values, so the eye lands on the field it came to fix.
 var editableFields = []editableField{
-	{Key: "name", Manual: "name", Label: "Name", Kind: kindText, Required: true,
+	{Key: "name", Manual: registry.FieldName, Label: "Name", Kind: kindText, Required: true,
 		value: func(v editValues) string { return v.Name }},
-	{Key: "desc", Manual: "desc", Label: "Description", Kind: kindTextarea,
+	{Key: "desc", Manual: registry.FieldDesc, Label: "Description", Kind: kindTextarea,
 		value: func(v editValues) string { return v.Desc }},
-	{Key: "rating", Manual: "rating", Label: "Rating", Kind: kindStars,
+	{Key: "rating", Manual: registry.FieldRating, Label: "Rating", Kind: kindStars,
 		value: func(v editValues) string { return v.Rating }},
-	{Key: "year", Manual: "release_date", Label: "Year", Kind: kindYear, Hint: "e.g. 1991",
+	{Key: "year", Manual: registry.FieldReleaseDate, Label: "Year", Kind: kindYear, Hint: "e.g. 1991",
 		value: func(v editValues) string { return v.Year }},
-	{Key: "developer", Manual: "developer", Label: "Developer", Kind: kindText,
+	{Key: "developer", Manual: registry.FieldDeveloper, Label: "Developer", Kind: kindText,
 		value: func(v editValues) string { return v.Developer }},
-	{Key: "publisher", Manual: "publisher", Label: "Publisher", Kind: kindText,
+	{Key: "publisher", Manual: registry.FieldPublisher, Label: "Publisher", Kind: kindText,
 		value: func(v editValues) string { return v.Publisher }},
-	{Key: "genre", Manual: "genre", Label: "Genre", Kind: kindText,
+	{Key: "genre", Manual: registry.FieldGenre, Label: "Genre", Kind: kindText,
 		value: func(v editValues) string { return v.Genre }},
-	{Key: "players", Manual: "players", Label: "Players", Kind: kindText, Hint: "e.g. 1-2",
+	{Key: "players", Manual: registry.FieldPlayers, Label: "Players", Kind: kindText, Hint: "e.g. 1-2",
 		value: func(v editValues) string { return v.Players }},
 }
 

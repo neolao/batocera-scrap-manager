@@ -128,6 +128,12 @@ func serveUntil(ctx context.Context, listener net.Listener, handler http.Handler
 	server := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
+		// Bounds a request whose body trickles in too slowly to ever finish on
+		// its own — a stalled upload, or a client with nothing to send —
+		// rather than holding the connection (and the goroutine serving it)
+		// open indefinitely. Comfortably above the largest legitimate body,
+		// the capped media upload (see internal/webui/media.go).
+		ReadTimeout: 60 * time.Second,
 		// Per-connection noise (a browser dropping a media download,
 		// a port scanner) is not the user's business: it would be
 		// interleaved with the command's own output.

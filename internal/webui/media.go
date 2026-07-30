@@ -2,6 +2,7 @@ package webui
 
 import (
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"slices"
@@ -87,21 +88,11 @@ func mediaControlsOf(entry registry.Entry, system, id string, present map[regist
 	return controls
 }
 
-// referenceOf reads what an entry stores for one medium. It goes through the
-// registry's own lookup rather than a second switch here, so the web UI cannot
-// hold its own idea of which field a medium is.
+// referenceOf reads what an entry stores for one medium, through the
+// registry's own lookup rather than a second switch here, so the web UI
+// cannot hold its own idea of which field a medium is.
 func referenceOf(entry registry.Entry, m registry.Medium) string {
-	switch m {
-	case registry.MediumImage:
-		return entry.Game.Image
-	case registry.MediumVideo:
-		return entry.Game.Video
-	case registry.MediumMarquee:
-		return entry.Game.Marquee
-	case registry.MediumThumbnail:
-		return entry.Game.Thumbnail
-	}
-	return ""
+	return registry.Reference(&entry.Game, m)
 }
 
 // mediumURL builds the URL one medium of one game is managed at, percent-
@@ -151,35 +142,18 @@ func (ui *webUI) uploadMedium(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
-	if err := r.ParseMultipartForm(maxUploadMemory); err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			ui.renderGameProblem(w, entry, http.StatusRequestEntityTooLarge,
-				"This file is larger than the "+megabytes(maxUploadBytes)+" an upload may carry, so nothing was stored.")
-			return
-		}
-		ui.renderGameProblem(w, entry, http.StatusBadRequest, "This upload could not be read.")
-		return
-	}
+	// The multipart form's own temporary storage must outlive parsing: file is
+	// read from it further down, well after this handler's write lock is taken.
 	defer func() {
 		if r.MultipartForm != nil {
 			_ = r.MultipartForm.RemoveAll()
 		}
 	}()
-
-	file, header, err := r.FormFile(mediaFileParam)
-	if err != nil {
-		ui.renderGameProblem(w, entry, http.StatusBadRequest, "Choose a file to upload first.")
+	file, filename, ok := ui.parseUploadedFile(w, r, entry, m)
+	if !ok {
 		return
 	}
 	defer file.Close()
-	if header.Size == 0 {
-		ui.renderGameProblem(w, entry, http.StatusBadRequest,
-			"This file is empty, so it was not stored: it would show as a broken "+
-				strings.ToLower(mediaLabels[m])+" everywhere.")
-		return
-	}
 
 	ui.mu.Lock()
 	defer ui.mu.Unlock()
@@ -188,28 +162,73 @@ func (ui *webUI) uploadMedium(w http.ResponseWriter, r *http.Request) {
 		renderGameNotFound(w, system, id)
 		return
 	}
+	warnings, ok := ui.storeUploadedMedium(w, entry, system, id, m, filename, file)
+	if !ok {
+		return
+	}
+	http.Redirect(w, r, mediaChangedURL(system, id, m, mediaStored, warnings), http.StatusSeeOther)
+}
+
+// parseUploadedFile reads and validates the multipart submission for medium
+// m, answering every way the submission can be malformed on its own — too
+// large, unreadable, no file chosen, empty — before the registry is ever
+// touched. Once ok is true, the caller owns closing the returned file.
+func (ui *webUI) parseUploadedFile(w http.ResponseWriter, r *http.Request, entry registry.Entry, m registry.Medium) (file multipart.File, filename string, ok bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+	if err := r.ParseMultipartForm(maxUploadMemory); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			ui.renderGameProblem(w, entry, http.StatusRequestEntityTooLarge,
+				"This file is larger than the "+megabytes(maxUploadBytes)+" an upload may carry, so nothing was stored.")
+			return nil, "", false
+		}
+		ui.renderGameProblem(w, entry, http.StatusBadRequest, "This upload could not be read.")
+		return nil, "", false
+	}
+
+	file, header, err := r.FormFile(mediaFileParam)
+	if err != nil {
+		ui.renderGameProblem(w, entry, http.StatusBadRequest, "Choose a file to upload first.")
+		return nil, "", false
+	}
+	if header.Size == 0 {
+		file.Close()
+		ui.renderGameProblem(w, entry, http.StatusBadRequest,
+			"This file is empty, so it was not stored: it would show as a broken "+
+				strings.ToLower(mediaLabels[m])+" everywhere.")
+		return nil, "", false
+	}
+	return file, header.Filename, true
+}
+
+// storeUploadedMedium writes the uploaded file as game system/id's medium m,
+// saves the registry, and reports the warnings worth surfacing on an
+// otherwise successful upload. ok is false once a problem response has
+// already been rendered and the caller must stop. Called under ui.mu's write
+// lock, since it reads and replaces ui.reg.
+func (ui *webUI) storeUploadedMedium(w http.ResponseWriter, entry registry.Entry, system, id string, m registry.Medium, filename string, file multipart.File) (warnings []string, ok bool) {
 	candidate := ui.reg.Clone()
-	replaced, err := registry.WriteMedium(candidate, ui.registryFolder, system, id, m, header.Filename, file)
+	replaced, err := registry.WriteMedium(candidate, ui.registryFolder, system, id, m, filename, file)
 	switch {
 	case errors.Is(err, registry.ErrGameNotFound):
 		renderGameNotFound(w, system, id)
-		return
+		return nil, false
 	case errors.Is(err, registry.ErrUnsupportedMediaFile):
 		ui.renderGameProblem(w, entry, http.StatusUnprocessableEntity,
 			"This file is not one a "+strings.ToLower(mediaLabels[m])+" can be stored as. Accepted here: "+
 				strings.Join(m.Extensions(), ", ")+".")
-		return
+		return nil, false
 	case err != nil:
 		ui.renderGameProblem(w, entry, http.StatusInternalServerError,
-			"This file could not be written into the registry, so nothing was stored: "+err.Error())
-		return
+			"This file could not be written into the registry, so nothing was stored.")
+		return nil, false
 	}
 
 	saveErr := store.Save(candidate, ui.registryFolder)
 	if saveErr != nil && !errors.Is(saveErr, store.ErrSiteNotRegenerated) {
 		ui.renderGameProblem(w, entry, http.StatusInternalServerError,
 			"The registry could not be written, so this medium was not stored.")
-		return
+		return nil, false
 	}
 	ui.reg = candidate
 
@@ -217,13 +236,13 @@ func (ui *webUI) uploadMedium(w http.ResponseWriter, r *http.Request) {
 	// under before is what keeps a replaced medium from lingering unreferenced —
 	// but a failure there is a caveat on a change that did happen, never a
 	// refusal (decisions/031, following decisions/024).
-	warnings := mediaWarnings(saveErr)
+	warnings = mediaWarnings(saveErr)
 	if replaced != "" {
 		if err := registry.RemoveMediumFile(ui.registryFolder, system, replaced); err != nil {
 			warnings = append(warnings, warningMediaLeft)
 		}
 	}
-	http.Redirect(w, r, mediaChangedURL(system, id, m, mediaStored, warnings), http.StatusSeeOther)
+	return warnings, true
 }
 
 // serveMediumDeleteConfirmation renders the page asking to confirm one medium's

@@ -31,6 +31,7 @@ func (ui *webUI) startCompletion(w http.ResponseWriter, r *http.Request) {
 // counts and the one that failed is named, exactly as the CLI's scrape stops.
 func (ui *webUI) completeRomsFolders(run *jobHandle) {
 	defer run.finish()
+	defer recoverJob(run)
 
 	ui.mu.RLock()
 	reg, registryFolder := ui.reg, ui.registryFolder
@@ -43,7 +44,7 @@ func (ui *webUI) completeRomsFolders(run *jobHandle) {
 			reg, folder, registryFolder, run.progress)
 		report := folderReport{Folder: folder, Counts: [3]int{processed, completed, failed}}
 		if err != nil {
-			report.Problem = "This folder could not be completed: " + err.Error()
+			report.Problem = "This folder could not be completed."
 		}
 		run.recordFolder(report)
 

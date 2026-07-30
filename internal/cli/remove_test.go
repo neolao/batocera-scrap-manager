@@ -131,13 +131,16 @@ func TestExecute_Remove_RegistryCannotBeWritten_WarnsAboutTheRegistryNotAStaleSi
 	registryFolder := setRemoveConfig(t)
 	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic the Hedgehog", "A classic platformer.")
 	writeRegistryEntry(t, registryFolder, "snes", "./Mario.zip", "Super Mario World", "Another classic.")
-	// The entry that survives the removal is still readable, but can no longer
-	// be rewritten: registry.Save fails before the site is ever generated.
-	kept := filepath.Join(registryFolder, "snes", "Mario.json")
-	if err := os.Chmod(kept, 0o444); err != nil {
+	// The entry that survives the removal is still readable, but its system
+	// folder can no longer be written into: registry.Save writes each game
+	// file through a temporary file renamed over it, which needs to create
+	// and rename within the folder — read-only permission bits on the game
+	// file itself would not stop a rename, only the folder's own can.
+	keptFolder := filepath.Join(registryFolder, "snes")
+	if err := os.Chmod(keptFolder, 0o555); err != nil {
 		t.Fatalf("failed to prepare the test fixture: %v", err)
 	}
-	t.Cleanup(func() { os.Chmod(kept, 0o644) })
+	t.Cleanup(func() { os.Chmod(keptFolder, 0o755) })
 	var out bytes.Buffer
 
 	code := Execute([]string{"remove", "megadrive", "Sonic.zip"}, &out)

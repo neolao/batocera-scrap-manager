@@ -289,3 +289,29 @@ func TestStartCompletion_ImportRunning_StartsNothing(t *testing.T) {
 		t.Error("a completion ran while an import held the slot")
 	}
 }
+
+func TestRecoverJob_PanicDuringWork_FailsTheRunAndFreesTheSlot(t *testing.T) {
+	// A registry or a ROMs folder large enough to panic somewhere deep inside
+	// an import or a completion must not take the whole server down with it —
+	// every other request being served depends on that same goroutine dying
+	// quietly instead.
+	var state jobs
+	run := state.start(jobImport)
+
+	func() {
+		defer run.finish()
+		defer recoverJob(run)
+		panic("something went badly wrong")
+	}()
+
+	if state.active != "" {
+		t.Errorf("active = %q, want the slot freed after a panic", state.active)
+	}
+	problem := state.runs[jobImport].problem
+	if !strings.Contains(strings.ToLower(problem), "internal error") {
+		t.Errorf("problem = %q, want it naming an internal error", problem)
+	}
+	if !strings.Contains(problem, "something went badly wrong") {
+		t.Errorf("problem = %q, want it carrying the panic's own message", problem)
+	}
+}

@@ -71,6 +71,7 @@ func (ui *webUI) startImport(w http.ResponseWriter, r *http.Request) {
 // as a claim that they were saved (decisions/028).
 func (ui *webUI) importRomsFolders(run *jobHandle) {
 	defer run.finish()
+	defer recoverJob(run)
 
 	ui.mu.RLock()
 	reg, registryFolder := ui.reg, ui.registryFolder
@@ -87,7 +88,7 @@ func (ui *webUI) importRomsFolders(run *jobHandle) {
 			candidate, folder, registryFolder, run.progress)
 		report := folderReport{Folder: folder, Counts: [3]int{added, updated, unchanged}}
 		if err != nil {
-			report.Problem = "This folder could not be imported: " + err.Error()
+			report.Problem = "This folder could not be imported."
 		}
 		run.recordFolder(report)
 
@@ -122,13 +123,13 @@ func (ui *webUI) commitImport(run *jobHandle, captured, candidate *registry.Regi
 
 	if err := store.Save(candidate, ui.registryFolder); err != nil {
 		if !errors.Is(err, store.ErrSiteNotRegenerated) {
-			run.fail("The registry could not be written: " + err.Error())
+			run.fail("The registry could not be written.")
 			return
 		}
 		// The registry is the source of truth and it was written: the games are
 		// there, and only the site derived from them is behind. Saying the
 		// import failed would have the user redo what already happened.
-		run.note("The games are in the registry, but the consultation site could not be regenerated: " + err.Error())
+		run.note("The games are in the registry, but the consultation site could not be regenerated.")
 	}
 	ui.reg = candidate
 }

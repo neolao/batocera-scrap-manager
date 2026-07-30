@@ -283,6 +283,13 @@ func TestStartImport_RegistryCouldNotBeWritten_ReportsItAndServesWhatIsOnDisk(t 
 	if !strings.Contains(strings.ToLower(body), "could not be written") {
 		t.Errorf("report does not say the registry could not be written\n--- page ---\n%s", body)
 	}
+	// This page is reachable by anyone on the local network (decisions/032):
+	// the underlying OS error is for the server's own log, never for a page
+	// served with no account behind it, since it can carry the server's
+	// folder layout.
+	if strings.Contains(strings.ToLower(body), "permission denied") || strings.Contains(body, registryFolder) {
+		t.Errorf("report leaks the underlying OS error to the page\n--- page ---\n%s", body)
+	}
 	if home := get(t, handler, "/").Body.String(); strings.Contains(home, "megadrive") {
 		t.Error("the served pages claim games the registry on disk does not hold")
 	}

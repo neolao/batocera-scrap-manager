@@ -73,12 +73,7 @@ func FilledStars(rating string) (int, bool) {
 	if err != nil {
 		return 0, false
 	}
-	if r < 0 {
-		r = 0
-	}
-	if r > 1 {
-		r = 1
-	}
+	r = max(0, min(1, r))
 	return int(math.Round(r * 5)), true
 }
 

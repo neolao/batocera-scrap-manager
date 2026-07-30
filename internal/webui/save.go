@@ -93,24 +93,14 @@ func (ui *webUI) saveGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The path is applied after the metadata: correcting it moves the entry
-	// under a new identifier, and UpdateMetadata addresses it by the old one.
-	// The domain refuses on its own terms even though pathError just checked
-	// the same rules — it owns them, and a rule added there must not slip
-	// through here silently.
-	renamed := values.Path != entry.Game.Path
-	if renamed {
-		if err := registry.ChangePath(candidate, system, id, values.Path); err != nil {
-			render(w, http.StatusUnprocessableEntity, editTemplate,
-				editForm(entry, values, map[string]string{pathKey: pathRefusal(err)}))
-			return
-		}
+	renamed, moved, ok := ui.applyPathChange(w, candidate, entry, values, system, id)
+	if !ok {
+		return
 	}
 	newID := registry.GameID(values.Path)
-	moved := newID != id
 
-	err := store.Save(candidate, ui.registryFolder)
-	if err != nil && !errors.Is(err, store.ErrSiteNotRegenerated) {
+	siteErr := store.Save(candidate, ui.registryFolder)
+	if siteErr != nil && !errors.Is(siteErr, store.ErrSiteNotRegenerated) {
 		page := editForm(entry, values, nil)
 		page.Problem = "The registry folder could not be written to, so this correction was not saved."
 		render(w, http.StatusInternalServerError, editTemplate, page)
@@ -129,20 +119,53 @@ func (ui *webUI) saveGame(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	query := savedRedirectQuery(renamed, moved, leftBehind, values.Path, siteErr)
+	http.Redirect(w, r, gameURL(system, newID)+"?"+query.Encode()+savedAnchor, http.StatusSeeOther)
+}
+
+// applyPathChange moves candidate's entry to values.Path when it differs from
+// the game's current one — applied after the metadata, since correcting the
+// path moves the entry under a new identifier and UpdateMetadata addresses it
+// by the old one. The domain refuses on its own terms even though pathError
+// already checked the same rules on the submission: it owns them, and a rule
+// added there must not slip through here silently. moved reports whether the
+// change also lands the entry under a different identifier, which is what
+// decides whether its previous file is left for the caller to erase. ok is
+// false once the refusal has already been rendered as the form's own error.
+func (ui *webUI) applyPathChange(
+	w http.ResponseWriter, candidate *registry.Registry, entry registry.Entry, values editValues, system, id string,
+) (renamed, moved, ok bool) {
+	renamed = values.Path != entry.Game.Path
+	if !renamed {
+		return false, false, true
+	}
+	if err := registry.ChangePath(candidate, system, id, values.Path); err != nil {
+		render(w, http.StatusUnprocessableEntity, editTemplate,
+			editForm(entry, values, map[string]string{pathKey: pathRefusal(err)}))
+		return renamed, false, false
+	}
+	return renamed, registry.GameID(values.Path) != id, true
+}
+
+// savedRedirectQuery builds the query the game page reads to word its own
+// confirmation. A renamed game names the path it resulted in, which no table
+// keyed by the outcome alone could hold, so it composes its own query instead
+// of merely picking an outcome — see savedConfirmation.
+func savedRedirectQuery(renamed, moved bool, leftBehind, path string, siteErr error) url.Values {
 	outcome := savedFully
-	if err != nil {
+	if siteErr != nil {
 		outcome = savedNoSite
 	}
 	query := url.Values{}
 	if renamed {
-		query = renameQuery(values.Path, moved, leftBehind)
+		query = renameQuery(path, moved, leftBehind)
 		outcome = savedPath
-		if err != nil {
+		if siteErr != nil {
 			outcome = savedPath + staleSuffix
 		}
 	}
 	query.Set(savedParam, outcome)
-	http.Redirect(w, r, gameURL(system, newID)+"?"+query.Encode()+savedAnchor, http.StatusSeeOther)
+	return query
 }
 
 // savedConfirmation turns what a change redirected with into the sentence the

@@ -171,7 +171,7 @@ func (ui *webUI) sendGame(w http.ResponseWriter, r *http.Request) {
 		outcome = sentMissing
 	case err != nil:
 		page := sendForm(entry, system, id, folder, mode,
-			"This ROMs folder could not be written to, so the game was not sent: "+err.Error())
+			"This ROMs folder could not be written to, so the game was not sent.")
 		render(w, http.StatusInternalServerError, sendTemplate, page)
 		return
 	case failed:

@@ -68,12 +68,8 @@ func runUpdateTargeted(reg *registry.Registry, cfg config.Config, path string, o
 		return 1
 	}
 
-	onProgress := func(e registry.ProgressEvent) {
-		fmt.Fprintf(out, "%s: %d game(s)\n", e.System, e.GameCount)
-		fmt.Fprintf(out, "  [%d/%d] %s\n", e.GameIndex, e.GameCount, e.GameName)
-	}
-
-	added, updated, unchanged, err := registry.ImportGame(reg, romsFolder, cfg.RegistryFolder, system, romFilename, onProgress)
+	added, updated, unchanged, err := registry.ImportGame(
+		reg, romsFolder, cfg.RegistryFolder, system, romFilename, newImportProgressReporter(out))
 	if err != nil {
 		if errors.Is(err, registry.ErrGameNotFound) {
 			fmt.Fprintf(out, "error: no game found in the local gamelist for %q (system: %s)\n", path, system)

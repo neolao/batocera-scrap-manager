@@ -6,23 +6,39 @@ import (
 	"github.com/neolao/batocera-scrap-manager/internal/gamelist"
 )
 
+// Names of the metadata fields a user may correct by hand — the same spelling
+// an entry's ManualFields marks a field under and its JSON file stores it
+// under. Exported so webui/edit.go's form builds its controls by decorating
+// these instead of typing its own copy of each spelling, which is exactly the
+// drift decisions/014 was written about, extended here past media to
+// metadata.
+const (
+	FieldName        = "name"
+	FieldDesc        = "desc"
+	FieldRating      = "rating"
+	FieldReleaseDate = "release_date"
+	FieldDeveloper   = "developer"
+	FieldPublisher   = "publisher"
+	FieldGenre       = "genre"
+	FieldPlayers     = "players"
+)
+
 // editableFields lists the metadata fields a user may correct by hand, each
-// paired with the name identifying it in an entry's ManualFields and in the
-// game's JSON file. Media references and the ROM path are deliberately absent:
-// the path identifies the entry itself, and media are managed by their own
-// flows rather than typed in.
+// paired with its accessor. Media references and the ROM path are
+// deliberately absent: the path identifies the entry itself, and media are
+// managed by their own flows rather than typed in.
 var editableFields = []struct {
 	Name string
 	get  func(*gamelist.Game) *string
 }{
-	{"name", func(g *gamelist.Game) *string { return &g.Name }},
-	{"desc", func(g *gamelist.Game) *string { return &g.Desc }},
-	{"rating", func(g *gamelist.Game) *string { return &g.Rating }},
-	{"release_date", func(g *gamelist.Game) *string { return &g.ReleaseDate }},
-	{"developer", func(g *gamelist.Game) *string { return &g.Developer }},
-	{"publisher", func(g *gamelist.Game) *string { return &g.Publisher }},
-	{"genre", func(g *gamelist.Game) *string { return &g.Genre }},
-	{"players", func(g *gamelist.Game) *string { return &g.Players }},
+	{FieldName, func(g *gamelist.Game) *string { return &g.Name }},
+	{FieldDesc, func(g *gamelist.Game) *string { return &g.Desc }},
+	{FieldRating, func(g *gamelist.Game) *string { return &g.Rating }},
+	{FieldReleaseDate, func(g *gamelist.Game) *string { return &g.ReleaseDate }},
+	{FieldDeveloper, func(g *gamelist.Game) *string { return &g.Developer }},
+	{FieldPublisher, func(g *gamelist.Game) *string { return &g.Publisher }},
+	{FieldGenre, func(g *gamelist.Game) *string { return &g.Genre }},
+	{FieldPlayers, func(g *gamelist.Game) *string { return &g.Players }},
 }
 
 // editableField returns the accessor of the editable field called name,

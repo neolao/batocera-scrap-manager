@@ -110,7 +110,11 @@ func loadSystemEntries(path, system string) ([]Entry, error) {
 
 // Save writes reg to the registry folder at path, as one JSON file per game
 // inside its system's subfolder (named after the ROM's base name), creating
-// folders as needed.
+// folders as needed. Each file goes through writeFileAtomically, the same
+// temporary-file-then-rename helper media copies already use: Save rewrites
+// every entry on a single-game correction, not only the one that changed, so
+// a crash or a full disk partway through one game's write must leave that
+// game's previous file exactly as it was rather than truncated.
 func Save(path string, reg *Registry) error {
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return err
@@ -126,7 +130,7 @@ func Save(path string, reg *Registry) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(systemDir, gameFileName(e.Game)), data, 0o644); err != nil {
+		if err := writeFileAtomically(filepath.Join(systemDir, gameFileName(e.Game)), bytes.NewReader(data)); err != nil {
 			return err
 		}
 	}

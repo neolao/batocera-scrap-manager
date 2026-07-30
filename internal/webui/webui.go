@@ -73,7 +73,23 @@ func Handler(reg *registry.Registry, registryFolder string, romsFolders []string
 	mux.Handle("GET "+mediaURLPrefix, http.StripPrefix(mediaURLPrefix,
 		http.FileServer(fileOnlyFS{http.Dir(registryFolder)})))
 	mux.HandleFunc("/", ui.serveUnknownPage)
-	return mux
+	return securityHeaders(mux)
+}
+
+// securityHeaders wraps handler so every response — a rendered page as much
+// as a media file — carries the baseline headers a browser needs to refuse
+// framing this site from another one. This surface has no accounts to
+// authenticate (decisions/032); telling the browser not to let another page
+// embed it is the one clickjacking defense available that costs it nothing.
+func securityHeaders(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Content-Security-Policy", "frame-ancestors 'none'")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		handler.ServeHTTP(w, r)
+	})
 }
 
 // webUI holds what every page needs: the registry snapshot to render, the
@@ -266,12 +282,12 @@ func (ui *webUI) gameDetail(entry registry.Entry) gameDetail {
 		Desc:       view.Desc,
 		CoverURL:   mediaURL(view.ImagePath),
 		Fields: []metadataField{
-			{Label: "Rating", Value: ratingValue(view), HandEdited: handEdited("rating")},
-			{Label: "Year", Value: view.Year, HandEdited: handEdited("release_date")},
-			{Label: "Developer", Value: view.Developer, HandEdited: handEdited("developer")},
-			{Label: "Publisher", Value: view.Publisher, HandEdited: handEdited("publisher")},
-			{Label: "Genre", Value: view.Genre, HandEdited: handEdited("genre")},
-			{Label: "Players", Value: view.Players, HandEdited: handEdited("players")},
+			{Label: "Rating", Value: ratingValue(view), HandEdited: handEdited(registry.FieldRating)},
+			{Label: "Year", Value: view.Year, HandEdited: handEdited(registry.FieldReleaseDate)},
+			{Label: "Developer", Value: view.Developer, HandEdited: handEdited(registry.FieldDeveloper)},
+			{Label: "Publisher", Value: view.Publisher, HandEdited: handEdited(registry.FieldPublisher)},
+			{Label: "Genre", Value: view.Genre, HandEdited: handEdited(registry.FieldGenre)},
+			{Label: "Players", Value: view.Players, HandEdited: handEdited(registry.FieldPlayers)},
 		},
 	}
 

@@ -116,6 +116,19 @@ func LookupMedium(name string) (Medium, bool) {
 	return "", false
 }
 
+// Reference reads what game stores for medium m, going through the same
+// mediaKinds table every write already does — so a caller cannot hold its own
+// idea of which field of gamelist.Game a medium is (the drift decisions/014
+// was written about).
+func Reference(game *gamelist.Game, m Medium) string {
+	for _, kind := range mediaKinds {
+		if kind.name == m {
+			return *kind.field(game)
+		}
+	}
+	return ""
+}
+
 // Extensions lists the file extensions m accepts, dotted and lowercase, so a
 // caller can offer them and word its own refusal from the same list this
 // package refuses on.

@@ -179,6 +179,17 @@ func (h *jobHandle) note(caveat string) {
 	h.run.caveat = caveat
 }
 
+// recoverJob turns a panic during a run's own work into a failed run instead
+// of letting it escape the goroutine started for it — which would otherwise
+// crash the whole process and take down every other request being served
+// with it. Deferred ahead of finish (defers run last-in-first-out), so the
+// failure it records is already in place by the time the slot is freed.
+func recoverJob(h *jobHandle) {
+	if p := recover(); p != nil {
+		h.fail(fmt.Sprintf("This run stopped on an internal error: %v", p))
+	}
+}
+
 // finish frees the slot and closes the report, which stays readable until the
 // next run of the same kind replaces it — a run writes where nothing can undo
 // it, so its account must outlive the browser tab that started it.

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/neolao/batocera-scrap-manager/internal/gamelist"
 )
@@ -94,6 +95,170 @@ func TestSave_WritesOneJSONFilePerGameInsideSystemFolder(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(path, "registry.json")); err == nil {
 		t.Error("a single registry.json should not be created, want one JSON file per game instead")
 	}
+}
+
+func TestSave_LoadThenSaveWithNoChanges_RewritesNothing(t *testing.T) {
+	path := t.TempDir()
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}},
+		{System: "megadrive", Game: gamelist.Game{Path: "./Golden Axe.zip", Name: "Golden Axe"}},
+	}}
+	if err := Save(path, reg); err != nil {
+		t.Fatalf("initial Save() error = %v, want nil", err)
+	}
+
+	reloaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+
+	files := []string{
+		filepath.Join(path, "megadrive", "Sonic.json"),
+		filepath.Join(path, "megadrive", "Golden Axe.json"),
+	}
+	before := statAll(t, files)
+
+	if err := Save(path, reloaded); err != nil {
+		t.Fatalf("second Save() error = %v, want nil", err)
+	}
+
+	after := statAll(t, files)
+	for _, f := range files {
+		if !before[f].Equal(after[f]) {
+			t.Errorf("%s was rewritten though nothing changed (mtime %v -> %v)", f, before[f], after[f])
+		}
+	}
+}
+
+func TestSave_OneEntryChangedAfterLoad_OnlyRewritesThatEntrysFile(t *testing.T) {
+	path := t.TempDir()
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}},
+		{System: "megadrive", Game: gamelist.Game{Path: "./Golden Axe.zip", Name: "Golden Axe"}},
+	}}
+	if err := Save(path, reg); err != nil {
+		t.Fatalf("initial Save() error = %v, want nil", err)
+	}
+
+	reloaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+
+	goldenAxeFile := filepath.Join(path, "megadrive", "Golden Axe.json")
+	before := statAll(t, []string{goldenAxeFile})
+
+	sonicIdx := indexOfGameNamed(t, reloaded, "Sonic")
+	reloaded.Entries[sonicIdx].Game.Name = "Sonic the Hedgehog"
+	if err := Save(path, reloaded); err != nil {
+		t.Fatalf("second Save() error = %v, want nil", err)
+	}
+
+	after := statAll(t, []string{goldenAxeFile})
+	if !before[goldenAxeFile].Equal(after[goldenAxeFile]) {
+		t.Errorf("Golden Axe.json was rewritten though only Sonic's entry changed")
+	}
+
+	sonicContent, err := os.ReadFile(filepath.Join(path, "megadrive", "Sonic.json"))
+	if err != nil {
+		t.Fatalf("reading Sonic.json: %v", err)
+	}
+	if !strings.Contains(string(sonicContent), "Sonic the Hedgehog") {
+		t.Errorf("Sonic.json = %s, want the updated name", sonicContent)
+	}
+}
+
+func TestSave_NewEntryAddedAfterLoad_OnlyWritesTheNewFile(t *testing.T) {
+	path := t.TempDir()
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}},
+	}}
+	if err := Save(path, reg); err != nil {
+		t.Fatalf("initial Save() error = %v, want nil", err)
+	}
+
+	reloaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+
+	sonicFile := filepath.Join(path, "megadrive", "Sonic.json")
+	before := statAll(t, []string{sonicFile})
+
+	reloaded.Entries = append(reloaded.Entries, Entry{
+		System: "megadrive", Game: gamelist.Game{Path: "./Golden Axe.zip", Name: "Golden Axe"},
+	})
+	if err := Save(path, reloaded); err != nil {
+		t.Fatalf("second Save() error = %v, want nil", err)
+	}
+
+	after := statAll(t, []string{sonicFile})
+	if !before[sonicFile].Equal(after[sonicFile]) {
+		t.Errorf("Sonic.json was rewritten though it did not change")
+	}
+	if _, err := os.Stat(filepath.Join(path, "megadrive", "Golden Axe.json")); err != nil {
+		t.Errorf("expected Golden Axe.json to exist: %v", err)
+	}
+}
+
+func TestSave_ClonedRegistryWithOneEntryChanged_OnlyRewritesThatEntrysFile(t *testing.T) {
+	path := t.TempDir()
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Sonic.zip", Name: "Sonic"}},
+		{System: "megadrive", Game: gamelist.Game{Path: "./Golden Axe.zip", Name: "Golden Axe"}},
+	}}
+	if err := Save(path, reg); err != nil {
+		t.Fatalf("initial Save() error = %v, want nil", err)
+	}
+
+	reloaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+
+	goldenAxeFile := filepath.Join(path, "megadrive", "Golden Axe.json")
+	before := statAll(t, []string{goldenAxeFile})
+
+	candidate := reloaded.Clone()
+	if err := UpdateMetadata(candidate, "megadrive", "Sonic", Metadata{Name: "Sonic the Hedgehog"}, nil); err != nil {
+		t.Fatalf("UpdateMetadata() error = %v, want nil", err)
+	}
+	if err := Save(path, candidate); err != nil {
+		t.Fatalf("Save() error = %v, want nil", err)
+	}
+
+	after := statAll(t, []string{goldenAxeFile})
+	if !before[goldenAxeFile].Equal(after[goldenAxeFile]) {
+		t.Errorf("Golden Axe.json was rewritten though the clone only changed Sonic's entry")
+	}
+}
+
+// statAll stats every path in files, returning each one's modification time
+// keyed by path, so a test can prove a later Save left a file untouched.
+func statAll(t *testing.T, files []string) map[string]time.Time {
+	t.Helper()
+	times := make(map[string]time.Time, len(files))
+	for _, f := range files {
+		info, err := os.Stat(f)
+		if err != nil {
+			t.Fatalf("stat %s: %v", f, err)
+		}
+		times[f] = info.ModTime()
+	}
+	return times
+}
+
+// indexOfGameNamed returns the index of the entry named name in reg.Entries,
+// failing the test if none matches.
+func indexOfGameNamed(t *testing.T, reg *Registry, name string) int {
+	t.Helper()
+	for i, e := range reg.Entries {
+		if e.Game.Name == name {
+			return i
+		}
+	}
+	t.Fatalf("no entry named %q found in %v", name, reg.Entries)
+	return -1
 }
 
 func TestImport_SameBaseNameDifferentExtension_SecondGameUpdatesFirstEntry(t *testing.T) {

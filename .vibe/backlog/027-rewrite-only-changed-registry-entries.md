@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Rewrite Only Changed Registry Entries
 

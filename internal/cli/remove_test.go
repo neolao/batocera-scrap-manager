@@ -2,10 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/neolao/batocera-scrap-manager/internal/store"
 )
 
 func setRemoveConfig(t *testing.T) string {
@@ -124,41 +128,30 @@ func TestExecute_Remove_SiteCannotBeRegenerated_ConfirmsTheRemovalAndSaysTheSite
 	}
 }
 
-func TestExecute_Remove_RegistryCannotBeWritten_WarnsAboutTheRegistryNotAStaleSite(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("running as root: a read-only file would still be writable")
-	}
-	registryFolder := setRemoveConfig(t)
-	writeRegistryEntry(t, registryFolder, "megadrive", "./Sonic.zip", "Sonic the Hedgehog", "A classic platformer.")
-	writeRegistryEntry(t, registryFolder, "snes", "./Mario.zip", "Super Mario World", "Another classic.")
-	// The entry that survives the removal is still readable, but its system
-	// folder can no longer be written into: registry.Save writes each game
-	// file through a temporary file renamed over it, which needs to create
-	// and rename within the folder — read-only permission bits on the game
-	// file itself would not stop a rename, only the folder's own can.
-	keptFolder := filepath.Join(registryFolder, "snes")
-	if err := os.Chmod(keptFolder, 0o555); err != nil {
-		t.Fatalf("failed to prepare the test fixture: %v", err)
-	}
-	t.Cleanup(func() { os.Chmod(keptFolder, 0o755) })
-	var out bytes.Buffer
+// persistenceWarning is exercised directly rather than through Execute: since
+// registry.Save now rewrites only entries that actually changed (backlog item
+// 027), a plain removal never touches a surviving, untouched entry's file
+// again, so a filesystem permission trick can no longer force store.Save to
+// fail after a removal the way it used to — the very failure surface this
+// function's non-site branch used to be tested through.
+func TestPersistenceWarning_SiteNotRegeneratedError_MentionsTheUpdateCommand(t *testing.T) {
+	err := fmt.Errorf("regenerate: %w", store.ErrSiteNotRegenerated)
 
-	code := Execute([]string{"remove", "megadrive", "Sonic.zip"}, &out)
+	got := persistenceWarning(err)
 
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0: the game was removed (output: %s)", code, out.String())
+	if !strings.Contains(got, "consultation site") || !strings.Contains(got, "update") {
+		t.Errorf("persistenceWarning() = %q, want it to mention the consultation site and the update command", got)
 	}
-	if !strings.Contains(out.String(), "removed Sonic.zip") {
-		t.Errorf("output = %q, want it to confirm what was removed", out.String())
+}
+
+func TestPersistenceWarning_OtherError_MentionsTheRegistryNotTheSite(t *testing.T) {
+	got := persistenceWarning(errors.New("disk full"))
+
+	if !strings.Contains(got, "registry") {
+		t.Errorf("persistenceWarning() = %q, want it to mention the registry", got)
 	}
-	if !strings.Contains(out.String(), "registry") {
-		t.Errorf("output = %q, want it to warn that the registry could not be written", out.String())
-	}
-	if strings.Contains(out.String(), "consultation site") {
-		t.Errorf("output = %q, want the registry failure worded apart from a merely stale site", out.String())
-	}
-	if _, err := os.Stat(filepath.Join(registryFolder, "megadrive", "Sonic.json")); err == nil {
-		t.Error("Sonic.json still exists, want it deleted even though the registry could not be rewritten")
+	if strings.Contains(got, "consultation site") {
+		t.Errorf("persistenceWarning() = %q, want the registry failure worded apart from a merely stale site", got)
 	}
 }
 

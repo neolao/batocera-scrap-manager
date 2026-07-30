@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/neolao/batocera-scrap-manager/internal/gamelist"
@@ -40,15 +41,27 @@ type storedGame struct {
 // Registry is the centralized index of games already known.
 type Registry struct {
 	Entries []Entry
+
+	// saved holds the entries as they were last known to match the registry
+	// folder on disk — set by Load, carried across by Clone, and refreshed by
+	// Save once it has written what changed. It is what lets Save tell which
+	// entries actually differ from disk instead of rewriting all of them
+	// (backlog item 027). A Registry built directly, without going through
+	// Load or Clone, has no baseline and Save falls back to writing every
+	// entry — the same behaviour as before this field existed.
+	saved []Entry
 }
 
 // Clone returns a copy of the registry that can be modified without touching
 // the original — the way a caller applies a change, tries to write it to
 // disk, and only swaps it in once the write succeeded, so a failed save never
-// leaves memory claiming something the disk does not hold.
+// leaves memory claiming something the disk does not hold. The clone starts
+// with the same notion of what is saved on disk as the original, so a Save
+// call on the clone still rewrites only what the clone's own changes touched.
 func (r *Registry) Clone() *Registry {
-	clone := &Registry{Entries: make([]Entry, len(r.Entries))}
+	clone := &Registry{Entries: make([]Entry, len(r.Entries)), saved: make([]Entry, len(r.saved))}
 	copy(clone.Entries, r.Entries)
+	copy(clone.saved, r.saved)
 	return clone
 }
 
@@ -78,6 +91,8 @@ func Load(path string) (*Registry, error) {
 		}
 		reg.Entries = append(reg.Entries, entries...)
 	}
+	reg.saved = make([]Entry, len(reg.Entries))
+	copy(reg.saved, reg.Entries)
 	return reg, nil
 }
 
@@ -111,16 +126,31 @@ func loadSystemEntries(path, system string) ([]Entry, error) {
 // Save writes reg to the registry folder at path, as one JSON file per game
 // inside its system's subfolder (named after the ROM's base name), creating
 // folders as needed. Each file goes through writeFileAtomically, the same
-// temporary-file-then-rename helper media copies already use: Save rewrites
-// every entry on a single-game correction, not only the one that changed, so
-// a crash or a full disk partway through one game's write must leave that
-// game's previous file exactly as it was rather than truncated.
+// temporary-file-then-rename helper media copies already use, so a crash or a
+// full disk partway through one game's write leaves that game's previous file
+// exactly as it was rather than truncated.
+//
+// Only an entry that is new or differs from reg's saved baseline (see the
+// Registry.saved field) is actually written — a single-game correction no
+// longer costs one write per unrelated entry in the registry (backlog item
+// 027). Once every changed entry has been written, the baseline is refreshed
+// to match reg.Entries, so a later Save on the same *Registry diffs against
+// what is now really on disk.
 func Save(path string, reg *Registry) error {
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return err
 	}
 
+	baseline := make(map[entryKey]Entry, len(reg.saved))
+	for _, e := range reg.saved {
+		baseline[keyOf(e)] = e
+	}
+
 	for _, e := range reg.Entries {
+		if base, found := baseline[keyOf(e)]; found && base.Game == e.Game && slices.Equal(base.ManualFields, e.ManualFields) {
+			continue
+		}
+
 		systemDir := filepath.Join(path, e.System)
 		if err := os.MkdirAll(systemDir, 0o755); err != nil {
 			return err
@@ -134,7 +164,24 @@ func Save(path string, reg *Registry) error {
 			return err
 		}
 	}
+
+	reg.saved = make([]Entry, len(reg.Entries))
+	copy(reg.saved, reg.Entries)
 	return nil
+}
+
+// entryKey identifies an entry the same way the registry deduplicates and
+// stores it on disk: by system and game ID (see GameID). Save uses it to
+// match a current entry against reg's saved baseline regardless of Entries
+// order, which an import's appends or a removal can change.
+type entryKey struct {
+	system string
+	id     string
+}
+
+// keyOf returns the entryKey identifying e.
+func keyOf(e Entry) entryKey {
+	return entryKey{system: e.System, id: GameID(e.Game.Path)}
 }
 
 // GameID returns the identifier used to deduplicate registry entries (see

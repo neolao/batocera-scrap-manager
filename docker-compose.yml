@@ -3,6 +3,12 @@ services:
     build: .
     image: batocera-scrap-manager
     restart: unless-stopped
+    # Defaults to the image's built-in non-root uid/gid (65532). Override
+    # PUID/PGID in .env when the mounted folders are already owned by
+    # another user and can't simply be chowned to 65532 — e.g. a Synology
+    # shared folder whose ACL doesn't recognize that uid at all, only the
+    # DSM user that created the folder.
+    user: "${PUID:-65532}:${PGID:-65532}"
     ports:
       - "${PORT:-8080}:8080"
     environment:

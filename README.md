@@ -59,7 +59,7 @@ To run the web browser interface without installing Go, build and run the provid
 docker build -t batocera-scrap-manager .
 ```
 
-The container runs as a non-root user (uid 65532), so every folder it writes to must already be owned by that uid — Docker otherwise creates missing ones as `root`, and the container gets a permission error the moment it tries to write. Prepare them upfront:
+The container runs as a non-root user (uid 65532 by default), so every folder it writes to must already be owned by that uid — Docker otherwise creates missing ones as `root`, and the container gets a permission error the moment it tries to write. Prepare them upfront:
 
 ```sh
 sudo mkdir -p /path/to/registry /path/to/config
@@ -67,6 +67,8 @@ sudo chown -R 65532:65532 /path/to/registry /path/to/config
 ```
 
 `/path/to/roms` needs the same ownership only if you'll write to it too (`scrape` or the browser's "Complete the ROMs folders"); if it's a network share (NFS/SMB) rather than a local filesystem, `chown` may not apply at all — mount it with options that map to uid/gid 65532 instead (e.g. `uid=65532,gid=65532` for a CIFS mount).
+
+If the folders still refuse writes after a successful `chown` (`ls -lan` really does show `65532`), the filesystem likely layers an ACL on top of plain Unix ownership that a plain `ls -l` hides — look for a trailing `+` after the permission bits (`ls -lan` again: `drwxrwxrwx+` rather than `drwxrwxrwx`). This is common on Synology shared folders, whose ACL only recognizes actual DSM users and overrides the classic bits entirely, no matter what they say. Rather than fighting the ACL, run the container as the uid:gid that already owns the folder (`ls -lan` names it) with `--user <uid>:<gid>` instead of chowning to 65532 — see the `docker-compose.yml`-based instructions below, or the *Running on a NAS* section, for the equivalent `PUID`/`PGID` setting.
 
 `config.json` is filled in with the `config` subcommand of the same image, run as a throwaway container (`--rm`, overriding the entrypoint) rather than through the long-running server — the server refuses to start before a registry is configured, so it cannot be up yet at this point:
 
@@ -114,7 +116,9 @@ docker compose run --rm --entrypoint /batocera-scrap-manager \
 docker compose up -d
 ```
 
-The container runs as a non-root user (uid 65532), which is why the folders are chowned to it upfront — Docker otherwise creates missing ones as `root`, and the container gets a permission error the moment it tries to write. `ROMS_FOLDER` needs the same treatment only if you'll write to it too (`scrape` or the browser's "Complete the ROMs folders"); skip it for a network share (NFS/SMB), where `chown` may not apply — mount it with options that map to uid/gid 65532 instead.
+The container runs as a non-root user (uid:gid 65532:65532 by default — overridable with `PUID`/`PGID` in `.env`, see below), which is why the folders are chowned to it upfront — Docker otherwise creates missing ones as `root`, and the container gets a permission error the moment it tries to write. `ROMS_FOLDER` needs the same treatment only if you'll write to it too (`scrape` or the browser's "Complete the ROMs folders"); skip it for a network share (NFS/SMB), where `chown` may not apply — mount it with options that map to uid/gid 65532 instead.
+
+If writes still fail after a successful `chown` (`ls -lan` on the folder genuinely shows `65532` as owner), check for a trailing `+` on its permissions (`drwxrwxrwx+`): that marks an ACL layered on top of plain Unix ownership, which some filesystems — most notably Synology shared folders — enforce *instead of* the classic bits, for actual local users only. `65532` isn't one, so the ACL silently refuses the write no matter what `chown`/`chmod` say. Don't fight it: set `PUID`/`PGID` in `.env` to the uid:gid that already owns the folder instead (same `ls -lan` names it), so the container runs as a user the ACL already trusts, and skip the `chown` entirely.
 
 `docker compose run --rm` starts a throwaway container from the same service definition, overriding its entrypoint — no port is published by it, so it doesn't clash with the long-running server; it works the same way whether that server is up or not, which is why it's used for the first-time setup above. It stays the right way to change `config.json` afterwards too, e.g. to add another ROMs folder — just follow it with `docker compose restart` for the change to take effect.
 
@@ -128,11 +132,19 @@ Most NAS boxes that can run Docker at all (Synology with Container Manager / DSM
 2. **Get the source onto the NAS.** Most NAS units don't ship `git`; clone the repository on your computer instead and copy the folder over (`scp -r batocera-scrap-manager admin@nas:/volume1/docker/`, or drag it in through File Station / a mapped SMB share).
 3. **Check the CPU architecture** before building: recent Synology/QNAP models are `x86_64` (Intel/AMD), same as a typical dev machine, so `docker build`/`docker compose up --build` run directly on the NAS. Older or entry-level models are `arm64`/`armv7` — either build for that platform elsewhere with `docker buildx build --platform linux/arm64 -t batocera-scrap-manager .` and transfer the image (`docker save` / `docker load`, or a registry you control), or build it once directly over SSH on the NAS itself (slower, but architecture-correct by construction).
 4. **Point paths at NAS shared folders**, not container-internal paths, in `.env` — e.g. `REGISTRY_FOLDER=/volume1/scrap-registry`, `ROMS_FOLDER=/volume1/roms` (the parent of every system's ROMs folder — see above), `CONFIG_FOLDER=/volume1/docker/batocera-scrap-manager/config` (a folder, not the `config.json` file — see `.env.example`). If Batocera itself lives on a different machine, share its `roms` folder over the network (NFS/SMB) and mount that share on the NAS first, so `ROMS_FOLDER` can point at a local path into it.
-5. From the copied folder, over SSH:
+5. **Set `PUID`/`PGID` in `.env` instead of chowning to 65532.** Synology (and some QNAP) shared folders enforce an ACL on top of plain Unix permissions — `ls -lan` on one shows a trailing `+` (`drwxrwxrwx+`) — that only recognizes actual NAS users and silently overrides `chown`/`chmod` for anyone else, uid 65532 included. Point the container at a user the ACL already trusts instead: create the folders as your admin user first (so the NAS's own ACL applies to them as usual), find that user's ids, and set them in `.env`:
    ```sh
-   cp .env.example .env   # then edit .env with the paths above
-   sudo mkdir -p /volume1/scrap-registry /volume1/docker/batocera-scrap-manager/config
-   sudo chown -R 65532:65532 /volume1/scrap-registry /volume1/docker/batocera-scrap-manager/config
+   mkdir -p /volume1/scrap-registry /volume1/docker/batocera-scrap-manager/config
+   id                                     # note the uid= and the first gid=
+   ```
+   ```
+   # in .env
+   PUID=1026   # the uid= value above
+   PGID=100    # the gid= value above
+   ```
+6. From the copied folder, over SSH:
+   ```sh
+   cp .env.example .env   # then edit .env with the paths above and PUID/PGID
    docker compose build
    docker compose run --rm --entrypoint /batocera-scrap-manager \
      batocera-scrap-manager config set-registry /data/registry
@@ -140,7 +152,7 @@ Most NAS boxes that can run Docker at all (Synology with Container Manager / DSM
      batocera-scrap-manager config add-roms-folder /data/roms/snes
    docker compose up -d
    ```
-6. The web UI is then reachable at `http://<nas-address>:8080` (or whatever `PORT` was set to in `.env`) from any machine on the network.
+7. The web UI is then reachable at `http://<nas-address>:8080` (or whatever `PORT` was set to in `.env`) from any machine on the network.
 
 <!-- vibe:end:install -->
 

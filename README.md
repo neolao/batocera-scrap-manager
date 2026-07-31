@@ -59,6 +59,15 @@ To run the web browser interface without installing Go, build and run the provid
 docker build -t batocera-scrap-manager .
 ```
 
+The container runs as a non-root user (uid 65532), so every folder it writes to must already be owned by that uid — Docker otherwise creates missing ones as `root`, and the container gets a permission error the moment it tries to write. Prepare them upfront:
+
+```sh
+sudo mkdir -p /path/to/registry /path/to/config
+sudo chown -R 65532:65532 /path/to/registry /path/to/config
+```
+
+`/path/to/roms` needs the same ownership only if you'll write to it too (`scrape` or the browser's "Complete the ROMs folders"); if it's a network share (NFS/SMB) rather than a local filesystem, `chown` may not apply at all — mount it with options that map to uid/gid 65532 instead (e.g. `uid=65532,gid=65532` for a CIFS mount).
+
 `config.json` is filled in with the `config` subcommand of the same image, run as a throwaway container (`--rm`, overriding the entrypoint) rather than through the long-running server — the server refuses to start before a registry is configured, so it cannot be up yet at this point:
 
 ```sh
@@ -88,8 +97,6 @@ docker run -d \
   batocera-scrap-manager
 ```
 
-The container runs as a non-root user (uid 65532): the host folders bind-mounted for the registry, the ROMs folder and the config folder must be readable and writable by that uid, or the server fails to start or to save.
-
 `/path/to/roms` above is expected to be the *parent* of every system's ROMs folder (as Batocera itself lays them out, e.g. `roms/snes`, `roms/megadrive`), mounted once. Which of its subfolders are actually watched is controlled entirely by `roms_folders` in `config.json` — running `config add-roms-folder` as above and restarting the container is enough to watch a new one, with no new bind mount required. Folders that don't already share one parent directory (separate drives, network shares) can be gathered under one by creating a folder of symlinks on the host and mounting that instead.
 
 A change to `config.json` only takes effect on the running server after a restart (`docker restart <container>`), since the configuration is read once at startup.
@@ -97,6 +104,8 @@ A change to `config.json` only takes effect on the running server after a restar
 A `docker-compose.yml` is provided for the same setup. Copy `.env.example` to `.env`, fill in the host paths, then:
 
 ```sh
+sudo mkdir -p ${REGISTRY_FOLDER} ${CONFIG_FOLDER}   # the values set in .env
+sudo chown -R 65532:65532 ${REGISTRY_FOLDER} ${CONFIG_FOLDER}
 docker compose build
 docker compose run --rm --entrypoint /batocera-scrap-manager \
   batocera-scrap-manager config set-registry /data/registry
@@ -104,6 +113,8 @@ docker compose run --rm --entrypoint /batocera-scrap-manager \
   batocera-scrap-manager config add-roms-folder /data/roms/snes
 docker compose up -d
 ```
+
+The container runs as a non-root user (uid 65532), which is why the folders are chowned to it upfront — Docker otherwise creates missing ones as `root`, and the container gets a permission error the moment it tries to write. `ROMS_FOLDER` needs the same treatment only if you'll write to it too (`scrape` or the browser's "Complete the ROMs folders"); skip it for a network share (NFS/SMB), where `chown` may not apply — mount it with options that map to uid/gid 65532 instead.
 
 `docker compose run --rm` starts a throwaway container from the same service definition, overriding its entrypoint — no port is published by it, so it doesn't clash with the long-running server; it works the same way whether that server is up or not, which is why it's used for the first-time setup above. It stays the right way to change `config.json` afterwards too, e.g. to add another ROMs folder — just follow it with `docker compose restart` for the change to take effect.
 
@@ -120,6 +131,8 @@ Most NAS boxes that can run Docker at all (Synology with Container Manager / DSM
 5. From the copied folder, over SSH:
    ```sh
    cp .env.example .env   # then edit .env with the paths above
+   sudo mkdir -p /volume1/scrap-registry /volume1/docker/batocera-scrap-manager/config
+   sudo chown -R 65532:65532 /volume1/scrap-registry /volume1/docker/batocera-scrap-manager/config
    docker compose build
    docker compose run --rm --entrypoint /batocera-scrap-manager \
      batocera-scrap-manager config set-registry /data/registry

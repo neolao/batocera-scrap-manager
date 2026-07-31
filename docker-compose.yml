@@ -6,14 +6,15 @@ services:
     ports:
       - "${PORT:-8080}:8080"
     environment:
-      - BATOCERA_SCRAP_MANAGER_CONFIG=/data/config.json
+      - BATOCERA_SCRAP_MANAGER_CONFIG=/data/config/config.json
     volumes:
       - ${REGISTRY_FOLDER}:/data/registry
       # ROMS_FOLDER is the parent of every ROMs folder to watch; add or
       # remove folders via config.json's "roms_folders", not here — see
       # .env.example.
       - ${ROMS_FOLDER}:/data/roms
-      # Not :ro: `docker compose exec batocera-scrap-manager
-      # /batocera-scrap-manager config ...` needs to write to it. The server
-      # itself only ever reads it.
-      - ${CONFIG_FILE}:/data/config.json
+      # A folder, not the config.json file itself: unlike a missing folder,
+      # a missing file makes Docker bind-mount a directory in its place,
+      # which breaks the server. config.json is created inside it by the
+      # `config` subcommand — see .env.example and the README.
+      - ${CONFIG_FOLDER}:/data/config

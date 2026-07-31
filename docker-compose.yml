@@ -1,0 +1,13 @@
+services:
+  batocera-scrap-manager:
+    build: .
+    image: batocera-scrap-manager
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - BATOCERA_SCRAP_MANAGER_CONFIG=/data/config.json
+    volumes:
+      - ${REGISTRY_FOLDER}:/data/registry
+      - ${ROMS_FOLDER}:/data/roms
+      - ${CONFIG_FILE}:/data/config.json:ro

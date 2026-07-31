@@ -66,7 +66,15 @@ docker run -d \
   batocera-scrap-manager
 ```
 
-The configuration file must set `registry_folder` (and, if roms folders should be watched, `roms_folders`) to paths under the mounted volumes, e.g. `/data/registry` and `/data/roms`. The container runs as a non-root user.
+The configuration file must set `registry_folder` (and, if roms folders should be watched, `roms_folders`) to paths under the mounted volumes, e.g. `/data/registry` and `/data/roms`. The container runs as a non-root user (uid 65532): the host folders bind-mounted for the registry, the ROMs folder and the config file must be readable and writable by that uid, or the server fails to start or to save.
+
+A `docker-compose.yml` is provided for the same setup. Copy `.env.example` to `.env`, fill in the host paths, then:
+
+```sh
+docker compose up -d
+```
+
+`.env` is git-ignored since its paths are specific to your machine; `.env.example` documents each variable.
 <!-- vibe:end:install -->
 
 <!-- vibe:begin:usage -->

@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - The web browser interface can now be started without installing Go: a `Dockerfile` at the repository root builds a small image that runs `batocera-scrap-manager serve` by default. The registry folder, the ROMs folders and the configuration file are all supplied from outside the container — nothing is baked in — and the container runs as a non-root user.
 - Saving a single correction — editing a game, protecting or unprotecting it, uploading or removing a medium, deleting a game — no longer rewrites every other game's file in the registry, only the one that actually changed. On a registry holding several thousand games, a single-field correction from the web browser now costs one file write instead of thousands.
 - `batocera-scrap-manager update` and `batocera-scrap-manager scrape` no longer slow down as the registry grows: looking up a game against a large registry is now near-instant instead of getting a little slower for every game already known, so importing or completing a ROMs folder against a registry holding several thousand games finishes in a fraction of the time it used to.
+- The web browser interface can now be started with `docker compose up -d`: a `docker-compose.yml` at the repository root wires up the existing `Dockerfile`, taking the registry folder, ROMs folder, config file and exposed port from an `.env` file (`.env.example` documents each one). `.env` is git-ignored, since its paths are specific to the machine it runs on.
 
 ### Changed
 

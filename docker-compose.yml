@@ -13,4 +13,7 @@ services:
       # remove folders via config.json's "roms_folders", not here — see
       # .env.example.
       - ${ROMS_FOLDER}:/data/roms
-      - ${CONFIG_FILE}:/data/config.json:ro
+      # Not :ro: `docker compose exec batocera-scrap-manager
+      # /batocera-scrap-manager config ...` needs to write to it. The server
+      # itself only ever reads it.
+      - ${CONFIG_FILE}:/data/config.json

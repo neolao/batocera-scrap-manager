@@ -57,26 +57,61 @@ To run the web browser interface without installing Go, build and run the provid
 
 ```sh
 docker build -t batocera-scrap-manager .
+touch /path/to/config.json   # an empty file is enough to start; see below
 docker run -d \
   -p 8080:8080 \
   -e BATOCERA_SCRAP_MANAGER_CONFIG=/data/config.json \
   -v /path/to/registry:/data/registry \
   -v /path/to/roms:/data/roms \
-  -v /path/to/config.json:/data/config.json:ro \
+  -v /path/to/config.json:/data/config.json \
   batocera-scrap-manager
 ```
 
-The configuration file must set `registry_folder` (and, if roms folders should be watched, `roms_folders`) to paths under the mounted volumes, e.g. `/data/registry` and `/data/roms`. The container runs as a non-root user (uid 65532): the host folders bind-mounted for the registry, the ROMs folder and the config file must be readable and writable by that uid, or the server fails to start or to save.
+The configuration file must set `registry_folder` (and, if roms folders should be watched, `roms_folders`) to paths under the mounted volumes, e.g. `/data/registry` and `/data/roms`. The container runs as a non-root user (uid 65532): the host folders bind-mounted for the registry, the ROMs folder and the config file must be readable and writable by that uid, or the server fails to start or to save. `/path/to/config.json` must already exist as a file before the container's first start — an empty one is fine — otherwise Docker mounts a directory in its place and the server never starts.
 
 `/path/to/roms` above is expected to be the *parent* of every system's ROMs folder (as Batocera itself lays them out, e.g. `roms/snes`, `roms/megadrive`), mounted once. Which of its subfolders are actually watched is controlled entirely by `roms_folders` in `config.json` — adding a folder there and restarting the container is enough to watch a new one, with no new bind mount required. Folders that don't already share one parent directory (separate drives, network shares) can be gathered under one by creating a folder of symlinks on the host and mounting that instead.
+
+`config.json` is not meant to be hand-edited: with the container running, use the same image to run the `config` subcommand against the mounted file, e.g.
+
+```sh
+docker exec <container> /batocera-scrap-manager config set-registry /data/registry
+docker exec <container> /batocera-scrap-manager config add-roms-folder /data/roms/snes
+docker exec <container> /batocera-scrap-manager config list
+```
+
+The image has no shell (it's built on `distroless`), which is why the binary is invoked directly rather than through `sh -c`. `docker exec` still works without one. A change only takes effect on the running server after a restart (`docker restart <container>`), since the configuration is read once at startup.
 
 A `docker-compose.yml` is provided for the same setup. Copy `.env.example` to `.env`, fill in the host paths, then:
 
 ```sh
+touch /path/to/config.json   # same path as CONFIG_FILE in .env
 docker compose up -d
+docker compose exec batocera-scrap-manager /batocera-scrap-manager config set-registry /data/registry
+docker compose exec batocera-scrap-manager /batocera-scrap-manager config add-roms-folder /data/roms/snes
+docker compose restart
 ```
 
 `.env` is git-ignored since its paths are specific to your machine; `.env.example` documents each variable.
+
+### Running on a NAS <!-- keep -->
+
+Most NAS boxes that can run Docker at all (Synology with Container Manager / DSM 7.2+, or the older Docker package; QNAP with Container Station) expose it well enough to run this the same way as above, with a few NAS-specific points:
+
+1. **Enable SSH** (Synology: *Control Panel → Terminal & SNMP*; QNAP: *Control Panel → Network & File Services → Telnet/SSH*) and log in as an admin user — the NAS's own Docker GUI can run a compose "project", but building the image and running `config` commands is far easier from a shell.
+2. **Get the source onto the NAS.** Most NAS units don't ship `git`; clone the repository on your computer instead and copy the folder over (`scp -r batocera-scrap-manager admin@nas:/volume1/docker/`, or drag it in through File Station / a mapped SMB share).
+3. **Check the CPU architecture** before building: recent Synology/QNAP models are `x86_64` (Intel/AMD), same as a typical dev machine, so `docker build`/`docker compose up --build` run directly on the NAS. Older or entry-level models are `arm64`/`armv7` — either build for that platform elsewhere with `docker buildx build --platform linux/arm64 -t batocera-scrap-manager .` and transfer the image (`docker save` / `docker load`, or a registry you control), or build it once directly over SSH on the NAS itself (slower, but architecture-correct by construction).
+4. **Point paths at NAS shared folders**, not container-internal paths, in `.env` — e.g. `REGISTRY_FOLDER=/volume1/scrap-registry`, `ROMS_FOLDER=/volume1/roms` (the parent of every system's ROMs folder — see above), `CONFIG_FILE=/volume1/docker/batocera-scrap-manager/config.json`. If Batocera itself lives on a different machine, share its `roms` folder over the network (NFS/SMB) and mount that share on the NAS first, so `ROMS_FOLDER` can point at a local path into it.
+5. From the copied folder, over SSH:
+   ```sh
+   cp .env.example .env   # then edit .env with the paths above
+   touch /volume1/docker/batocera-scrap-manager/config.json
+   docker compose up -d --build
+   docker compose exec batocera-scrap-manager /batocera-scrap-manager config set-registry /data/registry
+   docker compose exec batocera-scrap-manager /batocera-scrap-manager config add-roms-folder /data/roms/snes
+   docker compose restart
+   ```
+6. The web UI is then reachable at `http://<nas-address>:8080` (or whatever `PORT` was set to in `.env`) from any machine on the network.
+
 <!-- vibe:end:install -->
 
 <!-- vibe:begin:usage -->

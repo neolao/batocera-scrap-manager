@@ -9,5 +9,8 @@ services:
       - BATOCERA_SCRAP_MANAGER_CONFIG=/data/config.json
     volumes:
       - ${REGISTRY_FOLDER}:/data/registry
+      # ROMS_FOLDER is the parent of every ROMs folder to watch; add or
+      # remove folders via config.json's "roms_folders", not here — see
+      # .env.example.
       - ${ROMS_FOLDER}:/data/roms
       - ${CONFIG_FILE}:/data/config.json:ro

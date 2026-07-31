@@ -68,6 +68,8 @@ docker run -d \
 
 The configuration file must set `registry_folder` (and, if roms folders should be watched, `roms_folders`) to paths under the mounted volumes, e.g. `/data/registry` and `/data/roms`. The container runs as a non-root user (uid 65532): the host folders bind-mounted for the registry, the ROMs folder and the config file must be readable and writable by that uid, or the server fails to start or to save.
 
+`/path/to/roms` above is expected to be the *parent* of every system's ROMs folder (as Batocera itself lays them out, e.g. `roms/snes`, `roms/megadrive`), mounted once. Which of its subfolders are actually watched is controlled entirely by `roms_folders` in `config.json` — adding a folder there and restarting the container is enough to watch a new one, with no new bind mount required. Folders that don't already share one parent directory (separate drives, network shares) can be gathered under one by creating a folder of symlinks on the host and mounting that instead.
+
 A `docker-compose.yml` is provided for the same setup. Copy `.env.example` to `.env`, fill in the host paths, then:
 
 ```sh

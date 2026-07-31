@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-31
+
 ### Added
 
 - Users can now browse the registry live in a web browser with `batocera-scrap-manager serve`: it starts a web server (on `0.0.0.0:8080` by default, changeable with `--addr`) offering a page that lists every game grouped by system, and a page per game showing its full metadata and every medium scraped for it (jaquette, video, marquee, thumbnail). A link pointing at an unknown system or game shows a "not found" page offering a way back to the list, and pressing Ctrl+C stops the server.
@@ -85,7 +87,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Users can configure the registry folder and one or more Batocera ROMs folders to watch, via `batocera-scrap-manager config set-registry`, `config add-roms-folder`, and `config list`.
 
-[Unreleased]: https://github.com/neolao/batocera-scrap-manager/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/neolao/batocera-scrap-manager/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/neolao/batocera-scrap-manager/releases/tag/v0.1.0

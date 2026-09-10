@@ -19,7 +19,9 @@ Without a path, completes missing metadata and media for every game in
 every configured ROMs folder, using the registry as the source of
 already-known information.
 
-With the path to a specific ROM file, only that game is completed.
+With the path to a specific ROM file, only that game is completed. If that
+file has no entry yet in its folder's gamelist.xml but the registry already
+knows the game, a new entry is added for it instead of refusing.
 `
 
 func runScrape(args []string, out io.Writer) int {
@@ -68,7 +70,7 @@ func runScrapeTargeted(reg *registry.Registry, cfg config.Config, path string, o
 
 	onProgress := newCompletionProgressReporter(out, romsFolder)
 
-	completedGame, failedGame, err := registry.CompleteGame(reg, romsFolder, cfg.RegistryFolder, system, romFilename, onProgress)
+	completedGame, addedGame, failedGame, err := registry.CompleteGame(reg, romsFolder, cfg.RegistryFolder, system, romFilename, onProgress)
 	if err != nil {
 		if errors.Is(err, registry.ErrGameNotFound) {
 			fmt.Fprintf(out, "error: no game found in the registry for %q (system: %s)\n", path, system)
@@ -84,6 +86,9 @@ func runScrapeTargeted(reg *registry.Registry, cfg config.Config, path string, o
 	}
 	if failedGame {
 		failed = 1
+	}
+	if addedGame {
+		fmt.Fprintln(out, "added a new entry to the local gamelist.xml")
 	}
 	fmt.Fprintf(out, registry.CompletionSummaryFormat+"\n", 1, completed, failed)
 	return 0

@@ -1523,13 +1523,16 @@ func TestCompleteGame_IncompleteLocalEntry_FillsFromRegistryAndCopiesMedia(t *te
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	completed, failed, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+	completed, added, failed, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
 
 	if err != nil {
 		t.Fatalf("CompleteGame() error = %v, want nil", err)
 	}
 	if !completed {
 		t.Error("completed = false, want true (Sonic had gaps filled)")
+	}
+	if added {
+		t.Error("added = true, want false (Sonic already has a local entry)")
 	}
 	if failed {
 		t.Error("failed = true, want false")
@@ -1566,7 +1569,7 @@ func TestCompleteGame_AlreadyCompleteLocalEntry_ReturnsNotCompletedNoError(t *te
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	completed, failed, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", nil)
+	completed, _, failed, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", nil)
 
 	if err != nil {
 		t.Fatalf("CompleteGame() error = %v, want nil", err)
@@ -1594,7 +1597,7 @@ func TestCompleteGame_NoMatchingRegistryEntry_ReturnsErrGameNotFound(t *testing.
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	_, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Unknown.zip", nil)
+	_, _, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Unknown.zip", nil)
 
 	if !errors.Is(err, ErrGameNotFound) {
 		t.Errorf("CompleteGame() error = %v, want ErrGameNotFound (Unknown.zip has no registry entry)", err)
@@ -1606,7 +1609,7 @@ func TestCompleteGame_RomNotInLocalGamelist_ReturnsErrGameNotFound(t *testing.T)
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	_, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Ghost.zip", nil)
+	_, _, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Ghost.zip", nil)
 
 	if !errors.Is(err, ErrGameNotFound) {
 		t.Errorf("CompleteGame() error = %v, want ErrGameNotFound (Ghost.zip is not in the local gamelist.xml)", err)
@@ -1618,7 +1621,7 @@ func TestCompleteGame_SystemHasNoLocalGamelist_ReturnsErrGameNotFound(t *testing
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	_, _, err := CompleteGame(reg, romsFolder, registryFolder, "mastersystem", "Alex Kidd.zip", nil)
+	_, _, _, err := CompleteGame(reg, romsFolder, registryFolder, "mastersystem", "Alex Kidd.zip", nil)
 
 	if !errors.Is(err, ErrGameNotFound) {
 		t.Errorf("CompleteGame() error = %v, want ErrGameNotFound (mastersystem has no local gamelist.xml)", err)
@@ -1631,7 +1634,7 @@ func TestCompleteGame_ProgressCallback_FiresWithTheGamesLocalPosition(t *testing
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
 	var events []CompletionEvent
-	_, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", func(e CompletionEvent) {
+	_, _, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", func(e CompletionEvent) {
 		events = append(events, e)
 	})
 
@@ -1655,7 +1658,7 @@ func TestCompleteGame_MediaCopyFails_ReturnsFailedButStillFillsGamelist(t *testi
 		t.Fatalf("write blocking file: %v", err)
 	}
 
-	completed, failed, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+	completed, _, failed, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
 
 	if err != nil {
 		t.Fatalf("CompleteGame() error = %v, want nil (per-game failure, not fatal)", err)
@@ -1684,10 +1687,145 @@ func TestCompleteGame_LocalGamelistWriteFails_ReturnsError(t *testing.T) {
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 	makeSystemFolderReadOnly(t, filepath.Join(romsFolder, "megadrive"))
 
-	_, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+	_, _, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
 
 	if err == nil {
 		t.Fatal("CompleteGame() error = nil, want error when the local gamelist.xml cannot be rewritten")
+	}
+}
+
+func TestCompleteGame_RomOnDiskButNotInLocalGamelist_AddsNewEntry(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	reg.Entries = append(reg.Entries, Entry{System: "megadrive", Game: gamelist.Game{
+		Path: "./Streets of Rage.zip", Name: "Streets of Rage", Desc: "A brawler.",
+	}})
+	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "Streets of Rage.zip"), []byte("rom-bytes"), 0o644); err != nil {
+		t.Fatalf("write ROM file: %v", err)
+	}
+
+	completed, added, failed, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Streets of Rage.zip", nil)
+
+	if err != nil {
+		t.Fatalf("CompleteGame() error = %v, want nil", err)
+	}
+	if !added {
+		t.Error("added = false, want true (the ROM is on disk but was not yet listed)")
+	}
+	if !completed {
+		t.Error("completed = false, want true")
+	}
+	if failed {
+		t.Error("failed = true, want false")
+	}
+
+	streetsOfRage := localGame(t, romsFolder, "megadrive", "Streets of Rage")
+	if streetsOfRage.Desc != "A brawler." {
+		t.Errorf("Streets of Rage.Desc = %q, want %q from the registry", streetsOfRage.Desc, "A brawler.")
+	}
+	sonic := localGame(t, romsFolder, "megadrive", "Sonic")
+	if sonic.Desc != "" {
+		t.Errorf("Sonic.Desc = %q, want left empty: CompleteGame targeted Streets of Rage only", sonic.Desc)
+	}
+}
+
+func TestCompleteGame_RegistryMatchButRomNotOnDiskOrLocalGamelist_ReturnsErrGameNotFound(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	reg.Entries = append(reg.Entries, Entry{System: "megadrive", Game: gamelist.Game{
+		Path: "./Streets of Rage.zip", Name: "Streets of Rage", Desc: "A brawler.",
+	}})
+	// Deliberately no ROM file written to disk: the registry knows the game,
+	// but nothing here actually holds its ROM.
+
+	_, added, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "Streets of Rage.zip", nil)
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Errorf("CompleteGame() error = %v, want ErrGameNotFound (no ROM file, even though the registry knows the game)", err)
+	}
+	if added {
+		t.Error("added = true, want false: nothing should be created without a ROM file on disk")
+	}
+}
+
+func TestCompleteGame_SystemHasNoLocalGamelistButRomOnDisk_CreatesGamelistWithNewEntry(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	reg.Entries = append(reg.Entries, Entry{System: "mastersystem", Game: gamelist.Game{
+		Path: "./Alex Kidd.zip", Name: "Alex Kidd", Desc: "A karate platformer.",
+	}})
+	mastersystem := filepath.Join(romsFolder, "mastersystem")
+	if err := os.MkdirAll(mastersystem, 0o755); err != nil {
+		t.Fatalf("mkdir mastersystem: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(mastersystem, "Alex Kidd.zip"), []byte("rom-bytes"), 0o644); err != nil {
+		t.Fatalf("write ROM file: %v", err)
+	}
+
+	completed, added, failed, err := CompleteGame(reg, romsFolder, registryFolder, "mastersystem", "Alex Kidd.zip", nil)
+
+	if err != nil {
+		t.Fatalf("CompleteGame() error = %v, want nil", err)
+	}
+	if !added {
+		t.Error("added = false, want true: the system had no gamelist.xml at all yet")
+	}
+	if !completed || failed {
+		t.Errorf("completed = %v, failed = %v, want true/false", completed, failed)
+	}
+
+	alexKidd := localGame(t, romsFolder, "mastersystem", "Alex Kidd")
+	if alexKidd.Desc != "A karate platformer." {
+		t.Errorf("Alex Kidd.Desc = %q, want %q", alexKidd.Desc, "A karate platformer.")
+	}
+}
+
+func TestCompleteGame_MalformedLocalGamelistRomOnDisk_ReturnsErrGameNotFound(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	reg.Entries = append(reg.Entries, Entry{System: "arcade", Game: gamelist.Game{
+		Path: "./Ghosts.zip", Name: "Ghosts 'n Goblins", Desc: "A platformer.",
+	}})
+	arcade := filepath.Join(romsFolder, "arcade")
+	if err := os.MkdirAll(arcade, 0o755); err != nil {
+		t.Fatalf("mkdir arcade: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(arcade, "gamelist.xml"), []byte("<not-xml"), 0o644); err != nil {
+		t.Fatalf("write malformed gamelist: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(arcade, "Ghosts.zip"), []byte("rom-bytes"), 0o644); err != nil {
+		t.Fatalf("write ROM file: %v", err)
+	}
+
+	_, added, _, err := CompleteGame(reg, romsFolder, registryFolder, "arcade", "Ghosts.zip", nil)
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Errorf("CompleteGame() error = %v, want ErrGameNotFound (the local gamelist.xml is not valid XML)", err)
+	}
+	if added {
+		t.Error("added = true, want false: a malformed gamelist.xml must never be guessed at")
+	}
+}
+
+func TestCompleteGame_RomFilenameEscapesSystemFolder_ReturnsErrGameNotFound(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	reg.Entries = append(reg.Entries, Entry{System: "megadrive", Game: gamelist.Game{
+		Path: "../../secret.zip", Name: "Secret", Desc: "Should never be reached.",
+	}})
+
+	_, added, _, err := CompleteGame(reg, romsFolder, registryFolder, "megadrive", "../../secret.zip", nil)
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Errorf("CompleteGame() error = %v, want ErrGameNotFound (the path escapes the system folder)", err)
+	}
+	if added {
+		t.Error("added = true, want false: a path escaping the system folder must never be trusted")
 	}
 }
 
@@ -2115,13 +2253,16 @@ func TestReplaceGame_LocalValuePresent_OverwritesItWithTheRegistrys(t *testing.T
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	replaced, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", nil)
+	replaced, added, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", nil)
 
 	if err != nil {
 		t.Fatalf("ReplaceGame() error = %v, want nil", err)
 	}
 	if !replaced {
 		t.Error("replaced = false, want true (the local description differs from the registry's)")
+	}
+	if added {
+		t.Error("added = true, want false (Golden Axe already has a local entry)")
 	}
 	if failed {
 		t.Error("failed = true, want false")
@@ -2138,7 +2279,7 @@ func TestReplaceGame_RegistryFieldEmpty_LeavesTheLocalValueInPlace(t *testing.T)
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	if _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", nil); err != nil {
+	if _, _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", nil); err != nil {
 		t.Fatalf("ReplaceGame() error = %v, want nil", err)
 	}
 
@@ -2155,7 +2296,7 @@ func TestReplaceGame_SameMediaReferenceOtherFile_WritesTheRegistrysFileOver(t *t
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	replaced, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+	replaced, _, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
 
 	if err != nil {
 		t.Fatalf("ReplaceGame() error = %v, want nil", err)
@@ -2183,7 +2324,7 @@ func TestReplaceGame_SecondIdenticalRun_ReportsNothingChangedAndWritesNothing(t 
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	if _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil); err != nil {
+	if _, _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil); err != nil {
 		t.Fatalf("first ReplaceGame() error = %v, want nil", err)
 	}
 
@@ -2191,7 +2332,7 @@ func TestReplaceGame_SecondIdenticalRun_ReportsNothingChangedAndWritesNothing(t 
 	// gamelist.xml or the cover art would fail outright.
 	makeSystemFolderReadOnly(t, filepath.Join(romsFolder, "megadrive"))
 
-	replaced, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+	replaced, _, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
 
 	if err != nil {
 		t.Fatalf("second ReplaceGame() error = %v, want nil: nothing differs, so nothing should be written", err)
@@ -2209,7 +2350,7 @@ func TestReplaceGame_OtherGamesOfTheFolder_AreLeftUntouched(t *testing.T) {
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	if _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil); err != nil {
+	if _, _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil); err != nil {
 		t.Fatalf("ReplaceGame() error = %v, want nil", err)
 	}
 
@@ -2232,7 +2373,7 @@ func TestReplaceGame_RomNotInLocalGamelist_ReturnsErrGameNotFound(t *testing.T) 
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	_, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Ghost.zip", nil)
+	_, _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Ghost.zip", nil)
 
 	if !errors.Is(err, ErrGameNotFound) {
 		t.Errorf("ReplaceGame() error = %v, want ErrGameNotFound (Ghost.zip is not in the local gamelist.xml)", err)
@@ -2244,7 +2385,7 @@ func TestReplaceGame_NoMatchingRegistryEntry_ReturnsErrGameNotFound(t *testing.T
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	_, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Unknown.zip", nil)
+	_, _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Unknown.zip", nil)
 
 	if !errors.Is(err, ErrGameNotFound) {
 		t.Errorf("ReplaceGame() error = %v, want ErrGameNotFound (Unknown.zip has no registry entry)", err)
@@ -2256,7 +2397,7 @@ func TestReplaceGame_SystemHasNoLocalGamelist_ReturnsErrGameNotFound(t *testing.
 	registryFolder := t.TempDir()
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
-	_, _, err := ReplaceGame(reg, romsFolder, registryFolder, "mastersystem", "Alex Kidd.zip", nil)
+	_, _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "mastersystem", "Alex Kidd.zip", nil)
 
 	if !errors.Is(err, ErrGameNotFound) {
 		t.Errorf("ReplaceGame() error = %v, want ErrGameNotFound (mastersystem has no local gamelist.xml)", err)
@@ -2272,7 +2413,7 @@ func TestReplaceGame_MediaCopyFails_ReturnsFailedButStillWritesTheGamelist(t *te
 		t.Fatalf("write blocking file: %v", err)
 	}
 
-	replaced, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
+	replaced, _, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", nil)
 
 	if err != nil {
 		t.Fatalf("ReplaceGame() error = %v, want nil (a media failure is per-game, not fatal)", err)
@@ -2298,7 +2439,7 @@ func TestReplaceGame_LocalGamelistWriteFails_ReturnsError(t *testing.T) {
 	// rewriting the gamelist.xml is the only write left to fail.
 	makeSystemFolderReadOnly(t, filepath.Join(romsFolder, "megadrive"))
 
-	_, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", nil)
+	_, _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", nil)
 
 	if err == nil {
 		t.Fatal("ReplaceGame() error = nil, want an error when the local gamelist.xml cannot be rewritten")
@@ -2311,7 +2452,7 @@ func TestReplaceGame_ProgressCallback_FiresOnceWithTheGamesLocalPosition(t *test
 	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
 
 	var events []CompletionEvent
-	_, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", func(e CompletionEvent) {
+	_, _, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Sonic.zip", func(e CompletionEvent) {
 		events = append(events, e)
 	})
 
@@ -2323,6 +2464,58 @@ func TestReplaceGame_ProgressCallback_FiresOnceWithTheGamesLocalPosition(t *test
 	}
 	if events[0].System != "megadrive" || events[0].GameName != "Sonic" || events[0].GameIndex != 1 || events[0].GameCount != 3 {
 		t.Errorf("events[0] = %+v, want System=megadrive GameName=Sonic GameIndex=1 GameCount=3", events[0])
+	}
+}
+
+func TestReplaceGame_RomOnDiskButNotInLocalGamelist_AddsNewEntry(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	reg.Entries = append(reg.Entries, Entry{System: "megadrive", Game: gamelist.Game{
+		Path: "./Streets of Rage.zip", Name: "Streets of Rage", Desc: "A brawler.",
+	}})
+	if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "Streets of Rage.zip"), []byte("rom-bytes"), 0o644); err != nil {
+		t.Fatalf("write ROM file: %v", err)
+	}
+
+	replaced, added, failed, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Streets of Rage.zip", nil)
+
+	if err != nil {
+		t.Fatalf("ReplaceGame() error = %v, want nil", err)
+	}
+	if !added {
+		t.Error("added = false, want true (the ROM is on disk but was not yet listed)")
+	}
+	if !replaced {
+		t.Error("replaced = false, want true")
+	}
+	if failed {
+		t.Error("failed = true, want false")
+	}
+
+	streetsOfRage := localGame(t, romsFolder, "megadrive", "Streets of Rage")
+	if streetsOfRage.Desc != "A brawler." {
+		t.Errorf("Streets of Rage.Desc = %q, want %q from the registry", streetsOfRage.Desc, "A brawler.")
+	}
+}
+
+func TestReplaceGame_RegistryMatchButRomNotOnDiskOrLocalGamelist_ReturnsErrGameNotFound(t *testing.T) {
+	romsFolder := writeIncompleteRomsFolder(t)
+	registryFolder := t.TempDir()
+	reg := registryWithSonicAndGoldenAxe(t, registryFolder)
+	reg.Entries = append(reg.Entries, Entry{System: "megadrive", Game: gamelist.Game{
+		Path: "./Streets of Rage.zip", Name: "Streets of Rage", Desc: "A brawler.",
+	}})
+	// Deliberately no ROM file written to disk: the registry knows the game,
+	// but nothing here actually holds its ROM.
+
+	_, added, _, err := ReplaceGame(reg, romsFolder, registryFolder, "megadrive", "Streets of Rage.zip", nil)
+
+	if !errors.Is(err, ErrGameNotFound) {
+		t.Errorf("ReplaceGame() error = %v, want ErrGameNotFound (no ROM file, even though the registry knows the game)", err)
+	}
+	if added {
+		t.Error("added = true, want false: nothing should be created without a ROM file on disk")
 	}
 }
 

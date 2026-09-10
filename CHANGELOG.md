@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Sending or completing a single game (`batocera-scrap-manager scrape <path>`, or the web browser's "Send to a ROMs folder") no longer refuses when a ROMs folder does not list the game in its `gamelist.xml` yet: if the ROM file is actually present in that folder and the registry already knows the game, a new entry is created for it there, filled with everything the registry knows, instead of being turned down. A folder that genuinely does not hold the ROM is still refused exactly as before. The CLI notes when a new entry was added; the web browser's confirmation says so distinctly from a plain fill or replacement, the same way whichever of the two rules is chosen.
+
 ## [0.4.0] - 2026-07-31
 
 ### Added

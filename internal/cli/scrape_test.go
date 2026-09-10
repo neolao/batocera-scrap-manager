@@ -290,6 +290,61 @@ func TestExecute_Scrape_TargetedPath_AlreadyComplete_PrintsZeroCompletedSummary(
 	}
 }
 
+func TestExecute_Scrape_TargetedPath_RomOnDiskButNotInLocalGamelist_AddsEntryAndNotesIt(t *testing.T) {
+	romsFolder := writeScrapeFixtureRomsFolder(t)
+	registryFolder := setScrapeConfig(t, romsFolder)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Streets of Rage.zip", "Streets of Rage", "A brawler.")
+	gamePath := filepath.Join(romsFolder, "megadrive", "Streets of Rage.zip")
+	if err := os.WriteFile(gamePath, []byte("rom-bytes"), 0o644); err != nil {
+		t.Fatalf("write ROM file: %v", err)
+	}
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape", gamePath}, &out)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (output: %s)", code, out.String())
+	}
+	if !strings.Contains(out.String(), "1 processed") || !strings.Contains(out.String(), "1 completed") {
+		t.Errorf("output = %q, want a summary mentioning 1 processed, 1 completed", out.String())
+	}
+	if !strings.Contains(out.String(), "added a new entry") {
+		t.Errorf("output = %q, want it to say a new entry was added to the gamelist.xml", out.String())
+	}
+
+	games, err := os.ReadFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"))
+	if err != nil {
+		t.Fatalf("read gamelist.xml: %v", err)
+	}
+	if !strings.Contains(string(games), "A brawler.") {
+		t.Errorf("gamelist.xml = %q, want the new entry's description", games)
+	}
+}
+
+func TestExecute_Scrape_TargetedPath_RomNotOnDiskAndNotInLocalGamelist_ReturnsErrorCode(t *testing.T) {
+	romsFolder := writeScrapeFixtureRomsFolder(t)
+	registryFolder := setScrapeConfig(t, romsFolder)
+	writeRegistryEntry(t, registryFolder, "megadrive", "./Streets of Rage.zip", "Streets of Rage", "A brawler.")
+	// Deliberately not written to disk: the registry knows the game, but this
+	// folder does not actually hold its ROM.
+	gamePath := filepath.Join(romsFolder, "megadrive", "Streets of Rage.zip")
+	var out bytes.Buffer
+
+	code := Execute([]string{"scrape", gamePath}, &out)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+
+	games, err := os.ReadFile(filepath.Join(romsFolder, "megadrive", "gamelist.xml"))
+	if err != nil {
+		t.Fatalf("read gamelist.xml: %v", err)
+	}
+	if strings.Contains(string(games), "Streets of Rage") {
+		t.Errorf("gamelist.xml = %q, want no entry created for a ROM that is not on disk", games)
+	}
+}
+
 func TestExecute_Scrape_TargetedPath_OutsideConfiguredRomsFolders_ReturnsErrorCode(t *testing.T) {
 	romsFolder := writeScrapeFixtureRomsFolder(t)
 	setScrapeConfig(t, romsFolder)

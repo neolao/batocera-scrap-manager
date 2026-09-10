@@ -397,6 +397,99 @@ func TestSendGame_GameAbsentFromTheFoldersGamelist_SaysSoRatherThanClaimingSucce
 	}
 }
 
+func TestSendGame_GameOnDiskButAbsentFromFoldersGamelist_BothRulesGiveTheSameConfirmation(t *testing.T) {
+	writeGhostRom := func(t *testing.T, romsFolder string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(romsFolder, "megadrive", "Ghost.zip"), []byte("rom-bytes"), 0o644); err != nil {
+			t.Fatalf("write ROM file: %v", err)
+		}
+	}
+
+	regFill, registryFolderFill := registryForSending(t)
+	romsFolderFill := romsFolderForSending(t)
+	writeGhostRom(t, romsFolderFill)
+	handlerFill := Handler(regFill, registryFolderFill, []string{romsFolderFill})
+	recFill := post(t, handlerFill, gameURL("megadrive", "Ghost")+"/send", sendSubmission(romsFolderFill, sendModeFill))
+	if recFill.Code != http.StatusSeeOther {
+		t.Fatalf("fill: status = %d, want %d\n--- page ---\n%s", recFill.Code, http.StatusSeeOther, recFill.Body.String())
+	}
+	bannerFill := bannerAfter(t, handlerFill, recFill)
+
+	regReplace, registryFolderReplace := registryForSending(t)
+	romsFolderReplace := romsFolderForSending(t)
+	writeGhostRom(t, romsFolderReplace)
+	handlerReplace := Handler(regReplace, registryFolderReplace, []string{romsFolderReplace})
+	recReplace := post(t, handlerReplace, gameURL("megadrive", "Ghost")+"/send", sendSubmission(romsFolderReplace, sendModeReplace))
+	if recReplace.Code != http.StatusSeeOther {
+		t.Fatalf("replace: status = %d, want %d\n--- page ---\n%s", recReplace.Code, http.StatusSeeOther, recReplace.Body.String())
+	}
+	bannerReplace := bannerAfter(t, handlerReplace, recReplace)
+
+	if !strings.Contains(strings.ToLower(bannerFill), "new entry") {
+		t.Errorf("the fill confirmation %q does not say a new entry was added", bannerFill)
+	}
+	normalize := func(banner, folder string) string { return strings.ReplaceAll(banner, folder, "FOLDER") }
+	if normalize(bannerFill, romsFolderFill) != normalize(bannerReplace, romsFolderReplace) {
+		t.Errorf("fill and replace give different confirmations for a brand-new entry:\nfill:    %q\nreplace: %q", bannerFill, bannerReplace)
+	}
+
+	ghost := localGameOf(t, romsFolderFill, "A game no folder holds")
+	if ghost.Desc != "Known to the registry alone." {
+		t.Errorf("Ghost.Desc = %q, want the registry's value", ghost.Desc)
+	}
+}
+
+func TestSendGame_GameOnDiskButAbsentFromFoldersGamelist_MediaCopyFails_ReportsBothAddedAndMediaLeft(t *testing.T) {
+	reg := &registry.Registry{Entries: []registry.Entry{
+		{System: "megadrive", Game: gamelist.Game{
+			Path: "./Ghost.zip", Name: "A game no folder holds", Desc: "Known to the registry alone.",
+			Image: "./images/Ghost.png",
+		}},
+	}}
+	registryFolder := t.TempDir()
+	if err := registry.Save(registryFolder, reg); err != nil {
+		t.Fatalf("failed to write the registry: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(registryFolder, "megadrive", "images"), 0o755); err != nil {
+		t.Fatalf("mkdir registry images: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(registryFolder, "megadrive", "images", "Ghost.png"), []byte("cover"), 0o644); err != nil {
+		t.Fatalf("write registry cover art: %v", err)
+	}
+
+	romsFolder := t.TempDir()
+	megadrive := filepath.Join(romsFolder, "megadrive")
+	if err := os.MkdirAll(megadrive, 0o755); err != nil {
+		t.Fatalf("mkdir megadrive: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(megadrive, "Ghost.zip"), []byte("rom-bytes"), 0o644); err != nil {
+		t.Fatalf("write ROM file: %v", err)
+	}
+	// A file where the images folder should go, so copying the cover art fails.
+	if err := os.WriteFile(filepath.Join(megadrive, "images"), []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write blocking file: %v", err)
+	}
+	handler := Handler(reg, registryFolder, []string{romsFolder})
+
+	rec := post(t, handler, gameURL("megadrive", "Ghost")+"/send", sendSubmission(romsFolder, sendModeFill))
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d\n--- page ---\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	banner := bannerAfter(t, handler, rec)
+	if !strings.Contains(strings.ToLower(banner), "new entry") {
+		t.Errorf("the confirmation %q does not say a new entry was added", banner)
+	}
+	if !strings.Contains(banner, "could not be copied") {
+		t.Errorf("the confirmation %q does not mention the media that could not be copied", banner)
+	}
+
+	ghost := localGameOf(t, romsFolder, "A game no folder holds")
+	if ghost.Desc != "Known to the registry alone." {
+		t.Errorf("Ghost.Desc = %q, want it filled in despite the media failure", ghost.Desc)
+	}
+}
+
 func TestSendGame_FolderNotConfigured_IsRefusedAndWritesNothing(t *testing.T) {
 	reg, registryFolder := registryForSending(t)
 	configured, elsewhere := romsFolderForSending(t), romsFolderForSending(t)

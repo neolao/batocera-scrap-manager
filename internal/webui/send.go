@@ -53,10 +53,12 @@ var sendModes = []sendMode{
 // the folder, which is why they are composed rather than looked up in the
 // savedConfirmations table.
 const (
-	sentWritten   = "sent"
-	sentNothing   = "sent-nothing"
-	sentMediaLeft = "sent-media-left"
-	sentMissing   = "sent-missing"
+	sentWritten        = "sent"
+	sentAdded          = "sent-added"
+	sentAddedMediaLeft = "sent-added-media-left"
+	sentNothing        = "sent-nothing"
+	sentMediaLeft      = "sent-media-left"
+	sentMissing        = "sent-missing"
 )
 
 // sendControl is the game page's send section: where the choice is submitted,
@@ -163,7 +165,7 @@ func (ui *webUI) sendGame(w http.ResponseWriter, r *http.Request) {
 	if mode.Value == sendModeReplace {
 		send = registry.ReplaceGame
 	}
-	written, failed, err := send(reg, folder, registryFolder, system, entry.Game.Path, nil)
+	written, added, failed, err := send(reg, folder, registryFolder, system, entry.Game.Path, nil)
 
 	outcome := sentNothing
 	switch {
@@ -174,6 +176,10 @@ func (ui *webUI) sendGame(w http.ResponseWriter, r *http.Request) {
 			"This ROMs folder could not be written to, so the game was not sent.")
 		render(w, http.StatusInternalServerError, sendTemplate, page)
 		return
+	case added && failed:
+		outcome = sentAddedMediaLeft
+	case added:
+		outcome = sentAdded
 	case failed:
 		outcome = sentMediaLeft
 	case written:
@@ -249,15 +255,28 @@ func sentConfirmation(query url.Values) string {
 	switch query.Get(savedParam) {
 	case sentWritten:
 		return "Sent to " + folder + " — " + whatWasWritten(replaced)
+	case sentAdded:
+		return addedLead(folder)
 	case sentMediaLeft:
 		return "Sent to " + folder + " — " + whatWasWritten(replaced) +
 			" Some of its media files could not be copied there."
+	case sentAddedMediaLeft:
+		return addedLead(folder) + " Some of its media files could not be copied there."
 	case sentNothing:
 		return "Nothing to send to " + folder + " — it already holds everything the registry knows about this game."
 	case sentMissing:
 		return "Not sent: " + folder + " has no such game in its gamelist.xml. Sending a game fills in what a folder already lists; it never adds a game to a folder that does not hold its ROM."
 	}
 	return ""
+}
+
+// addedLead words a send that created a brand-new gamelist.xml entry rather
+// than filling or replacing an existing one — the one outcome where "Fill
+// the gaps only" and "Replace with what the registry knows" produce the
+// exact same result, so neither mode's own vocabulary belongs in the
+// sentence (see decisions/037).
+func addedLead(folder string) string {
+	return folder + " did not list this game yet — a new entry was added, with everything the registry knows about it."
 }
 
 // whatWasWritten says what the chosen rule actually did, since "sent" alone

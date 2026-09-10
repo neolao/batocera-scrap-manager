@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-10
+
 ### Added
 
 - The ROMs folder status page no longer counts an `_info.txt` file as a missing ROM, and now leaves out entirely any game EmulationStation itself marks hidden (`<hidden>true</hidden>`) — neither counted, nor listed as missing, even when its ROM file is still on disk. Every problem game the page still lists now links, when the registry already knows it, straight to that game's own page in the registry — so a scrape started there can be finished or corrected right away, instead of hunting for it by hand.
@@ -103,7 +105,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Users can configure the registry folder and one or more Batocera ROMs folders to watch, via `batocera-scrap-manager config set-registry`, `config add-roms-folder`, and `config list`.
 
-[Unreleased]: https://github.com/neolao/batocera-scrap-manager/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/neolao/batocera-scrap-manager/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.2.0...v0.3.0

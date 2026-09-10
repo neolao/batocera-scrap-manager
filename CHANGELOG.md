@@ -6,10 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-10
+
 ### Added
 
 - Each configured ROMs folder now has its own status page in the web browser, linked from the home page, showing what it is still missing — instead of the registry's own view, which holds everything and cannot say what one particular folder lacks. For every system it holds: how many ROM files are found, how many already have a complete local `gamelist.xml` entry, how many have one but it is missing something, and how many ROM files have no local entry at all. Systems with the most problems are listed first. Below the counts, every game still missing something is named, saying whether the registry already holds what a "Complete the ROMs folders" run would use to fill it right now, or whether it is missing from the registry too and needs real scraping. Opening the page changes nothing, in the ROMs folder or in the registry; a ROMs folder no longer configured, or removed from disk, shows a clear message instead of a broken page.
 - Sending or completing a single game (`batocera-scrap-manager scrape <path>`, or the web browser's "Send to a ROMs folder") no longer refuses when a ROMs folder does not list the game in its `gamelist.xml` yet: if the ROM file is actually present in that folder and the registry already knows the game, a new entry is created for it there, filled with everything the registry knows, instead of being turned down. A folder that genuinely does not hold the ROM is still refused exactly as before. The CLI notes when a new entry was added; the web browser's confirmation says so distinctly from a plain fill or replacement, the same way whichever of the two rules is chosen.
+- The Docker Compose setup can now run the container as any uid:gid, via `PUID`/`PGID` in `.env`, instead of always the image's built-in 65532:65532. This matters when a bind-mounted folder's permissions can't simply be `chown`ed to that uid — for example a Synology shared folder, whose ACL only trusts actual DSM users and silently overrides `chown`/`chmod` for anyone else. `PUID`/`PGID` default to 65532, so nothing changes for a setup that doesn't need them.
+
+### Fixed
+
+- The Docker Compose setup now mounts a *folder* for `config.json`, not the file itself, and configures it through a throwaway container (`docker compose run --rm`) rather than by `exec`ing into the running server. Bind-mounting a `config.json` that doesn't exist yet made Docker create a directory in its place, and the server refuses to start before a registry is configured — so the container could never come up far enough to `exec` into it and run `config` in the first place.
 
 ## [0.4.0] - 2026-07-31
 
@@ -92,7 +99,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Users can configure the registry folder and one or more Batocera ROMs folders to watch, via `batocera-scrap-manager config set-registry`, `config add-roms-folder`, and `config list`.
 
-[Unreleased]: https://github.com/neolao/batocera-scrap-manager/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/neolao/batocera-scrap-manager/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.1.0...v0.2.0

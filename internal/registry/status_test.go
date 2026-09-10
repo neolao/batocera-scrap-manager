@@ -290,3 +290,123 @@ func TestRomsFolderStatus_MostProblematicSystemFirst(t *testing.T) {
 		t.Fatalf("Systems = %v, want noisy first (2 gaps against quiet's 1)", status.Systems)
 	}
 }
+
+// writeNoisyRomsFolder builds a megadrive folder holding, besides gamelist.xml
+// itself: an _info.txt note (never a ROM), a visible incomplete game
+// ("Golden Axe.zip", known to the registry), and a hidden one ("Streets.zip",
+// marked <hidden>true</hidden> — EmulationStation's own way of excluding it,
+// its ROM file still physically present).
+func writeNoisyRomsFolder(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	megadrive := filepath.Join(root, "megadrive")
+	if err := os.MkdirAll(megadrive, 0o755); err != nil {
+		t.Fatalf("mkdir megadrive: %v", err)
+	}
+	for _, name := range []string{"_info.txt", "Golden Axe.zip", "Streets.zip"} {
+		if err := os.WriteFile(filepath.Join(megadrive, name), []byte("x"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	xml := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Golden Axe.zip</path><name>Golden Axe</name></game>
+  <game><path>./Streets.zip</path><name>Streets of Rage</name><hidden>true</hidden></game>
+</gameList>`
+	if err := os.WriteFile(filepath.Join(megadrive, "gamelist.xml"), []byte(xml), 0o644); err != nil {
+		t.Fatalf("write gamelist: %v", err)
+	}
+	return root
+}
+
+func TestRomsFolderStatus_InfoTxtFile_IsNeverCountedAsARom(t *testing.T) {
+	romsFolder := writeNoisyRomsFolder(t)
+	reg := &Registry{}
+
+	status, err := RomsFolderStatus(reg, romsFolder)
+
+	if err != nil {
+		t.Fatalf("RomsFolderStatus() error = %v, want nil", err)
+	}
+	sys := status.Systems[0]
+	// Golden Axe.zip is the only real ROM candidate: _info.txt is never one,
+	// and Streets.zip is hidden (see the dedicated test below) — both must
+	// stay out of ROMCount, not just out of the gap list.
+	if sys.ROMCount != 1 {
+		t.Errorf("ROMCount = %d, want 1 (_info.txt excluded, hidden Streets.zip excluded too)", sys.ROMCount)
+	}
+	for _, gap := range sys.Gaps {
+		if gap.ROMFilename == "_info.txt" {
+			t.Errorf("_info.txt appears in Gaps: %+v", gap)
+		}
+	}
+}
+
+func TestRomsFolderStatus_HiddenGame_IsIgnoredEntirely(t *testing.T) {
+	romsFolder := writeNoisyRomsFolder(t)
+	reg := &Registry{}
+
+	status, err := RomsFolderStatus(reg, romsFolder)
+
+	if err != nil {
+		t.Fatalf("RomsFolderStatus() error = %v, want nil", err)
+	}
+	sys := status.Systems[0]
+	if sys.CompleteCount != 0 || sys.IncompleteCount != 1 || sys.NotListedCount != 0 {
+		t.Errorf("counts = complete:%d incomplete:%d notListed:%d, want 0/1/0 (Streets.zip hidden, ignored; Golden Axe.zip the only real gap)",
+			sys.CompleteCount, sys.IncompleteCount, sys.NotListedCount)
+	}
+	for _, gap := range sys.Gaps {
+		if gap.ROMFilename == "Streets.zip" {
+			t.Errorf("hidden game Streets.zip appears in Gaps: %+v", gap)
+		}
+	}
+}
+
+func TestRomsFolderStatus_GapWithMatchingRegistryEntry_CarriesItsRegistryID(t *testing.T) {
+	romsFolder := writeNoisyRomsFolder(t)
+	reg := &Registry{Entries: []Entry{
+		{System: "megadrive", Game: gamelist.Game{Path: "./Golden Axe.zip", Name: "Golden Axe", Desc: "Two warriors."}},
+	}}
+
+	status, err := RomsFolderStatus(reg, romsFolder)
+
+	if err != nil {
+		t.Fatalf("RomsFolderStatus() error = %v, want nil", err)
+	}
+	var goldenAxe *GameGap
+	for i := range status.Systems[0].Gaps {
+		if status.Systems[0].Gaps[i].ROMFilename == "Golden Axe.zip" {
+			goldenAxe = &status.Systems[0].Gaps[i]
+		}
+	}
+	if goldenAxe == nil {
+		t.Fatal("Golden Axe.zip missing from Gaps")
+	}
+	if goldenAxe.RegistryID != "Golden Axe" {
+		t.Errorf("RegistryID = %q, want %q", goldenAxe.RegistryID, "Golden Axe")
+	}
+}
+
+func TestRomsFolderStatus_GapWithNoMatchingRegistryEntry_HasNoRegistryID(t *testing.T) {
+	romsFolder := writeNoisyRomsFolder(t)
+	reg := &Registry{}
+
+	status, err := RomsFolderStatus(reg, romsFolder)
+
+	if err != nil {
+		t.Fatalf("RomsFolderStatus() error = %v, want nil", err)
+	}
+	var goldenAxe *GameGap
+	for i := range status.Systems[0].Gaps {
+		if status.Systems[0].Gaps[i].ROMFilename == "Golden Axe.zip" {
+			goldenAxe = &status.Systems[0].Gaps[i]
+		}
+	}
+	if goldenAxe == nil {
+		t.Fatal("Golden Axe.zip missing from Gaps")
+	}
+	if goldenAxe.RegistryID != "" {
+		t.Errorf("RegistryID = %q, want empty (no matching registry entry)", goldenAxe.RegistryID)
+	}
+}

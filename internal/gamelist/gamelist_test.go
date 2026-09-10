@@ -114,6 +114,68 @@ func TestParseFile_FileDoesNotExist_ReturnsError(t *testing.T) {
 	}
 }
 
+const gamelistWithVisibilityXML = `<?xml version="1.0"?>
+<gameList>
+  <game>
+    <path>./Sonic.zip</path>
+    <name>Sonic the Hedgehog</name>
+  </game>
+  <game>
+    <path>./Streets.zip</path>
+    <name>Streets of Rage</name>
+    <hidden>true</hidden>
+  </game>
+  <game>
+    <path>./Golden Axe.zip</path>
+    <name>Golden Axe</name>
+    <hidden>false</hidden>
+  </game>
+</gameList>
+`
+
+func TestParseWithVisibility_NominalFixture_ReportsHiddenPerGameByIndex(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gamelist.xml")
+	if err := os.WriteFile(path, []byte(gamelistWithVisibilityXML), 0o644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+
+	games, hidden, err := ParseWithVisibility(path)
+
+	if err != nil {
+		t.Fatalf("ParseWithVisibility() error = %v, want nil", err)
+	}
+	if len(games) != 3 || len(hidden) != 3 {
+		t.Fatalf("games/hidden = %d/%d entries, want 3/3", len(games), len(hidden))
+	}
+	want := []bool{false, true, false}
+	for i, w := range want {
+		if hidden[i] != w {
+			t.Errorf("hidden[%d] (%s) = %v, want %v", i, games[i].Name, hidden[i], w)
+		}
+	}
+}
+
+func TestParseWithVisibility_FileDoesNotExist_ReturnsError(t *testing.T) {
+	_, _, err := ParseWithVisibility(filepath.Join(t.TempDir(), "missing-gamelist.xml"))
+
+	if err == nil {
+		t.Fatal("ParseWithVisibility() error = nil, want error for missing file")
+	}
+}
+
+func TestParseWithVisibility_MalformedXML_ReturnsError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gamelist.xml")
+	if err := os.WriteFile(path, []byte("<gameList><game><name>oops</game></gameList>"), 0o644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+
+	_, _, err := ParseWithVisibility(path)
+
+	if err == nil {
+		t.Fatal("ParseWithVisibility() error = nil, want error for malformed XML")
+	}
+}
+
 func TestWrite_ThenParse_RoundTripsAllFields(t *testing.T) {
 	games := []Game{
 		{

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The ROMs folder status page no longer counts an `_info.txt` file as a missing ROM, and now leaves out entirely any game EmulationStation itself marks hidden (`<hidden>true</hidden>`) — neither counted, nor listed as missing, even when its ROM file is still on disk. Every problem game the page still lists now links, when the registry already knows it, straight to that game's own page in the registry — so a scrape started there can be finished or corrected right away, instead of hunting for it by hand.
+
 ## [0.5.0] - 2026-09-10
 
 ### Added

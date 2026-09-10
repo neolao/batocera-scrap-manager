@@ -72,6 +72,10 @@ type gapView struct {
 	Listed      bool
 	Missing     string
 	Fillable    string
+	// RegistryURL leads to this game's own page in the registry, so its scrape
+	// can be corrected or completed by hand right there. Empty when the
+	// registry does not know this game at all — nothing to link to.
+	RegistryURL string
 }
 
 // serveRomsFolderStatus renders the read-only status report of one
@@ -121,11 +125,22 @@ func romsFolderStatusViewOf(status registry.FolderStatus) romsFolderStatusView {
 				Listed:      gap.Listed,
 				Missing:     fieldLabels(gap.Missing),
 				Fillable:    fieldLabels(gap.Fillable),
+				RegistryURL: registryURLFor(sys.System, gap.RegistryID),
 			})
 		}
 		view.Systems = append(view.Systems, sv)
 	}
 	return view
+}
+
+// registryURLFor builds the link to a gap's own registry page, when it has
+// one — an empty registryID (no matching entry) yields no link at all,
+// which is what the template branches on to offer none.
+func registryURLFor(system, registryID string) string {
+	if registryID == "" {
+		return ""
+	}
+	return gameURL(system, registryID)
 }
 
 // fieldLabels turns a list of registry.Field*/registry.Medium identifiers
@@ -203,6 +218,7 @@ var romsFolderStatusTemplate = newPage("roms-folder-status", `
 {{else if .Missing}}<p class="status__gap-state">Missing: {{.Missing}}.</p>{{end}}
 {{if .Fillable}}<p class="status__gap-fillable">A Completion would already fill: {{.Fillable}}.</p>
 {{else}}<p class="status__gap-stuck">Needs real scraping — the registry does not know this either.</p>{{end}}
+{{if .RegistryURL}}<p class="status__gap-link"><a href="{{.RegistryURL}}">Complete the scrape in the registry &rarr;</a></p>{{end}}
 </li>
 {{end}}
 </ul>

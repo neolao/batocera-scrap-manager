@@ -43,8 +43,17 @@ type unmodelledElement struct {
 // purpose — Game itself must remain a plain comparable struct the registry can
 // test with `==`, and must never start carrying values that belong to the
 // user's ROMs folder rather than to the registry (see backlog item 024).
+//
+// Hidden is EmulationStation's own `<hidden>` mark — kept apart from Game for
+// the very same reason, not folded into it: nothing that already holds a Game
+// (the registry included) needs to know a ROM is hidden, only ParseWithVisibility
+// does (see decisions/039). Modelling it here rather than leaving it to fall
+// into Unmodelled is what lets that one entry point read it at all, while
+// documentGames still carries it through a rewrite exactly as it does Attrs
+// and Unmodelled.
 type documentGame struct {
 	Game
+	Hidden     string              `xml:"hidden,omitempty"`
 	Attrs      []xml.Attr          `xml:",any,attr"`
 	Unmodelled []unmodelledElement `xml:",any"`
 }
@@ -91,6 +100,34 @@ func ParseFile(path string) ([]Game, error) {
 	return Parse(f)
 }
 
+// ParseWithVisibility reads and parses the gamelist.xml file at path exactly
+// as ParseFile does, additionally reporting, for each returned game at the
+// same index, whether EmulationStation itself marks it `<hidden>true</hidden>`
+// — its own way of excluding a ROM from Batocera's list without removing the
+// file. Hidden is not one of the fields Game models (see documentGame): this
+// is the one entry point that reads it, for callers — the ROMs folder status
+// report — that must leave a hidden game out of what they report entirely.
+func ParseWithVisibility(path string) (games []Game, hidden []bool, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer f.Close()
+
+	parsed, err := parseDocument(f)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	games = make([]Game, len(parsed))
+	hidden = make([]bool, len(parsed))
+	for i, g := range parsed {
+		games[i] = g.Game
+		hidden[i] = g.Hidden == "true"
+	}
+	return games, hidden, nil
+}
+
 // Write encodes games as a gamelist.xml document to w. It writes exactly what
 // Game models — use UpdateFile to rewrite an existing document without
 // discarding the rest of it.
@@ -121,6 +158,7 @@ func documentGames(games []Game, preserved map[string]documentGame) []documentGa
 	for i, game := range games {
 		document[i] = documentGame{
 			Game:       game,
+			Hidden:     preserved[game.Path].Hidden,
 			Attrs:      preserved[game.Path].Attrs,
 			Unmodelled: preserved[game.Path].Unmodelled,
 		}
@@ -150,7 +188,7 @@ func preservedOf(path string) (map[string]documentGame, error) {
 
 	preserved := make(map[string]documentGame, len(games))
 	for _, game := range games {
-		if len(game.Attrs) > 0 || len(game.Unmodelled) > 0 {
+		if game.Hidden != "" || len(game.Attrs) > 0 || len(game.Unmodelled) > 0 {
 			preserved[game.Path] = game
 		}
 	}

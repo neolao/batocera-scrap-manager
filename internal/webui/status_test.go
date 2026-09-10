@@ -70,6 +70,28 @@ func TestServeRomsFolderStatus_NominalFixture_ShowsCountsAndTellsFillableFromStu
 	}
 }
 
+func TestServeRomsFolderStatus_GapKnownToTheRegistry_LinksToItsPage(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
+
+	body := get(t, Handler(reg, registryFolder, []string{romsFolder}), romsFolderStatusURL+"?"+statusFolderParam+"="+romsFolder).Body.String()
+
+	want := gameURL("megadrive", "Golden Axe")
+	if !strings.Contains(body, `href="`+want+`"`) {
+		t.Errorf("the page does not link Golden Axe to its registry page (%s)\n--- page ---\n%s", want, body)
+	}
+}
+
+func TestServeRomsFolderStatus_GapUnknownToTheRegistry_HasNoRegistryLink(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
+
+	body := get(t, Handler(reg, registryFolder, []string{romsFolder}), romsFolderStatusURL+"?"+statusFolderParam+"="+romsFolder).Body.String()
+
+	unwanted := gameURL("megadrive", "Ghost")
+	if strings.Contains(body, `href="`+unwanted+`"`) {
+		t.Errorf("the page links Ghost.zip to a registry page it has none of (%s)\n--- page ---\n%s", unwanted, body)
+	}
+}
+
 func TestServeRomsFolderStatus_FolderNotConfigured_IsRefused(t *testing.T) {
 	reg, registryFolder := fullyScrapedRegistry(t)
 

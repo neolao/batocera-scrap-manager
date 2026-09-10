@@ -70,7 +70,17 @@ type GameGap struct {
 	// for — what a Completion run would fill right now, as opposed to a gap
 	// the registry does not know how to close either.
 	Fillable []string
+	// RegistryID is the identifier of the matching registry entry, when one
+	// exists — what a caller builds a link to that entry's own page from, so
+	// the scrape can be finished by hand right there. Empty when the registry
+	// does not know this game at all.
+	RegistryID string
 }
+
+// infoTxtFileName is a note some Batocera setups leave directly in a system's
+// ROM folder — never a ROM, so the flat-file scan behind ROMCount and the
+// not-listed detection must not count it as one.
+const infoTxtFileName = "_info.txt"
 
 // RomsFolderStatus reports, for every system subfolder of romsFolder, what
 // its local gamelist.xml is still missing compared to what CompleteRomsFolder
@@ -124,27 +134,49 @@ func systemStatus(reg *Registry, romsFolder, system string) SystemStatus {
 
 	var romFiles []string
 	for _, de := range dirEntries {
-		if de.IsDir() || de.Name() == "gamelist.xml" {
+		if de.IsDir() || de.Name() == "gamelist.xml" || de.Name() == infoTxtFileName {
 			continue
 		}
 		romFiles = append(romFiles, de.Name())
 	}
 
-	games, parseErr := gamelist.ParseFile(filepath.Join(systemFolder, "gamelist.xml"))
+	games, hidden, parseErr := gamelist.ParseWithVisibility(filepath.Join(systemFolder, "gamelist.xml"))
 	if parseErr != nil {
 		if !errors.Is(parseErr, os.ErrNotExist) {
 			return SystemStatus{System: system, Problem: "This system's gamelist.xml could not be read."}
 		}
-		games = nil
+		games, hidden = nil, nil
 	}
+
+	// A game EmulationStation itself marks <hidden> is left out of the report
+	// entirely — not just out of the gap list, but out of ROMCount too, exactly
+	// as it is left out of Batocera's own list. Its ROM file is dropped from
+	// romFiles here, before ROMCount is ever read off its length.
+	hiddenNames := make(map[string]bool)
+	listed := make(map[string]bool, len(games))
+	for i, g := range games {
+		name := filepath.Base(g.Path)
+		if hidden[i] {
+			hiddenNames[name] = true
+			continue
+		}
+		listed[name] = true
+	}
+	var visible []string
+	for _, file := range romFiles {
+		if !hiddenNames[file] {
+			visible = append(visible, file)
+		}
+	}
+	romFiles = visible
 
 	st := SystemStatus{System: system, ROMCount: len(romFiles)}
 
-	listed := make(map[string]bool, len(games))
-	for _, g := range games {
-		name := filepath.Base(g.Path)
-		listed[name] = true
-		st.addGap(name, g, g.Name, true, registryGameOf(reg, system, g.Path))
+	for i, g := range games {
+		if hidden[i] {
+			continue
+		}
+		st.addGap(filepath.Base(g.Path), g, g.Name, true, registryGameOf(reg, system, g.Path))
 	}
 
 	for _, file := range romFiles {
@@ -181,8 +213,12 @@ func (st *SystemStatus) addGap(romFilename string, local gamelist.Game, localNam
 	}
 
 	name := localName
-	if name == "" && registryGame != nil {
-		name = registryGame.Name
+	registryID := ""
+	if registryGame != nil {
+		if name == "" {
+			name = registryGame.Name
+		}
+		registryID = GameID(registryGame.Path)
 	}
 	st.Gaps = append(st.Gaps, GameGap{
 		ROMFilename: romFilename,
@@ -190,6 +226,7 @@ func (st *SystemStatus) addGap(romFilename string, local gamelist.Game, localNam
 		Listed:      listedLocally,
 		Missing:     missing,
 		Fillable:    fillable,
+		RegistryID:  registryID,
 	})
 }
 

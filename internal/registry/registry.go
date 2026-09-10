@@ -230,19 +230,27 @@ func gameFileName(g gamelist.Game) string {
 // fields, so a field added to Game is never honoured by one and forgotten by
 // the other. The ROM path is deliberately absent: it identifies the entry
 // rather than describing it, and no send ever moves a game.
-var gameFields = []func(*gamelist.Game) *string{
-	func(g *gamelist.Game) *string { return &g.Name },
-	func(g *gamelist.Game) *string { return &g.Desc },
-	func(g *gamelist.Game) *string { return &g.Image },
-	func(g *gamelist.Game) *string { return &g.Video },
-	func(g *gamelist.Game) *string { return &g.Marquee },
-	func(g *gamelist.Game) *string { return &g.Thumbnail },
-	func(g *gamelist.Game) *string { return &g.Rating },
-	func(g *gamelist.Game) *string { return &g.ReleaseDate },
-	func(g *gamelist.Game) *string { return &g.Developer },
-	func(g *gamelist.Game) *string { return &g.Publisher },
-	func(g *gamelist.Game) *string { return &g.Genre },
-	func(g *gamelist.Game) *string { return &g.Players },
+//
+// Each entry also carries the exported identifier the field or medium is
+// already known by elsewhere (registry.Field*, registry.Medium) — enriched
+// for RomsFolderStatus (status.go), which needs to name which of the twelve a
+// gap is in, rather than a second table listing the same twelve again.
+var gameFields = []struct {
+	id    string
+	field func(*gamelist.Game) *string
+}{
+	{FieldName, func(g *gamelist.Game) *string { return &g.Name }},
+	{FieldDesc, func(g *gamelist.Game) *string { return &g.Desc }},
+	{string(MediumImage), func(g *gamelist.Game) *string { return &g.Image }},
+	{string(MediumVideo), func(g *gamelist.Game) *string { return &g.Video }},
+	{string(MediumMarquee), func(g *gamelist.Game) *string { return &g.Marquee }},
+	{string(MediumThumbnail), func(g *gamelist.Game) *string { return &g.Thumbnail }},
+	{FieldRating, func(g *gamelist.Game) *string { return &g.Rating }},
+	{FieldReleaseDate, func(g *gamelist.Game) *string { return &g.ReleaseDate }},
+	{FieldDeveloper, func(g *gamelist.Game) *string { return &g.Developer }},
+	{FieldPublisher, func(g *gamelist.Game) *string { return &g.Publisher }},
+	{FieldGenre, func(g *gamelist.Game) *string { return &g.Genre }},
+	{FieldPlayers, func(g *gamelist.Game) *string { return &g.Players }},
 }
 
 // ErrGameNotFound is returned by Remove and RemoveByID when no entry matches
@@ -768,7 +776,7 @@ func completeSystemGames(reg *Registry, games []gamelist.Game, romsFolder, regis
 func mergeGame(dst *gamelist.Game, src gamelist.Game) bool {
 	changed := false
 	for _, field := range gameFields {
-		d, s := field(dst), *field(&src)
+		d, s := field.field(dst), *field.field(&src)
 		if *d == "" && s != "" {
 			*d = s
 			changed = true
@@ -785,7 +793,7 @@ func mergeGame(dst *gamelist.Game, src gamelist.Game) bool {
 func overwriteGame(dst *gamelist.Game, src gamelist.Game) bool {
 	changed := false
 	for _, field := range gameFields {
-		d, s := field(dst), *field(&src)
+		d, s := field.field(dst), *field.field(&src)
 		if s != "" && *d != s {
 			*d = s
 			changed = true

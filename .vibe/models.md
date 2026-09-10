@@ -163,6 +163,32 @@ Defined in: `internal/webui/media.go`
 | Problem | string | empty on the first attempt; otherwise why the folder could not be written to, the page being shown again rather than a dead-end error |
 Defined in: `internal/webui/send.go`
 
+## FolderStatus / SystemStatus / GameGap
+| Field | Type | Notes |
+|---|---|---|
+| FolderStatus.RomsFolder | string | the folder the report is about |
+| FolderStatus.Systems | []SystemStatus | ordered worst first (most `IncompleteCount + NotListedCount`), tie-broken by name; a system with nothing to report is left out entirely |
+| SystemStatus.ROMCount | int | files sitting directly in the system's folder, `gamelist.xml` and any subfolder excluded — no extension check (see [`decisions/038`](decisions/038-roms-folder-status-detects-orphan-roms-by-flat-file-heuristic.md)) |
+| SystemStatus.CompleteCount / IncompleteCount / NotListedCount | int | local entries with every field present / missing at least one / ROM files with no local entry at all |
+| SystemStatus.FillableCount | int | how many of the incomplete-or-not-listed games the registry already holds enough to fill, in whole or in part |
+| SystemStatus.Problem | string | non-empty when this system's own folder or `gamelist.xml` could not be read — every other count then stays zero, and the system is still listed rather than dropped |
+| SystemStatus.Gaps | []GameGap | sorted by best-known name |
+| GameGap.ROMFilename / Name | string | the file's base name; the best name known, local entry's first then the registry's |
+| GameGap.Listed | bool | false means the ROM has no local `gamelist.xml` entry at all |
+| GameGap.Missing | []string | `registry.Field*`/`registry.Medium` identifiers still empty locally |
+| GameGap.Fillable | []string | the subset of `Missing` the registry already holds a value for |
+
+`gapFields` computes `Missing`/`Fillable` by walking the same enriched `gameFields` table `mergeGame`/`overwriteGame` already walk — the same test a real Completion applies, without writing anything.
+Defined in: `internal/registry/status.go`
+
+## romsFolderStatusView / systemStatusView / gapView
+| Field | Type | Notes |
+|---|---|---|
+| romsFolderStatusView.Folder / Systems | string / []systemStatusView | the rendering counterpart of `registry.FolderStatus` |
+| systemStatusView.Anchor | string | `"system-" + name`, what the page's table of contents jumps to on the one long page the whole report renders on |
+| gapView.Missing / Fillable | string | comma-joined labels, resolved from `registry.GameGap`'s identifiers through the existing `mediaLabels`/`editableFields` tables rather than a table of its own |
+Defined in: `internal/webui/status.go` (built by `romsFolderStatusViewOf` from `registry.FolderStatus`)
+
 ## SystemView / GameView
 | Field | Type | Notes |
 |---|---|---|

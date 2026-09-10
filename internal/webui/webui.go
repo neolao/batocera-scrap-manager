@@ -70,6 +70,8 @@ func Handler(reg *registry.Registry, registryFolder string, romsFolders []string
 	mux.HandleFunc("GET "+completeURL, ui.serveComplete)
 	mux.HandleFunc("POST "+completeURL, ui.startCompletion)
 	mux.HandleFunc(completeURL, allowOnly(readAndSubmit))
+	mux.HandleFunc("GET "+romsFolderStatusURL, ui.serveRomsFolderStatus)
+	mux.HandleFunc(romsFolderStatusURL, allowOnly(http.MethodGet))
 	mux.Handle("GET "+mediaURLPrefix, http.StripPrefix(mediaURLPrefix,
 		http.FileServer(fileOnlyFS{http.Dir(registryFolder)})))
 	mux.HandleFunc("/", ui.serveUnknownPage)
@@ -122,6 +124,10 @@ type homeView struct {
 	Systems    []systemSummary
 	Deleted    string
 	Configured bool
+	// RomsFolderLinks lists each configured ROMs folder, leading to its own
+	// read-only status page — see status.go. Empty exactly when Configured is
+	// false.
+	RomsFolderLinks []romsFolderLink
 }
 
 // systemSummary is one system on the home page, and one entry of the system
@@ -198,9 +204,10 @@ func (ui *webUI) serveHome(w http.ResponseWriter, r *http.Request) {
 
 	query := r.URL.Query()
 	render(w, http.StatusOK, homeTemplate, homeView{
-		Systems:    summaries,
-		Deleted:    deletedConfirmation(query.Get(deletedParam), query.Get(systemParam), query[warningParam]),
-		Configured: len(ui.romsFolders) > 0,
+		Systems:         summaries,
+		Deleted:         deletedConfirmation(query.Get(deletedParam), query.Get(systemParam), query[warningParam]),
+		Configured:      len(ui.romsFolders) > 0,
+		RomsFolderLinks: romsFolderLinksOf(ui.romsFolders),
 	})
 }
 
@@ -476,6 +483,13 @@ var homeTemplate = newPage("home", `
 <p class="home__note">Writes what the registry knows back into Batocera.</p>
 </div>
 </div>
+<h2 class="system__title">ROMs folders</h2>
+<p class="home__note">See what each one is still missing, compared to the registry — a read-only report.</p>
+<ul class="systems">
+{{range .RomsFolderLinks}}
+<li><a class="systems__item" href="{{.URL}}"><code>{{.Folder}}</code></a></li>
+{{end}}
+</ul>
 {{else}}
 <p class="home__note">No ROMs folder is configured yet. Add one with <code>batocera-scrap-manager config add-roms-folder &lt;path&gt;</code>, then restart the server.</p>
 {{end}}

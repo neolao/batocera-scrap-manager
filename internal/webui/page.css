@@ -519,3 +519,45 @@ textarea.field__control { resize: vertical; line-height: 1.6; }
   .button { display: inline-flex; align-items: center; min-height: 2.75rem; }
   .pager__state { order: 3; width: 100%; text-align: center; }
 }
+/* The ROMs folder status report: a jump list to each system (the whole report
+   renders on one page), per-system counts, and the list of its problem
+   games — each telling apart a gap a Completion would already fill from one
+   that needs real scraping. */
+.status__toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+.status__system { margin: 0 0 2rem; }
+.status__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 2rem;
+  margin: 0.5rem 0 1.25rem;
+}
+.status__counts dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+.status__counts dd { margin: 0; font-family: var(--font-display); font-size: 1.15rem; }
+.status__gaps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.status__gap {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  background: var(--bg-card);
+}
+.status__gap p { margin: 0.2rem 0; }
+.status__gap-name { font-weight: bold; }
+.status__gap-file { margin-left: 0.5rem; color: var(--ink-dim); }
+.status__gap-state { color: var(--ink-dim); font-size: 0.85rem; }
+.status__gap-fillable { color: var(--cyan); font-size: 0.85rem; }
+.status__gap-stuck { color: var(--ink-dim); font-size: 0.85rem; }

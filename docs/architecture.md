@@ -22,7 +22,7 @@ The heart of the tool: a centralized index of all already-known games, along wit
 Turns the registry's content into HTML, so it can be browsed in a web browser without opening individual metadata files. It is the shared presentation layer: it both writes the static site regenerated on every update, and provides the theme, the grouping by system and the formatting (rating stars, release year, safely encoded media links) reused by the web server, so both renderings stay consistent.
 
 **Web server**
-Serves the registry's content over HTTP on demand: a summary of the systems, one paginated list of games per system, one page per game, the form correcting a game's metadata and the ROM file identifying it, the controls managing a game's four media and the page confirming one of them be erased, the page confirming a game's deletion, the page confirming that one game be sent to one chosen ROMs folder, one page per long operation on the ROMs folders (importing them into the registry, completing them from it), and the media files themselves. Unlike the static site, each game and each system has its own address, which is what makes a game reachable, linkable, editable and deletable.
+Serves the registry's content over HTTP on demand: a summary of the systems, one paginated list of games per system, one page per game, the form correcting a game's metadata and the ROM file identifying it, the controls managing a game's four media and the page confirming one of them be erased, the page confirming a game's deletion, the page confirming that one game be sent to one chosen ROMs folder, one page per long operation on the ROMs folders (importing them into the registry, completing them from it), a read-only status report of one configured ROMs folder, and the media files themselves. Unlike the static site, each game and each system has its own address, which is what makes a game reachable, linkable, editable and deletable.
 
 **Commit of a registry change**
 Writing the registry and regenerating the consultation site derived from it always go together, so the two never drift apart. Both the commands and the web server go through the same single place to do it, which also tells apart the case where the registry itself was written but only the site could not be regenerated.
@@ -44,12 +44,13 @@ Every time the registry is updated, a small static website is (re)generated dire
 
 The static site is a snapshot written to disk; the tool can also serve the registry itself over HTTP, which is what makes each game addressable. The server listens on every interface on port 8080 by default — so the registry can be browsed from a phone or another computer on the same network — and both the address and the port can be changed. On startup it prints the address it actually listens on plus a URL usable as-is in a browser, and it stops cleanly when interrupted, letting requests in flight finish.
 
-Four kinds of pages are served, sharing the static site's look:
+Five kinds of pages are served, sharing the static site's look:
 
 - the home page, a summary naming each system and how many games it holds, each leading to its own list. It names no game: a registry of several thousand games would otherwise be written out in full into the very first page a browser opens, which is both slow to produce and unreadable on a phone;
 - one list per system, showing 60 games at a time with "previous"/"next" links, a bar to jump straight to another system, and each game linking to its own page. Only the games actually on the page are prepared, so the cost of a list no longer grows with the size of the system;
 - one page per game, showing the ROM file it stands for, its full description, all of its metadata labels (rating, year, developer, publisher, genre, players) — kept visible even when the game has no value for them — and every medium actually present for it: jaquette, video, marquee, thumbnail. A game with no cover art, no description or no media is presented cleanly rather than showing empty or broken elements, and its rating is written out in words next to the stars so it is not conveyed by symbols alone;
-- one page per long operation on the ROMs folders — importing them into the registry, and completing them from it — both reached from the home page, which state what the operation does before anything is written and then follow it while it runs. See "Importing from the browser" and "Completing from the browser" below.
+- one page per long operation on the ROMs folders — importing them into the registry, and completing them from it — both reached from the home page, which state what the operation does before anything is written and then follow it while it runs. See "Importing from the browser" and "Completing from the browser" below;
+- one status page per configured ROMs folder, also reached from the home page, reporting what it is still missing rather than what the whole registry knows. See "Checking a ROMs folder's status" below.
 
 A game is addressed by the same identifier the registry already uses to name its file on disk, so no second matching rule is introduced — which is also why correcting a game's ROM path changes the address of its own page. An address designating an unknown system or an unknown game — or one that is simply malformed, or asks for a page number beyond the last of a system — answers with a "not found" page in the same style, naming what could not be found and offering a link back, rather than a blank page, an empty list or a server error. Media files are read from the registry folder only: no address can reach a file outside it, and the folders themselves are never listed.
 
@@ -82,6 +83,7 @@ flowchart LR
   SRV --> MEDIA["Media: serve the files, upload one, erase one"]
   MEDIA --> COMMIT
   SRV --> NF["Not-found page"]
+  SRV --> STATUS["ROMs folder status: read-only report"]
   EDIT --> COMMIT["Commit: registry + consultation site"]
   SITE["Consultation site"] -. shared theme and formatting .-> SRV
 ```
@@ -212,6 +214,14 @@ A game sheet holds more than the thirteen fields this tool understands: Batocera
 So a rewrite reads the document already in place first, indexes by ROM path everything each game carried beyond the modelled fields — child elements captured whole, with their attributes and their raw inner markup, plus the attributes of the game element — and writes it back onto the matching game. A game dropped from the list takes its own remainder with it; a game the previous document did not hold simply carries nothing.
 
 Two boundaries are deliberate. The preserved remainder never leaves the game-sheet layer: the type carrying it is unexported, so the registry's own notion of a game stays a plain comparable value that neither stores nor imports a play count — those belong to the ROMs folder, not to an index of scraped metadata. And the preserved elements are re-emitted after the modelled ones rather than at their original position, which EmulationStation does not care about since it looks children up by name.
+
+## Checking a ROMs folder's status
+
+The registry aggregates every configured ROMs folder into one view, which is exactly what makes it unable to say what *one particular* folder still lacks — a game complete there because another folder already scraped it reads as complete in the registry regardless. Each configured folder therefore has its own read-only status page, reached from the home page, that looks at that folder alone and tells apart a gap the registry could already close from one it cannot.
+
+For each system subfolder it holds, the report counts: the ROM files found, how many already have a fully complete local `gamelist.xml` entry (every field this tool models present), how many have an entry but it is missing something, and how many ROM files have no local entry at all. A ROM file with no entry is found by listing whatever sits directly in the system's folder, excluding `gamelist.xml` and any subfolder such as `images/`/`videos/` — the same layout every other flow already assumes, with no check on file extension, since the tool holds no per-system list of valid ones (see [`decisions/038`](../.vibe/decisions/038-roms-folder-status-detects-orphan-roms-by-flat-file-heuristic.md)). Systems are listed worst first — the one holding the most gaps at the top — rather than alphabetically, so a folder spanning many systems says at a glance where the problems are; a system with neither a ROM file nor a local entry has nothing to report and is left out entirely.
+
+Below the counts, every problem game is named, each saying what a **Completion** run would already fill from the registry apart from what it needs real scraping for — the registry not knowing a value either is told apart from the local sheet simply not holding it yet, which is the one distinction this page exists to draw. It writes nothing, in the ROMs folder or in the registry: opening it is a pure read, unlike every other page that starts one of the long operations. A folder no longer configured is refused; one that was configured but can no longer be read — removed, a network share gone — is named with a clear message instead of a broken page, and one bad system's own `gamelist.xml` failing to parse is reported next to it without hiding the rest of the folder's report.
 
 ## Removing an entry from the registry
 

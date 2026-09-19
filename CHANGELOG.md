@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-19
+
 ### Added
 
 - Each game listed on a ROMs folder's status page can now be acted on right there, one game at a time. A game whose local `gamelist.xml` already has an entry the registry does not know, or knows only in part, gets a "Retrieve into the registry" button that pulls it in with one click — no need to drop to the command line. A game the registry already knows gets a "Send to this folder" link that jumps straight to its existing send confirmation, this folder and "fill the gaps only" already chosen.
@@ -109,7 +111,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Users can configure the registry folder and one or more Batocera ROMs folders to watch, via `batocera-scrap-manager config set-registry`, `config add-roms-folder`, and `config list`.
 
-[Unreleased]: https://github.com/neolao/batocera-scrap-manager/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/neolao/batocera-scrap-manager/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.3.0...v0.4.0

@@ -563,3 +563,5 @@ textarea.field__control { resize: vertical; line-height: 1.6; }
 .status__gap-stuck { color: var(--ink-dim); font-size: 0.85rem; }
 .status__gap-link { margin-top: 0.5rem; font-size: 0.85rem; }
 .status__gap-link a { color: var(--cyan); }
+.status__gap-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+.status__gap-actions form { margin: 0; }

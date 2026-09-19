@@ -84,6 +84,9 @@ flowchart LR
   MEDIA --> COMMIT
   SRV --> NF["Not-found page"]
   SRV --> STATUS["ROMs folder status: read-only report"]
+  STATUS --> RETRIEVE["Retrieve one game: import, no confirmation"]
+  RETRIEVE --> COMMIT
+  STATUS -. direct link, folder+mode preset .-> SEND
   EDIT --> COMMIT["Commit: registry + consultation site"]
   SITE["Consultation site"] -. shared theme and formatting .-> SRV
 ```
@@ -224,6 +227,14 @@ For each system subfolder it holds, the report counts: the ROM files found, how 
 A game EmulationStation itself marks `<hidden>true</hidden>` is left out of the report **entirely** — not counted as complete, incomplete, or not-listed, and its ROM file dropped from the ROM-file count too — exactly as EmulationStation itself leaves it out of Batocera's own list. `Hidden` is not one of the fields `gamelist.Game` models: modelling it there would have grown the registry's own on-disk shape for a value that belongs to local curation, not to scraped metadata, so it is read by a narrow, separate entry point used only by this report (see [`decisions/039`](../.vibe/decisions/039-hidden-is-modelled-on-documentgame-not-on-game.md)).
 
 Below the counts, every problem game is named, each saying what a **Completion** run would already fill from the registry apart from what it needs real scraping for — the registry not knowing a value either is told apart from the local sheet simply not holding it yet, which is the one distinction this page exists to draw. When the registry already holds a matching entry, the game's name also links straight to that entry's own page, so a scrape can be finished or corrected by hand right there instead of being hunted down by system and filename. It writes nothing, in the ROMs folder or in the registry: opening it is a pure read, unlike every other page that starts one of the long operations. A folder no longer configured is refused; one that was configured but can no longer be read — removed, a network share gone — is named with a clear message instead of a broken page, and one bad system's own `gamelist.xml` failing to parse is reported next to it without hiding the rest of the folder's report.
+
+### Acting on one game from its status row
+
+Two per-game actions sit directly on this page, so a problem game does not have to be chased down elsewhere first.
+
+**Retrieve** is the reverse of Completion for one game: it imports that one ROM's already-scraped local entry into the registry, reusing the same single-game import the `update <path>` command already exposes. It is offered only on a game whose local `gamelist.xml` genuinely has an entry (`Listed`) — a ROM with no local entry has nothing to pull, since this tool never scrapes on its own. Because it writes only the registry, which the tool can always rebuild from the ROMs folders, it runs inside its own request with no confirmation page — the same reasoning that already lets a correction or a protection change apply on one submit (see [`decisions/041`](../.vibe/decisions/041-retrieve-writes-synchronously-with-no-confirmation.md)). The `(folder, system, ROM filename)` a submission names is never trusted as a path: it is checked against the folder's status, recomputed fresh, before anything is imported — so a stale page, or a forged request, degrades to a clear refusal rather than a wrong write. The status page then reports, by name, whether the game was added, refreshed, already matched, had nothing worth keeping locally, or could not be retrieved.
+
+**Send**, for a game the registry already knows, is a direct link to that game's own existing send confirmation (see "Sending one game to a chosen ROMs folder" below), with this folder and the "fill the gaps only" rule already chosen in the query — one click from the status row instead of first opening the game's page and picking the folder there. No new write path is introduced for it: it is the same flow, reached from a second place (see [`decisions/040`](../.vibe/decisions/040-send-from-the-status-page-links-to-the-existing-confirmation.md)).
 
 ## Removing an entry from the registry
 

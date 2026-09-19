@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Each game listed on a ROMs folder's status page can now be acted on right there, one game at a time. A game whose local `gamelist.xml` already has an entry the registry does not know, or knows only in part, gets a "Retrieve into the registry" button that pulls it in with one click — no need to drop to the command line. A game the registry already knows gets a "Send to this folder" link that jumps straight to its existing send confirmation, this folder and "fill the gaps only" already chosen.
+
 ## [0.6.0] - 2026-09-10
 
 ### Added

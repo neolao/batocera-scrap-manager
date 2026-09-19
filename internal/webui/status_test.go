@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -89,6 +90,55 @@ func TestServeRomsFolderStatus_GapUnknownToTheRegistry_HasNoRegistryLink(t *test
 	unwanted := gameURL("megadrive", "Ghost")
 	if strings.Contains(body, `href="`+unwanted+`"`) {
 		t.Errorf("the page links Ghost.zip to a registry page it has none of (%s)\n--- page ---\n%s", unwanted, body)
+	}
+}
+
+func TestServeRomsFolderStatus_GapListedButUnknownToRegistry_OffersRetrieveControl(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForRetrieve(t)
+
+	body := get(t, Handler(reg, registryFolder, []string{romsFolder}),
+		romsFolderStatusURL+"?"+statusFolderParam+"="+romsFolder).Body.String()
+
+	if !strings.Contains(body, `action="`+retrieveURL+`"`) {
+		t.Errorf("the page offers no retrieve control for a Listed gap unknown to the registry\n--- page ---\n%s", body)
+	}
+	if !strings.Contains(body, `name="`+retrieveROMParam+`" value="Streets.zip"`) {
+		t.Errorf("the retrieve control does not target Streets.zip\n--- page ---\n%s", body)
+	}
+}
+
+func TestServeRomsFolderStatus_GapNotListed_HasNoRetrieveControl(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
+
+	body := get(t, Handler(reg, registryFolder, []string{romsFolder}),
+		romsFolderStatusURL+"?"+statusFolderParam+"="+romsFolder).Body.String()
+
+	if strings.Contains(body, `name="`+retrieveROMParam+`" value="Ghost.zip"`) {
+		t.Errorf("the page offers a retrieve control for a ROM with no local entry\n--- page ---\n%s", body)
+	}
+}
+
+func TestServeRomsFolderStatus_GapKnownToRegistry_SendLinkPreselectsFolderAndFillMode(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
+
+	body := get(t, Handler(reg, registryFolder, []string{romsFolder}),
+		romsFolderStatusURL+"?"+statusFolderParam+"="+romsFolder).Body.String()
+
+	want := sendURLFor("megadrive", "Golden Axe", romsFolder)
+	if !strings.Contains(html.UnescapeString(body), want) {
+		t.Errorf("the page does not link Golden Axe straight to its send confirmation (%s)\n--- page ---\n%s", want, body)
+	}
+}
+
+func TestServeRomsFolderStatus_GapUnknownToRegistry_HasNoSendLink(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForRetrieve(t)
+
+	body := get(t, Handler(reg, registryFolder, []string{romsFolder}),
+		romsFolderStatusURL+"?"+statusFolderParam+"="+romsFolder).Body.String()
+
+	unwanted := sendURLFor("megadrive", "Streets", romsFolder)
+	if strings.Contains(html.UnescapeString(body), unwanted) {
+		t.Errorf("the page links Streets of Rage to a send confirmation although the registry does not know it (%s)\n--- page ---\n%s", unwanted, body)
 	}
 }
 

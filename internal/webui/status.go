@@ -44,8 +44,11 @@ func romsFolderLinksOf(romsFolders []string) []romsFolderLink {
 // romsFolderStatusView is the report's own page: which folder it is about,
 // and each of its systems.
 type romsFolderStatusView struct {
-	Folder  string
-	Systems []systemStatusView
+	Folder string
+	// Retrieved carries the confirmation of a retrieve that just redirected
+	// here, or nothing when the page was opened any other way.
+	Retrieved string
+	Systems   []systemStatusView
 }
 
 // systemStatusView is one system's share of the report, plus what a template
@@ -67,6 +70,9 @@ type systemStatusView struct {
 // turned into the labels a user knows them by — the registry only ever names
 // them by their internal identifiers.
 type gapView struct {
+	// System is this gap's Batocera system — every other identifier here is
+	// only unique within it, and the retrieve control needs it too.
+	System      string
 	ROMFilename string
 	Name        string
 	Listed      bool
@@ -76,6 +82,11 @@ type gapView struct {
 	// can be corrected or completed by hand right there. Empty when the
 	// registry does not know this game at all — nothing to link to.
 	RegistryURL string
+	// SendURL leads straight to this game's existing send confirmation, this
+	// folder and the fill-the-gaps rule already chosen (decisions/040). Empty
+	// exactly when RegistryURL is: nothing to send for a game the registry
+	// does not know.
+	SendURL string
 }
 
 // serveRomsFolderStatus renders the read-only status report of one
@@ -100,7 +111,9 @@ func (ui *webUI) serveRomsFolderStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	render(w, http.StatusOK, romsFolderStatusTemplate, romsFolderStatusViewOf(status))
+	view := romsFolderStatusViewOf(status)
+	view.Retrieved = retrievedConfirmation(r.URL.Query())
+	render(w, http.StatusOK, romsFolderStatusTemplate, view)
 }
 
 // romsFolderStatusViewOf turns a registry.FolderStatus into what the template
@@ -120,12 +133,14 @@ func romsFolderStatusViewOf(status registry.FolderStatus) romsFolderStatusView {
 		}
 		for _, gap := range sys.Gaps {
 			sv.Gaps = append(sv.Gaps, gapView{
+				System:      sys.System,
 				ROMFilename: gap.ROMFilename,
 				Name:        gap.Name,
 				Listed:      gap.Listed,
 				Missing:     fieldLabels(gap.Missing),
 				Fillable:    fieldLabels(gap.Fillable),
 				RegistryURL: registryURLFor(sys.System, gap.RegistryID),
+				SendURL:     sendURLFor(sys.System, gap.RegistryID, status.RomsFolder),
 			})
 		}
 		view.Systems = append(view.Systems, sv)
@@ -141,6 +156,19 @@ func registryURLFor(system, registryID string) string {
 		return ""
 	}
 	return gameURL(system, registryID)
+}
+
+// sendURLFor builds the link straight to a gap's existing send confirmation,
+// this folder and the fill-the-gaps rule already chosen (decisions/040) — the
+// direct entry point a gap known to the registry offers next to the slower
+// path through its own page. Empty exactly when registryURLFor's is: a game
+// the registry does not know has nothing to send.
+func sendURLFor(system, registryID, folder string) string {
+	if registryID == "" {
+		return ""
+	}
+	query := url.Values{sendFolderParam: {folder}, sendModeParam: {sendModeFill}}
+	return gameURL(system, registryID) + "/send?" + query.Encode()
 }
 
 // fieldLabels turns a list of registry.Field*/registry.Medium identifiers
@@ -185,8 +213,9 @@ var romsFolderStatusTemplate = newPage("roms-folder-status", `
 <a href="/">Registry</a><span class="crumbs__sep">/</span><span class="crumbs__current">ROMs folder status</span>
 </nav>
 <main>
+{{if .Retrieved}}<p class="banner" id="retrieved" role="status" tabindex="-1">{{.Retrieved}}</p>{{end}}
 <h2 class="game__title">Status of <code>{{.Folder}}</code></h2>
-<p class="home__note">A read-only report: opening it changes nothing, here or in the registry.</p>
+<p class="home__note">A read-only report: opening it changes nothing, here or in the registry. Retrieving or sending one game below does, for that game alone.</p>
 {{if not .Systems}}
 <p class="empty-state">Nothing to report: no ROM file and no gamelist.xml entry were found in this folder.</p>
 {{else}}
@@ -219,6 +248,17 @@ var romsFolderStatusTemplate = newPage("roms-folder-status", `
 {{if .Fillable}}<p class="status__gap-fillable">A Completion would already fill: {{.Fillable}}.</p>
 {{else}}<p class="status__gap-stuck">Needs real scraping — the registry does not know this either.</p>{{end}}
 {{if .RegistryURL}}<p class="status__gap-link"><a href="{{.RegistryURL}}">Complete the scrape in the registry &rarr;</a></p>{{end}}
+<div class="status__gap-actions">
+{{if .Listed}}
+<form method="post" action="`+retrieveURL+`">
+<input type="hidden" name="`+statusFolderParam+`" value="{{$.Folder}}">
+<input type="hidden" name="`+retrieveSystemParam+`" value="{{.System}}">
+<input type="hidden" name="`+retrieveROMParam+`" value="{{.ROMFilename}}">
+<button class="button button--quiet" type="submit">Retrieve into the registry</button>
+</form>
+{{end}}
+{{if .SendURL}}<a class="button button--quiet" href="{{.SendURL}}">Send to this folder</a>{{end}}
+</div>
 </li>
 {{end}}
 </ul>

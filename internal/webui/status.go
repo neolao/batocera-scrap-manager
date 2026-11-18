@@ -132,6 +132,10 @@ type gameStatusView struct {
 	// folder and the fill-the-gaps rule already chosen (decisions/040). Empty
 	// exactly when RegistryURL is.
 	SendURL string
+	// FillURL leads to the form creating this game in the registry by hand.
+	// Empty exactly when RegistryURL is not: only a game the registry does
+	// not know can be filled in.
+	FillURL string
 	// LocalImageURL and RegistryImageURL show the cover art the ROMs folder
 	// and the registry each hold, side by side; empty when that file is
 	// absent.
@@ -276,6 +280,9 @@ func (ui *webUI) gameStatusViews(folder, system string, games []registry.GameSta
 			RegistryURL:   registryURLFor(system, game.RegistryID),
 			SendURL:       sendURLFor(system, game.RegistryID, folder),
 			LocalImageURL: localImageURL(folder, system, game.LocalImage),
+		}
+		if game.RegistryID == "" {
+			views[i].FillURL = fillURLFor(folder, system, game.ROMFilename)
 		}
 		if game.RegistryImage != "" && site.MediaFileExists(ui.registryFolder, system, game.RegistryImage) {
 			views[i].RegistryImageURL = mediaURL(site.EscapeMediaPath(system, game.RegistryImage))
@@ -498,6 +505,7 @@ var romsFolderSystemStatusTemplate = newPage("roms-folder-system-status", `
 </form>
 {{end}}
 {{if .SendURL}}<a class="button button--quiet" href="{{.SendURL}}">Send to this folder</a>{{end}}
+{{if .FillURL}}<a class="button button--quiet" href="{{.FillURL}}">Fill in by hand</a>{{end}}
 </div>
 </div>
 </li>

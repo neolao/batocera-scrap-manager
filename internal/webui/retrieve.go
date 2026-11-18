@@ -40,6 +40,9 @@ const (
 	retrievedUnchanged = "unchanged"
 	retrievedNothing   = "nothing"
 	retrievedFailed    = "failed"
+	// retrievedFilled confirms a game created by hand through the fill-in
+	// form, which lands on the same status page.
+	retrievedFilled = "filled"
 )
 
 // retrievedConfirmations maps the outcome a retrieve redirected with to the
@@ -50,6 +53,7 @@ var retrievedConfirmations = map[string]string{
 	retrievedUpdated:   "'s entry in the registry was refreshed from this folder.",
 	retrievedUnchanged: " already matched the registry — nothing changed.",
 	retrievedNothing:   " has no description or cover art locally yet — nothing to retrieve.",
+	retrievedFilled:    " was created in the registry — send it to this folder to write it there.",
 	retrievedFailed:    " could not be retrieved — its local files may have changed since this page was opened.",
 }
 

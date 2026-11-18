@@ -208,6 +208,19 @@ func editForm(entry registry.Entry, values editValues, errs map[string]string) e
 		})
 	}
 
+	fields, fieldErrors := metadataControls(values, errs, entry.ManualFields)
+	page.Fields = fields
+	page.Errors = append(page.Errors, fieldErrors...)
+	return page
+}
+
+// metadataControls builds one control per editable field, filled with values,
+// carrying the messages of the fields errs refused and marking those manual
+// names as corrected by hand; the refused ones are also returned as the
+// error summary's entries, in form order.
+func metadataControls(values editValues, errs map[string]string, manual []string) ([]formControl, []formError) {
+	var controls []formControl
+	var summary []formError
 	for _, field := range editableFields {
 		control := formControl{
 			Key:        field.Key,
@@ -218,20 +231,20 @@ func editForm(entry registry.Entry, values editValues, errs map[string]string) e
 			Required:   field.Required,
 			Value:      field.value(values),
 			Error:      errs[field.Key],
-			HandEdited: slices.Contains(entry.ManualFields, field.Manual),
+			HandEdited: slices.Contains(manual, field.Manual),
 			MinYear:    minYear,
 			MaxYear:    maxYear,
 		}
 		if field.Kind == kindStars {
 			control.Stars = starOptions(control.Value)
 		}
-		page.Fields = append(page.Fields, control)
+		controls = append(controls, control)
 
 		if control.Error != "" {
-			page.Errors = append(page.Errors, formError{Key: field.Key, Label: field.Label, Message: control.Error})
+			summary = append(summary, formError{Key: field.Key, Label: field.Label, Message: control.Error})
 		}
 	}
-	return page
+	return controls, summary
 }
 
 // starOptions builds the rating control's choices, marking the one matching
@@ -294,6 +307,22 @@ var editTemplate = newPage("edit", `
 </div>
 {{end}}
 </fieldset>
+{{template "metadata-fields" .}}
+<div class="form__actions">
+<button class="button" type="submit">Save changes</button>
+<a class="button button--quiet" href="{{.GameURL}}">Cancel</a>
+</div>
+</form>
+</article>
+</main>
+{{end}}
+`+metadataFieldsTemplate)
+
+// metadataFieldsTemplate renders the editable metadata controls, shared by
+// the edit form and the fill-in form so both read and validate alike. Its
+// data needs Fields.
+const metadataFieldsTemplate = `
+{{define "metadata-fields"}}
 <fieldset class="form__fields">
 <legend>Metadata</legend>
 {{range .Fields}}
@@ -315,19 +344,12 @@ var editTemplate = newPage("edit", `
 {{end}}
 {{if .HandEdited}}
 <p class="field__manual">
-<input type="checkbox" id="hand-back-{{.Key}}" name="`+handBackParam+`" value="{{.Manual}}">
+<input type="checkbox" id="hand-back-{{.Key}}" name="` + handBackParam + `" value="{{.Manual}}">
 <label for="hand-back-{{.Key}}">Corrected by hand &mdash; let updates overwrite it again</label>
 </p>
 {{end}}
 </div>
 {{end}}
 </fieldset>
-<div class="form__actions">
-<button class="button" type="submit">Save changes</button>
-<a class="button button--quiet" href="{{.GameURL}}">Cancel</a>
-</div>
-</form>
-</article>
-</main>
 {{end}}
-`)
+`

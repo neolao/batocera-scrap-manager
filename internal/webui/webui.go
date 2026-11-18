@@ -73,6 +73,9 @@ func Handler(reg *registry.Registry, registryFolder string, romsFolders []string
 	mux.HandleFunc("GET "+romsFolderStatusURL, ui.serveRomsFolderStatus)
 	mux.HandleFunc(romsFolderStatusURL, allowOnly(http.MethodGet))
 	mux.HandleFunc("GET "+romsFolderMediaPrefix+"{system}/{path...}", ui.serveRomsFolderMedium)
+	mux.HandleFunc("GET "+fillURL, ui.serveFillForm)
+	mux.HandleFunc("POST "+fillURL, ui.fillGame)
+	mux.HandleFunc(fillURL, allowOnly(readAndSubmit))
 	mux.HandleFunc("POST "+retrieveURL, ui.retrieveGame)
 	mux.HandleFunc(retrieveURL, allowOnly(http.MethodPost))
 	mux.Handle("GET "+mediaURLPrefix, http.StripPrefix(mediaURLPrefix,

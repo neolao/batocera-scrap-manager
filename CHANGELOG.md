@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - A ROMs folder's status page is now a summary table, with one row per system and its counts. Each system opens on its own page, 60 games per page with previous/next navigation and a bar to jump between the folder's systems. That page now lists every game, complete ones included, and shows the cover art the ROMs folder holds next to the cover art the registry holds, so the two can be compared at a glance. After "Retrieve into the registry", you come back to the system you were on.
+- A game that nobody has scraped yet, unknown to both the ROMs folder and the registry, can now be filled in by hand from its system's page in the ROMs folder status. A "Fill in by hand" button opens a form for the name, description, rating, year, developer, publisher, genre and number of players, and creates the game in the registry with those values. They are protected from later updates, like any correction. The game can then be sent to the folder through the usual confirmation. Nothing is written to the ROMs folder before that. Cover art is added afterwards from the game's page in the registry.
 
 ## [0.7.0] - 2026-09-19
 

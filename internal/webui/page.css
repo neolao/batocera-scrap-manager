@@ -620,3 +620,14 @@ textarea.field__control { resize: vertical; line-height: 1.6; }
   .import__table th, .import__table td { border: 0; padding: 0.2rem 0.5rem; }
   .import__table td.import__value, .import__table td:nth-child(3), .import__table td:nth-child(4) { grid-column: 2; }
 }
+/* The filters of a system status page, as tabs above its list. */
+.status__tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0 0 1rem; }
+.status__tabs a {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-dim);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+.status__tabs a.is-current { color: var(--cyan); border-color: var(--cyan); }

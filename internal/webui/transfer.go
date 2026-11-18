@@ -85,12 +85,15 @@ func statusConfirmation(query url.Values) string {
 
 // statusConfirmationURL builds the system status page URL confirming a
 // change to the game it names.
-func statusConfirmationURL(folder, system, name, outcome string) string {
+func statusConfirmationURL(folder, system, filter, name, outcome string) string {
 	query := url.Values{
 		statusFolderParam:  {folder},
 		statusSystemParam:  {system},
 		statusNameParam:    {name},
 		statusOutcomeParam: {outcome},
+	}
+	if filter != "" {
+		query.Set(filterParam, filter)
 	}
 	return romsFolderStatusURL + "?" + query.Encode() + statusAnchor
 }
@@ -117,6 +120,7 @@ type transferPage struct {
 	Folder    string
 	System    string
 	Direction string
+	Filter    string
 	From      string
 	To        string
 	StatusURL string
@@ -127,6 +131,9 @@ type transferPage struct {
 // transferRequest is one transfer's coordinates, read from a request.
 type transferRequest struct {
 	folder, system, rom, direction string
+	// filter is the system status page's filter the review was opened from,
+	// carried along to land back on the same list.
+	filter string
 }
 
 // transferSides reads the source and destination of t as they are now. ok is
@@ -179,9 +186,10 @@ func (ui *webUI) transferForm(t transferRequest, source, destination gamelist.Ga
 		Folder:    t.folder,
 		System:    t.system,
 		Direction: t.direction,
+		Filter:    t.filter,
 		From:      "This ROMs folder",
 		To:        "Registry",
-		StatusURL: romsFolderSystemStatusURLFor(t.folder, t.system, 1),
+		StatusURL: filteredStatusURL(t.folder, t.system, t.filter, 1),
 	}
 	if page.Name == "" {
 		page.Name = t.rom
@@ -262,6 +270,7 @@ func readTransferRequest(values url.Values) transferRequest {
 		system:    values.Get(gameSystemParam),
 		rom:       values.Get(gameROMParam),
 		direction: values.Get(directionParam),
+		filter:    requestedFilter(values),
 	}
 }
 
@@ -327,7 +336,7 @@ func (ui *webUI) transfer(w http.ResponseWriter, r *http.Request) {
 		render(w, status, transferTemplate, page)
 		return
 	}
-	http.Redirect(w, r, statusConfirmationURL(t.folder, t.system, page.Name, outcome), http.StatusSeeOther)
+	http.Redirect(w, r, statusConfirmationURL(t.folder, t.system, t.filter, page.Name, outcome), http.StatusSeeOther)
 }
 
 // applyTransfer copies the ticked values of t, returning the outcome to
@@ -388,6 +397,7 @@ var transferTemplate = newPage("transfer", `
 <input type="hidden" name="`+gameSystemParam+`" value="{{.System}}">
 <input type="hidden" name="`+gameROMParam+`" value="{{.ROM}}">
 <input type="hidden" name="`+directionParam+`" value="{{.Direction}}">
+{{if .Filter}}<input type="hidden" name="`+filterParam+`" value="{{.Filter}}">{{end}}
 <table class="import__table">
 <thead><tr><th scope="col">Copy</th><th scope="col">Value</th><th scope="col">{{.To}} now</th><th scope="col">{{.From}}</th></tr></thead>
 <tbody>

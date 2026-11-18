@@ -264,3 +264,25 @@ func TestTransfer_ToRegistry_RegistryCannotBeWritten_KeepsTheServedRegistry(t *t
 		t.Error("the served registry holds a game that was never written to disk")
 	}
 }
+
+func TestTransfer_FromTheIncompleteFilter_ReturnsToIt(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForTransfer(t)
+	handler := Handler(reg, registryFolder, []string{romsFolder})
+	form := transferChoices(romsFolder, "Streets.zip", directionToRegistry, "name", "desc", "image")
+	form.Set(filterParam, filterIncomplete)
+
+	review := html.UnescapeString(get(t, handler, transferURLFor(romsFolder, "megadrive", "Streets.zip", directionToRegistry)+"&"+filterParam+"="+filterIncomplete).Body.String())
+	rec := post(t, handler, transferURL, form)
+
+	back := filteredStatusURL(romsFolder, "megadrive", filterIncomplete, 1)
+	if !strings.Contains(review, `href="`+back+`"`) || !strings.Contains(review, `name="`+filterParam+`" value="`+filterIncomplete+`"`) {
+		t.Error("the review does not lead back to, nor carry, the incomplete filter")
+	}
+	location, _, _ := strings.Cut(rec.Header().Get("Location"), "#")
+	if query, _ := url.ParseQuery(strings.SplitN(location, "?", 2)[1]); query.Get(filterParam) != filterIncomplete {
+		t.Errorf("Location = %q, want the incomplete filter kept", location)
+	}
+	if banner := statusBannerAfter(t, handler, rec); !strings.Contains(banner, "Streets of Rage") {
+		t.Errorf("banner = %q on the filtered list", banner)
+	}
+}

@@ -456,7 +456,7 @@ func (ui *webUI) fillGameFromURL(w http.ResponseWriter, r *http.Request) {
 	if _, ok := ui.commitURLImport(w, target, raw, candidate, replaced); !ok {
 		return
 	}
-	http.Redirect(w, r, statusConfirmationURL(folder, system, result.Name, outcomeCreated), http.StatusSeeOther)
+	http.Redirect(w, r, statusConfirmationURL(folder, system, "", result.Name, outcomeCreated), http.StatusSeeOther)
 }
 
 // commitURLImport saves candidate and makes it the served registry, then erases

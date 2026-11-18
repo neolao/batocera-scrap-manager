@@ -52,11 +52,44 @@ func romsFolderLinksOf(romsFolders []string) []romsFolderLink {
 // system status page is about. Its absence means the folder's summary.
 const statusSystemParam = "system"
 
+// filterParam narrows a system status page to some of its games; its only
+// value today is filterIncomplete, every game missing at least one value.
+// Absent, or any other value, lists every game.
+const (
+	filterParam      = "show"
+	filterIncomplete = "incomplete"
+)
+
+// requestedFilter reads which filter the query asks for, "" meaning none.
+func requestedFilter(query url.Values) string {
+	if query.Get(filterParam) == filterIncomplete {
+		return filterIncomplete
+	}
+	return ""
+}
+
+// withFilter appends filter to target, which already carries a query.
+func withFilter(target, filter string) string {
+	if filter == "" {
+		return target
+	}
+	return target + "&" + filterParam + "=" + filter
+}
+
 // romsFolderSystemStatusURLFor builds the URL of one page of one system's
-// status within a configured folder. The first page is addressed without a
-// page parameter, so a system keeps one canonical URL.
+// status within a configured folder, listing every game.
 func romsFolderSystemStatusURLFor(folder, system string, page int) string {
+	return filteredStatusURL(folder, system, "", page)
+}
+
+// filteredStatusURL builds the URL of one page of one system's status
+// narrowed by filter. The first page is addressed without a page parameter,
+// so a view keeps one canonical URL.
+func filteredStatusURL(folder, system, filter string, page int) string {
 	query := url.Values{statusFolderParam: {folder}, statusSystemParam: {system}}
+	if filter != "" {
+		query.Set(filterParam, filter)
+	}
 	if page > 1 {
 		query.Set(pageParam, strconv.Itoa(page))
 	}
@@ -96,14 +129,25 @@ type systemStatusPage struct {
 	Incomplete int
 	NotListed  int
 	Fillable   int
-	Games      []gameStatusView
-	Page       int
-	PageCount  int
-	PrevURL    string
-	NextURL    string
-	First      int
-	Last       int
-	Total      int
+	// Filter is the filter narrowing Games, "" for none.
+	Filter    string
+	Tabs      []statusTab
+	Games     []gameStatusView
+	Page      int
+	PageCount int
+	PrevURL   string
+	NextURL   string
+	First     int
+	Last      int
+	Total     int
+}
+
+// statusTab is one filter of a system status page, with the number of games
+// it lists across the whole system.
+type statusTab struct {
+	Label   string
+	URL     string
+	Current bool
 }
 
 // folderSystemLink is one entry of the navigation between a folder's systems.
@@ -210,7 +254,13 @@ func (ui *webUI) serveRomsFolderSystemStatus(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	pageCount := max(1, (len(st.Games)+gamesPerPage-1)/gamesPerPage)
+	filter := requestedFilter(query)
+	games := st.Games
+	if filter == filterIncomplete {
+		games = incompleteGames(st.Games)
+	}
+
+	pageCount := max(1, (len(games)+gamesPerPage-1)/gamesPerPage)
 	page, ok := requestedPage(query, pageCount)
 	if !ok {
 		renderProblem(w, http.StatusNotFound, "Not found",
@@ -218,7 +268,7 @@ func (ui *webUI) serveRomsFolderSystemStatus(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	first := (page - 1) * gamesPerPage
-	last := min(first+gamesPerPage, len(st.Games))
+	last := min(first+gamesPerPage, len(games))
 
 	systems, err := registry.RomsFolderSystems(folder)
 	if err != nil {
@@ -228,7 +278,7 @@ func (ui *webUI) serveRomsFolderSystemStatus(w http.ResponseWriter, r *http.Requ
 	}
 	links := make([]folderSystemLink, len(systems))
 	for i, name := range systems {
-		links[i] = folderSystemLink{Name: name, URL: romsFolderSystemStatusURLFor(folder, name, 1)}
+		links[i] = folderSystemLink{Name: name, URL: filteredStatusURL(folder, name, filter, 1)}
 	}
 
 	view := systemStatusPage{
@@ -243,14 +293,19 @@ func (ui *webUI) serveRomsFolderSystemStatus(w http.ResponseWriter, r *http.Requ
 		Incomplete: st.IncompleteCount,
 		NotListed:  st.NotListedCount,
 		Fillable:   st.FillableCount,
-		Games:      ui.gameStatusViews(folder, system, st.Games[first:last]),
-		Page:       page,
-		PageCount:  pageCount,
-		PrevURL:    statusPageURL(folder, system, page-1, pageCount),
-		NextURL:    statusPageURL(folder, system, page+1, pageCount),
-		First:      first + 1,
-		Last:       last,
-		Total:      len(st.Games),
+		Filter:     filter,
+		Tabs: []statusTab{
+			{Label: "All (" + strconv.Itoa(len(st.Games)) + ")", URL: filteredStatusURL(folder, system, "", 1), Current: filter == ""},
+			{Label: "Incomplete (" + strconv.Itoa(len(incompleteGames(st.Games))) + ")", URL: filteredStatusURL(folder, system, filterIncomplete, 1), Current: filter == filterIncomplete},
+		},
+		Games:     ui.gameStatusViews(folder, system, filter, games[first:last]),
+		Page:      page,
+		PageCount: pageCount,
+		PrevURL:   statusPageURL(folder, system, filter, page-1, pageCount),
+		NextURL:   statusPageURL(folder, system, filter, page+1, pageCount),
+		First:     first + 1,
+		Last:      last,
+		Total:     len(games),
 	}
 	render(w, http.StatusOK, romsFolderSystemStatusTemplate, view)
 }
@@ -258,16 +313,27 @@ func (ui *webUI) serveRomsFolderSystemStatus(w http.ResponseWriter, r *http.Requ
 // statusPageURL builds the URL of one page of a system's status, or an empty
 // string when page falls outside [1, pageCount] — how the pager knows the
 // first page has no previous link and the last no next one.
-func statusPageURL(folder, system string, page, pageCount int) string {
+func statusPageURL(folder, system, filter string, page, pageCount int) string {
 	if page < 1 || page > pageCount {
 		return ""
 	}
-	return romsFolderSystemStatusURLFor(folder, system, page)
+	return filteredStatusURL(folder, system, filter, page)
+}
+
+// incompleteGames keeps, in order, the games missing at least one value.
+func incompleteGames(games []registry.GameStatus) []registry.GameStatus {
+	var kept []registry.GameStatus
+	for _, g := range games {
+		if !g.Complete() {
+			kept = append(kept, g)
+		}
+	}
+	return kept
 }
 
 // gameStatusViews turns one page of a system's games into what the template
 // renders. Only this page's cover art files are looked up on disk.
-func (ui *webUI) gameStatusViews(folder, system string, games []registry.GameStatus) []gameStatusView {
+func (ui *webUI) gameStatusViews(folder, system, filter string, games []registry.GameStatus) []gameStatusView {
 	views := make([]gameStatusView, len(games))
 	for i, game := range games {
 		views[i] = gameStatusView{
@@ -284,10 +350,10 @@ func (ui *webUI) gameStatusViews(folder, system string, games []registry.GameSta
 		if game.RegistryID == "" {
 			views[i].FillURL = fillURLFor(folder, system, game.ROMFilename)
 		} else {
-			views[i].ToFolderURL = transferURLFor(folder, system, game.ROMFilename, directionToFolder)
+			views[i].ToFolderURL = withFilter(transferURLFor(folder, system, game.ROMFilename, directionToFolder), filter)
 		}
 		if game.Listed {
-			views[i].ToRegistryURL = transferURLFor(folder, system, game.ROMFilename, directionToRegistry)
+			views[i].ToRegistryURL = withFilter(transferURLFor(folder, system, game.ROMFilename, directionToRegistry), filter)
 		}
 		if game.RegistryImage != "" && site.MediaFileExists(ui.registryFolder, system, game.RegistryImage) {
 			views[i].RegistryImageURL = mediaURL(site.EscapeMediaPath(system, game.RegistryImage))
@@ -460,8 +526,12 @@ var romsFolderSystemStatusTemplate = newPage("roms-folder-system-status", `
 <div><dt>Not listed</dt><dd>{{.NotListed}}</dd></div>
 <div><dt>Fillable now</dt><dd>{{.Fillable}}</dd></div>
 </dl>
+<nav class="status__tabs" aria-label="Filter the games">
+{{range .Tabs}}<a href="{{.URL}}"{{if .Current}} class="is-current" aria-current="page"{{end}}>{{.Label}}</a>
+{{end}}
+</nav>
 {{if not .Games}}
-<p class="empty-state">No game in this system.</p>
+<p class="empty-state">{{if .Filter}}Nothing missing here.{{else}}No game in this system.{{end}}</p>
 {{else}}
 {{template "pager" .}}
 <ul class="status__gaps">

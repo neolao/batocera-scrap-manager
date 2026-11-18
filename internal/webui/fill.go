@@ -152,7 +152,7 @@ func (ui *webUI) fillGame(w http.ResponseWriter, r *http.Request) {
 	}
 	ui.reg = candidate
 
-	http.Redirect(w, r, statusConfirmationURL(folder, system, values.Name, outcomeCreated), http.StatusSeeOther)
+	http.Redirect(w, r, statusConfirmationURL(folder, system, "", values.Name, outcomeCreated), http.StatusSeeOther)
 }
 
 // fillTemplate renders the fill-in form: the ROM it creates a game for, and

@@ -343,3 +343,87 @@ func writeFile(t *testing.T, path, content string) {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }
+
+// writeMixedSystem writes a "mixed" system of total games, every one listed
+// locally, the first complete of which hold all twelve values and the rest
+// only a name.
+func writeMixedSystem(t *testing.T, romsFolder string, total, complete int) {
+	t.Helper()
+	games := make([]gamelist.Game, total)
+	for i := range games {
+		games[i] = gamelist.Game{Path: fmt.Sprintf("./Game %03d.zip", i), Name: fmt.Sprintf("Game %03d", i)}
+		if i < complete {
+			games[i].Desc, games[i].Image, games[i].Video, games[i].Marquee, games[i].Thumbnail = "d", "./i.png", "./v.mp4", "./m.png", "./t.png"
+			games[i].Rating, games[i].ReleaseDate, games[i].Developer = "0.5", "19910101T000000", "dev"
+			games[i].Publisher, games[i].Genre, games[i].Players = "pub", "genre", "1"
+		}
+	}
+	writeSystemGames(t, romsFolder, "mixed", games)
+}
+
+func TestServeRomsFolderSystemStatus_IncompleteFilter_ListsOnlyGamesMissingSomething(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
+	writeMixedSystem(t, romsFolder, 5, 2)
+
+	body := get(t, Handler(reg, registryFolder, []string{romsFolder}), filteredStatusURL(romsFolder, "mixed", filterIncomplete, 1)).Body.String()
+
+	if strings.Contains(body, "Game 000") || strings.Contains(body, "Game 001") {
+		t.Error("the incomplete filter still lists complete games")
+	}
+	if !strings.Contains(body, "Game 002") || !strings.Contains(body, "Game 004") {
+		t.Error("the incomplete filter does not list the incomplete games")
+	}
+	if !strings.Contains(body, "All (5)") || !strings.Contains(body, "Incomplete (3)") {
+		t.Errorf("the tabs do not show the system-wide counts\n--- page ---\n%s", body)
+	}
+	if !strings.Contains(body, `aria-current="page">Incomplete (3)`) {
+		t.Error("the incomplete tab is not marked as the current one")
+	}
+}
+
+func TestServeRomsFolderSystemStatus_IncompleteFilter_PaginatesAndKeepsTheFilterInEveryLink(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
+	writeMixedSystem(t, romsFolder, gamesPerPage+5, 4)
+	handler := Handler(reg, registryFolder, []string{romsFolder})
+
+	first := html.UnescapeString(get(t, handler, filteredStatusURL(romsFolder, "mixed", filterIncomplete, 1)).Body.String())
+	second := get(t, handler, filteredStatusURL(romsFolder, "mixed", filterIncomplete, 2)).Body.String()
+
+	if !strings.Contains(first, filteredStatusURL(romsFolder, "mixed", filterIncomplete, 2)) {
+		t.Error("the next-page link drops the filter")
+	}
+	if !strings.Contains(first, filteredStatusURL(romsFolder, "megadrive", filterIncomplete, 1)) {
+		t.Error("the link to another system drops the filter")
+	}
+	if !strings.Contains(first, transferURLFor(romsFolder, "mixed", "Game 004.zip", directionToRegistry)+"&"+filterParam+"="+filterIncomplete) {
+		t.Error("the copy link drops the filter")
+	}
+	if strings.Count(second, `class="status__gap"`) != 1 || !strings.Contains(second, "Game 064") {
+		t.Error("page 2 of the incomplete filter does not hold the one remaining game")
+	}
+	if rec := get(t, handler, filteredStatusURL(romsFolder, "mixed", filterIncomplete, 3)); rec.Code != http.StatusNotFound {
+		t.Errorf("page 3: status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestServeRomsFolderSystemStatus_IncompleteFilterOnACompleteSystem_SaysNothingIsMissing(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
+	writeMixedSystem(t, romsFolder, 2, 2)
+
+	rec := get(t, Handler(reg, registryFolder, []string{romsFolder}), filteredStatusURL(romsFolder, "mixed", filterIncomplete, 1))
+
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Nothing missing here") {
+		t.Errorf("status = %d, want 200 and an empty-state message\n%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServeRomsFolderSystemStatus_UnknownFilter_ListsEveryGame(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
+	writeMixedSystem(t, romsFolder, 3, 1)
+
+	body := get(t, Handler(reg, registryFolder, []string{romsFolder}), filteredStatusURL(romsFolder, "mixed", "bogus", 1)).Body.String()
+
+	if !strings.Contains(body, "Game 000") || !strings.Contains(body, `aria-current="page">All (3)`) {
+		t.Error("an unknown filter does not fall back to every game")
+	}
+}

@@ -591,3 +591,32 @@ textarea.field__control { resize: vertical; line-height: 1.6; }
 .status__gap-link a { color: var(--cyan); }
 .status__gap-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
 .status__gap-actions form { margin: 0; }
+/* Importing a game's values from a web page: the address to look up, then
+   one row per value found, current and proposed side by side, each with the
+   box deciding whether it is taken. */
+.lookup { margin: 0 0 1.5rem; }
+.lookup__row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.lookup__row .field__control { flex: 1 1 16rem; min-width: 0; }
+.import__table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.import__table th, .import__table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.import__table thead th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+.import__table input[type="checkbox"] { width: 1.25rem; height: 1.25rem; }
+.import__value { white-space: pre-line; overflow-wrap: anywhere; }
+.import__same, .import__empty { color: var(--ink-dim); font-size: 0.8rem; }
+.import__art { display: block; width: 8rem; max-width: 100%; border-radius: var(--radius); }
+@media (max-width: 640px) {
+  .import__table thead { display: none; }
+  .import__table tr { display: grid; grid-template-columns: 2rem 1fr; border-bottom: 1px solid var(--line); padding: 0.5rem 0; }
+  .import__table th, .import__table td { border: 0; padding: 0.2rem 0.5rem; }
+  .import__table td.import__value, .import__table td:nth-child(3), .import__table td:nth-child(4) { grid-column: 2; }
+}

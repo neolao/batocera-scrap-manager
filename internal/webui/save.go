@@ -27,6 +27,7 @@ const (
 	savedNoSite      = "stale-site"
 	savedProtected   = "protected"
 	savedUnprotected = "unprotected"
+	savedImported    = "imported"
 	savedAnchor      = "#saved"
 
 	// staleSuffix turns an outcome into the variant reporting that the
@@ -46,6 +47,7 @@ var savedConfirmations = map[string]string{
 	savedFully:       "Metadata saved to the registry.",
 	savedNoSite:      "Metadata saved to the registry, but the consultation site could not be regenerated — run 'update' to rebuild it.",
 	savedProtected:   "This game is protected — updates will leave its metadata alone.",
+	savedImported:    "Imported into the registry from the page you chose — the values taken are protected from later updates.",
 	savedUnprotected: "This game is no longer protected — updates can overwrite its metadata again.",
 }
 

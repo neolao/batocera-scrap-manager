@@ -120,6 +120,8 @@ type editPage struct {
 	// Problem states what went wrong when the correction itself was fine but
 	// could not be stored — a field-level message would blame the wrong thing.
 	Problem string
+	// Lookup offers to import this game's values from a web page instead.
+	Lookup lookupForm
 }
 
 // formControl is one rendered control of the form.
@@ -201,6 +203,7 @@ func editForm(entry registry.Entry, values editValues, errs map[string]string) e
 		GameURL:   gameURL(entry.System, id),
 		Action:    gameURL(entry.System, id) + "/edit",
 		PathField: pathControl(values.Path, errs[pathKey]),
+		Lookup:    lookupForm{Action: gameFromURL(entry.System, id)},
 	}
 	if page.PathField.Error != "" {
 		page.Errors = append(page.Errors, formError{
@@ -280,6 +283,7 @@ var editTemplate = newPage("edit", `
 <main>
 <article class="game">
 <h2 class="game__title">Edit {{.Name}}</h2>
+{{template "lookup-form" .Lookup}}
 {{if .Problem}}
 <div class="errors" role="alert" tabindex="-1" id="errors">
 <p class="errors__title">Not saved</p>
@@ -316,7 +320,7 @@ var editTemplate = newPage("edit", `
 </article>
 </main>
 {{end}}
-`+metadataFieldsTemplate)
+`+metadataFieldsTemplate+lookupFormTemplate)
 
 // metadataFieldsTemplate renders the editable metadata controls, shared by
 // the edit form and the fill-in form so both read and validate alike. Its

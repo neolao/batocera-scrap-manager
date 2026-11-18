@@ -35,6 +35,8 @@ type fillPage struct {
 	// Problem states what went wrong when the values were fine but could not
 	// be stored.
 	Problem string
+	// Lookup offers to import this game's values from a web page instead.
+	Lookup lookupForm
 }
 
 // fillForm builds the fill-in form for rom, filled with values and the
@@ -48,6 +50,7 @@ func fillForm(folder, system, rom string, values editValues, errs map[string]str
 		StatusURL: romsFolderSystemStatusURLFor(folder, system, 1),
 		Fields:    fields,
 		Errors:    summary,
+		Lookup:    lookupForm{Action: fillFromURL, Hidden: romFields(folder, system, rom)},
 	}
 }
 
@@ -164,6 +167,7 @@ var fillTemplate = newPage("fill", `
 <article class="game">
 <h2 class="game__title">Fill in <code>{{.ROM}}</code></h2>
 <p class="home__note">Creates this game in the registry with what you type. Nothing is written to <code>{{.Folder}}</code> until you send it there. Cover art and other media can be added afterwards from the game's page in the registry.</p>
+{{template "lookup-form" .Lookup}}
 {{if .Problem}}
 <div class="errors" role="alert" tabindex="-1" id="errors">
 <p class="errors__title">Not saved</p>
@@ -192,4 +196,4 @@ var fillTemplate = newPage("fill", `
 </article>
 </main>
 {{end}}
-`+metadataFieldsTemplate)
+`+metadataFieldsTemplate+lookupFormTemplate)

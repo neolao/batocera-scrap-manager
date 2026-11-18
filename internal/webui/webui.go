@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
+	"github.com/neolao/batocera-scrap-manager/internal/scrape"
 	"github.com/neolao/batocera-scrap-manager/internal/site"
 )
 
@@ -39,7 +40,13 @@ const readAndSubmit = http.MethodGet + ", " + http.MethodPost
 // Batocera ROMs folders the two long operations read from and write back to;
 // none configured is a valid state, not an error.
 func Handler(reg *registry.Registry, registryFolder string, romsFolders []string) http.Handler {
-	ui := &webUI{reg: reg, registryFolder: registryFolder, romsFolders: romsFolders}
+	return newHandler(reg, registryFolder, romsFolders, scrape.New(nil))
+}
+
+// newHandler is Handler reading pages to import from through scraper — which
+// tests point at a local server instead of the network.
+func newHandler(reg *registry.Registry, registryFolder string, romsFolders []string, scraper *scrape.Fetcher) http.Handler {
+	ui := &webUI{reg: reg, registryFolder: registryFolder, romsFolders: romsFolders, scraper: scraper}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", ui.serveHome)
@@ -73,6 +80,12 @@ func Handler(reg *registry.Registry, registryFolder string, romsFolders []string
 	mux.HandleFunc("GET "+romsFolderStatusURL, ui.serveRomsFolderStatus)
 	mux.HandleFunc(romsFolderStatusURL, allowOnly(http.MethodGet))
 	mux.HandleFunc("GET "+romsFolderMediaPrefix+"{system}/{path...}", ui.serveRomsFolderMedium)
+	mux.HandleFunc("GET /game/{system}/{id}/from-url", ui.serveGameFromURL)
+	mux.HandleFunc("POST /game/{system}/{id}/from-url", ui.importGameFromURL)
+	mux.HandleFunc("/game/{system}/{id}/from-url", allowOnly(readAndSubmit))
+	mux.HandleFunc("GET "+fillFromURL, ui.serveFillFromURL)
+	mux.HandleFunc("POST "+fillFromURL, ui.fillGameFromURL)
+	mux.HandleFunc(fillFromURL, allowOnly(readAndSubmit))
 	mux.HandleFunc("GET "+fillURL, ui.serveFillForm)
 	mux.HandleFunc("POST "+fillURL, ui.fillGame)
 	mux.HandleFunc(fillURL, allowOnly(readAndSubmit))
@@ -111,6 +124,9 @@ type webUI struct {
 	reg            *registry.Registry
 	registryFolder string
 	romsFolders    []string
+	// scraper reads the pages a game's values are imported from. It guards
+	// itself, and is fixed for the process's lifetime.
+	scraper *scrape.Fetcher
 	// jobs tracks the one long operation the server runs at a time, whichever
 	// direction it goes. It guards itself: a run outlives its request and must
 	// not hold mu, which every served page needs.

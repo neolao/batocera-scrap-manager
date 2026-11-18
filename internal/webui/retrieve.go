@@ -68,11 +68,12 @@ func retrievedConfirmation(query url.Values) string {
 	return name + suffix
 }
 
-// retrievedURL builds the status page URL confirming a retrieve: the folder
-// it stays on, the game it named, and how it turned out.
-func retrievedURL(folder, name, outcome string) string {
+// retrievedURL builds the system status page URL confirming a retrieve: the
+// folder and system it stays on, the game it named, and how it turned out.
+func retrievedURL(folder, system, name, outcome string) string {
 	query := url.Values{
 		statusFolderParam:  {folder},
+		statusSystemParam:  {system},
 		retrievedNameParam: {name},
 		retrievedParam:     {outcome},
 	}
@@ -85,28 +86,23 @@ func retrievedURL(folder, name, outcome string) string {
 // request, the same rule a forged folder name is already refused by (see
 // requestedSend in send.go): a page rendered earlier may no longer agree with
 // what is on disk, or with the registry, right now.
-func retrievableGap(reg *registry.Registry, folder, system, rom string) (registry.GameGap, bool) {
-	status, err := registry.RomsFolderStatus(reg, folder)
+func retrievableGap(reg *registry.Registry, folder, system, rom string) (registry.GameStatus, bool) {
+	st, err := registry.RomsFolderSystemStatus(reg, folder, system)
 	if err != nil {
-		return registry.GameGap{}, false
+		return registry.GameStatus{}, false
 	}
-	for _, sys := range status.Systems {
-		if sys.System != system {
-			continue
-		}
-		for _, gap := range sys.Gaps {
-			if gap.Listed && gap.ROMFilename == rom {
-				return gap, true
-			}
+	for _, game := range st.Games {
+		if game.Listed && game.ROMFilename == rom {
+			return game, true
 		}
 	}
-	return registry.GameGap{}, false
+	return registry.GameStatus{}, false
 }
 
 // gapDisplayName is the name a confirmation names a gap by — its own when
 // known, the ROM filename otherwise, exactly as the status page's own list
 // already falls back (see gapSortKey in internal/registry/status.go).
-func gapDisplayName(gap registry.GameGap) string {
+func gapDisplayName(gap registry.GameStatus) string {
 	if gap.Name != "" {
 		return gap.Name
 	}
@@ -163,7 +159,7 @@ func (ui *webUI) retrieveGame(w http.ResponseWriter, r *http.Request) {
 	candidate := ui.reg.Clone()
 	added, updated, unchanged, err := registry.ImportGame(candidate, folder, ui.registryFolder, system, rom, nil)
 	if err != nil {
-		http.Redirect(w, r, retrievedURL(folder, name, retrievedFailed), http.StatusSeeOther)
+		http.Redirect(w, r, retrievedURL(folder, system, name, retrievedFailed), http.StatusSeeOther)
 		return
 	}
 
@@ -179,11 +175,11 @@ func (ui *webUI) retrieveGame(w http.ResponseWriter, r *http.Request) {
 
 	if outcome != retrievedNothing {
 		if saveErr := store.Save(candidate, ui.registryFolder); saveErr != nil && !errors.Is(saveErr, store.ErrSiteNotRegenerated) {
-			http.Redirect(w, r, retrievedURL(folder, name, retrievedFailed), http.StatusSeeOther)
+			http.Redirect(w, r, retrievedURL(folder, system, name, retrievedFailed), http.StatusSeeOther)
 			return
 		}
 		ui.reg = candidate
 	}
 
-	http.Redirect(w, r, retrievedURL(folder, name, outcome), http.StatusSeeOther)
+	http.Redirect(w, r, retrievedURL(folder, system, name, outcome), http.StatusSeeOther)
 }

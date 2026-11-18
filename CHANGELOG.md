@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A ROMs folder's status page is now a summary table, with one row per system and its counts. Each system opens on its own page, 60 games per page with previous/next navigation and a bar to jump between the folder's systems. That page now lists every game, complete ones included, and shows the cover art the ROMs folder holds next to the cover art the registry holds, so the two can be compared at a glance. After "Retrieve into the registry", you come back to the system you were on.
+
 ## [0.7.0] - 2026-09-19
 
 ### Added

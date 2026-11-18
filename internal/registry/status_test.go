@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -104,12 +105,12 @@ func TestRomsFolderStatus_NominalFixture_ReportsEveryKindOfGap(t *testing.T) {
 	if sys.FillableCount != 2 {
 		t.Errorf("FillableCount = %d, want 2 (Golden Axe and Orphan, from the registry)", sys.FillableCount)
 	}
-	if len(sys.Gaps) != 4 {
-		t.Fatalf("Gaps = %v, want 4 entries (Sonic is complete and excluded)", sys.Gaps)
+	if len(sys.Games) != 5 {
+		t.Fatalf("Games = %v, want 5 entries (complete Sonic included)", sys.Games)
 	}
 
-	byFile := map[string]GameGap{}
-	for _, g := range sys.Gaps {
+	byFile := map[string]GameStatus{}
+	for _, g := range sys.Games {
 		byFile[g.ROMFilename] = g
 	}
 
@@ -184,11 +185,11 @@ func TestRomsFolderStatus_SystemHasNoLocalGamelist_EveryROMIsNotListed(t *testin
 		t.Fatalf("Systems = %v, want exactly nes", status.Systems)
 	}
 	sys := status.Systems[0]
-	if sys.NotListedCount != 1 || len(sys.Gaps) != 1 {
-		t.Fatalf("NotListedCount/Gaps = %d/%v, want 1/[Zelda.zip]", sys.NotListedCount, sys.Gaps)
+	if sys.NotListedCount != 1 || len(sys.Games) != 1 {
+		t.Fatalf("NotListedCount/Gaps = %d/%v, want 1/[Zelda.zip]", sys.NotListedCount, sys.Games)
 	}
-	if sys.Gaps[0].ROMFilename != "Zelda.zip" {
-		t.Errorf("Gaps[0].ROMFilename = %q, want Zelda.zip", sys.Gaps[0].ROMFilename)
+	if sys.Games[0].ROMFilename != "Zelda.zip" {
+		t.Errorf("Gaps[0].ROMFilename = %q, want Zelda.zip", sys.Games[0].ROMFilename)
 	}
 }
 
@@ -244,7 +245,7 @@ func TestRomsFolderStatus_SystemGamelistIsMalformed_NamesTheProblemAndKeepsOther
 	if broke == nil || broke.Problem == "" {
 		t.Fatalf("broken system = %v, want a non-empty Problem", broke)
 	}
-	if other == nil || len(other.Gaps) != 1 {
+	if other == nil || len(other.Games) != 1 {
 		t.Fatalf("nes system = %v, want its own gap still reported", other)
 	}
 }
@@ -335,9 +336,9 @@ func TestRomsFolderStatus_InfoTxtFile_IsNeverCountedAsARom(t *testing.T) {
 	if sys.ROMCount != 1 {
 		t.Errorf("ROMCount = %d, want 1 (_info.txt excluded, hidden Streets.zip excluded too)", sys.ROMCount)
 	}
-	for _, gap := range sys.Gaps {
+	for _, gap := range sys.Games {
 		if gap.ROMFilename == "_info.txt" {
-			t.Errorf("_info.txt appears in Gaps: %+v", gap)
+			t.Errorf("_info.txt appears in Games: %+v", gap)
 		}
 	}
 }
@@ -356,9 +357,9 @@ func TestRomsFolderStatus_HiddenGame_IsIgnoredEntirely(t *testing.T) {
 		t.Errorf("counts = complete:%d incomplete:%d notListed:%d, want 0/1/0 (Streets.zip hidden, ignored; Golden Axe.zip the only real gap)",
 			sys.CompleteCount, sys.IncompleteCount, sys.NotListedCount)
 	}
-	for _, gap := range sys.Gaps {
+	for _, gap := range sys.Games {
 		if gap.ROMFilename == "Streets.zip" {
-			t.Errorf("hidden game Streets.zip appears in Gaps: %+v", gap)
+			t.Errorf("hidden game Streets.zip appears in Games: %+v", gap)
 		}
 	}
 }
@@ -374,10 +375,10 @@ func TestRomsFolderStatus_GapWithMatchingRegistryEntry_CarriesItsRegistryID(t *t
 	if err != nil {
 		t.Fatalf("RomsFolderStatus() error = %v, want nil", err)
 	}
-	var goldenAxe *GameGap
-	for i := range status.Systems[0].Gaps {
-		if status.Systems[0].Gaps[i].ROMFilename == "Golden Axe.zip" {
-			goldenAxe = &status.Systems[0].Gaps[i]
+	var goldenAxe *GameStatus
+	for i := range status.Systems[0].Games {
+		if status.Systems[0].Games[i].ROMFilename == "Golden Axe.zip" {
+			goldenAxe = &status.Systems[0].Games[i]
 		}
 	}
 	if goldenAxe == nil {
@@ -397,10 +398,10 @@ func TestRomsFolderStatus_GapWithNoMatchingRegistryEntry_HasNoRegistryID(t *test
 	if err != nil {
 		t.Fatalf("RomsFolderStatus() error = %v, want nil", err)
 	}
-	var goldenAxe *GameGap
-	for i := range status.Systems[0].Gaps {
-		if status.Systems[0].Gaps[i].ROMFilename == "Golden Axe.zip" {
-			goldenAxe = &status.Systems[0].Gaps[i]
+	var goldenAxe *GameStatus
+	for i := range status.Systems[0].Games {
+		if status.Systems[0].Games[i].ROMFilename == "Golden Axe.zip" {
+			goldenAxe = &status.Systems[0].Games[i]
 		}
 	}
 	if goldenAxe == nil {
@@ -408,5 +409,89 @@ func TestRomsFolderStatus_GapWithNoMatchingRegistryEntry_HasNoRegistryID(t *test
 	}
 	if goldenAxe.RegistryID != "" {
 		t.Errorf("RegistryID = %q, want empty (no matching registry entry)", goldenAxe.RegistryID)
+	}
+}
+
+func TestRomsFolderStatus_CompleteGame_IsListedWithNothingMissing(t *testing.T) {
+	status, err := RomsFolderStatus(statusRegistry(), writeStatusRomsFolder(t))
+
+	if err != nil {
+		t.Fatalf("RomsFolderStatus() error = %v, want nil", err)
+	}
+	var sonic *GameStatus
+	for i := range status.Systems[0].Games {
+		if status.Systems[0].Games[i].ROMFilename == "Sonic.zip" {
+			sonic = &status.Systems[0].Games[i]
+		}
+	}
+	if sonic == nil {
+		t.Fatal("complete Sonic.zip missing from Games")
+	}
+	if !sonic.Listed || len(sonic.Missing) != 0 || !sonic.Complete() {
+		t.Errorf("Sonic.zip = %+v, want listed, nothing missing, Complete()", *sonic)
+	}
+}
+
+func TestRomsFolderStatus_Games_CarryTheLocalAndRegistryCoverArt(t *testing.T) {
+	status, err := RomsFolderStatus(statusRegistry(), writeStatusRomsFolder(t))
+
+	if err != nil {
+		t.Fatalf("RomsFolderStatus() error = %v, want nil", err)
+	}
+	byFile := map[string]GameStatus{}
+	for _, g := range status.Systems[0].Games {
+		byFile[g.ROMFilename] = g
+	}
+	if got := byFile["Sonic.zip"].LocalImage; got != "./images/Sonic.png" {
+		t.Errorf("Sonic.zip LocalImage = %q, want ./images/Sonic.png", got)
+	}
+	if got := byFile["Sonic.zip"].RegistryImage; got != "" {
+		t.Errorf("Sonic.zip RegistryImage = %q, want empty (unknown to the registry)", got)
+	}
+	if got := byFile["Golden Axe.zip"].RegistryImage; got != "./images/Golden Axe.png" {
+		t.Errorf("Golden Axe.zip RegistryImage = %q, want ./images/Golden Axe.png", got)
+	}
+	if got := byFile["Golden Axe.zip"].LocalImage; got != "" {
+		t.Errorf("Golden Axe.zip LocalImage = %q, want empty (no local cover art)", got)
+	}
+}
+
+func TestRomsFolderSystemStatus_KnownSystem_ReportsOnlyThatSystem(t *testing.T) {
+	st, err := RomsFolderSystemStatus(statusRegistry(), writeStatusRomsFolder(t), "megadrive")
+
+	if err != nil {
+		t.Fatalf("RomsFolderSystemStatus() error = %v, want nil", err)
+	}
+	if st.System != "megadrive" || st.ROMCount != 5 || len(st.Games) != 5 {
+		t.Errorf("status = %s/%d ROMs/%d games, want megadrive/5/5", st.System, st.ROMCount, len(st.Games))
+	}
+}
+
+func TestRomsFolderSystemStatus_UnknownOrUnsafeSystem_ReturnsNotExist(t *testing.T) {
+	romsFolder := writeStatusRomsFolder(t)
+	for _, system := range []string{"snes", "", ".", "..", "../megadrive", "megadrive/images"} {
+		_, err := RomsFolderSystemStatus(statusRegistry(), romsFolder, system)
+		if !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("RomsFolderSystemStatus(%q) error = %v, want os.ErrNotExist", system, err)
+		}
+	}
+}
+
+func TestRomsFolderSystems_ListsOnlySystemFoldersHoldingSomething(t *testing.T) {
+	romsFolder := writeStatusRomsFolder(t)
+
+	systems, err := RomsFolderSystems(romsFolder)
+
+	if err != nil {
+		t.Fatalf("RomsFolderSystems() error = %v, want nil", err)
+	}
+	if !slices.Equal(systems, []string{"megadrive"}) {
+		t.Errorf("systems = %v, want [megadrive] (empty mastersystem left out)", systems)
+	}
+}
+
+func TestRomsFolderSystems_FolderDoesNotExist_ReturnsError(t *testing.T) {
+	if _, err := RomsFolderSystems(filepath.Join(t.TempDir(), "gone")); err == nil {
+		t.Fatal("RomsFolderSystems() error = nil, want an error")
 	}
 }

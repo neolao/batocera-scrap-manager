@@ -203,7 +203,13 @@ var systemTemplate = newPage("system", `
 </section>
 </main>
 {{end}}
+`+pagerTemplate)
 
+// pagerTemplate frames a paginated list above and below: previous and next
+// controls, and which games of how many are being looked at. Shared by every
+// paginated page, each defining PrevURL, NextURL, First, Last, Total, Page
+// and PageCount.
+const pagerTemplate = `
 {{define "pager"}}
 {{if gt .PageCount 1}}
 <nav class="pager" aria-label="Pagination">
@@ -213,4 +219,4 @@ var systemTemplate = newPage("system", `
 </nav>
 {{end}}
 {{end}}
-`)
+`

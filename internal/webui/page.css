@@ -519,22 +519,24 @@ textarea.field__control { resize: vertical; line-height: 1.6; }
   .button { display: inline-flex; align-items: center; min-height: 2.75rem; }
   .pager__state { order: 3; width: 100%; text-align: center; }
 }
-/* The ROMs folder status report: a jump list to each system (the whole report
-   renders on one page), per-system counts, and the list of its problem
-   games — each telling apart a gap a Completion would already fill from one
-   that needs real scraping. */
-.status__toc {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  margin: 0 0 1.5rem;
-  padding: 0;
-  list-style: none;
-  font-family: var(--font-display);
-  font-size: 0.75rem;
-  letter-spacing: 0.05em;
+/* The ROMs folder status: a summary table with one row per system, then
+   one paginated page per system listing every game with the cover art the
+   folder and the registry each hold, side by side. */
+.status__table-wrap { overflow-x: auto; }
+.status__table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.status__table th, .status__table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
 }
-.status__system { margin: 0 0 2rem; }
+.status__table th:first-child, .status__table td[colspan] { text-align: left; }
+.status__table thead th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+.status__table tbody th a { color: var(--cyan); }
 .status__counts {
   display: flex;
   flex-wrap: wrap;
@@ -550,12 +552,36 @@ textarea.field__control { resize: vertical; line-height: 1.6; }
 .status__counts dd { margin: 0; font-family: var(--font-display); font-size: 1.15rem; }
 .status__gaps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
 .status__gap {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 0.75rem 1rem;
   background: var(--bg-card);
 }
 .status__gap p { margin: 0.2rem 0; }
+.status__gap-body { min-width: 0; flex: 1; }
+.status__arts { display: flex; gap: 0.5rem; flex: 0 0 auto; }
+.status__art { margin: 0; width: 6rem; }
+.status__art img, .status__art--empty::before {
+  display: block;
+  width: 6rem;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+.status__art--empty::before {
+  content: "";
+  background: repeating-linear-gradient(45deg, rgba(77, 240, 255, 0.08), rgba(77, 240, 255, 0.08) 10px, rgba(255, 62, 200, 0.08) 10px, rgba(255, 62, 200, 0.08) 20px);
+}
+.status__art figcaption { font-size: 0.7rem; color: var(--ink-dim); text-align: center; margin-top: 0.2rem; }
+.status__gap-complete { color: var(--cyan); font-size: 0.85rem; }
+@media (max-width: 640px) {
+  .status__gap { flex-direction: column; }
+  .status__art, .status__art img, .status__art--empty::before { width: 4.5rem; }
+}
 .status__gap-name { font-weight: bold; }
 .status__gap-file { margin-left: 0.5rem; color: var(--ink-dim); }
 .status__gap-state { color: var(--ink-dim); font-size: 0.85rem; }

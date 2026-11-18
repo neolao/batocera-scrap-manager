@@ -2,9 +2,11 @@ package registry
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/neolao/batocera-scrap-manager/internal/gamelist"
 )
@@ -46,14 +48,16 @@ type SystemStatus struct {
 	// (its gamelist.xml exists but could not be parsed, or its folder could
 	// not be read), leaving every count above at zero.
 	Problem string
-	Gaps    []GameGap
+	// Games is every visible game of the system, complete ones included,
+	// sorted by name.
+	Games []GameStatus
 }
 
-// GameGap is one ROM file that is not, locally, everything it could be: what
-// names it, whether it has a local gamelist.xml entry at all, which of the
-// twelve fields are still missing, and which of those the registry already
+// GameStatus is one ROM file of a system: what names it, whether it has a
+// local gamelist.xml entry at all, which of the twelve fields are still
+// missing (none for a complete game), and which of those the registry already
 // holds — the distinction the whole report exists for.
-type GameGap struct {
+type GameStatus struct {
 	// ROMFilename is the file's base name, as found on disk or as its local
 	// entry's path names it.
 	ROMFilename string
@@ -75,6 +79,17 @@ type GameGap struct {
 	// the scrape can be finished by hand right there. Empty when the registry
 	// does not know this game at all.
 	RegistryID string
+	// LocalImage is the cover art reference of the local entry, relative to
+	// the system's folder as gamelist.xml writes it; empty when none.
+	LocalImage string
+	// RegistryImage is the cover art reference of the matching registry
+	// entry, relative to its system's folder in the registry; empty when none.
+	RegistryImage string
+}
+
+// Complete reports whether nothing is missing locally.
+func (g GameStatus) Complete() bool {
+	return len(g.Missing) == 0
 }
 
 // infoTxtFileName is a note some Batocera setups leave directly in a system's
@@ -186,8 +201,8 @@ func systemStatus(reg *Registry, romsFolder, system string) SystemStatus {
 		st.addGap(file, gamelist.Game{}, "", false, registryGameOf(reg, system, file))
 	}
 
-	sort.Slice(st.Gaps, func(i, j int) bool {
-		return gapSortKey(st.Gaps[i]) < gapSortKey(st.Gaps[j])
+	sort.Slice(st.Games, func(i, j int) bool {
+		return gapSortKey(st.Games[i]) < gapSortKey(st.Games[j])
 	})
 
 	return st
@@ -195,17 +210,15 @@ func systemStatus(reg *Registry, romsFolder, system string) SystemStatus {
 
 // addGap classifies one ROM (local, its local entry — a zero value when it
 // has none) against the matching registry entry, if any, updating the
-// system's counts and, when it is not already complete, appending its gap.
+// system's counts and appending its status.
 func (st *SystemStatus) addGap(romFilename string, local gamelist.Game, localName string, listedLocally bool, registryGame *gamelist.Game) {
 	missing, fillable := gapFields(local, registryGame)
-	if len(missing) == 0 {
+	switch {
+	case len(missing) == 0:
 		st.CompleteCount++
-		return
-	}
-
-	if listedLocally {
+	case listedLocally:
 		st.IncompleteCount++
-	} else {
+	default:
 		st.NotListedCount++
 	}
 	if len(fillable) > 0 {
@@ -214,20 +227,77 @@ func (st *SystemStatus) addGap(romFilename string, local gamelist.Game, localNam
 
 	name := localName
 	registryID := ""
+	registryImage := ""
 	if registryGame != nil {
 		if name == "" {
 			name = registryGame.Name
 		}
 		registryID = GameID(registryGame.Path)
+		registryImage = registryGame.Image
 	}
-	st.Gaps = append(st.Gaps, GameGap{
-		ROMFilename: romFilename,
-		Name:        name,
-		Listed:      listedLocally,
-		Missing:     missing,
-		Fillable:    fillable,
-		RegistryID:  registryID,
+	st.Games = append(st.Games, GameStatus{
+		ROMFilename:   romFilename,
+		Name:          name,
+		Listed:        listedLocally,
+		Missing:       missing,
+		Fillable:      fillable,
+		RegistryID:    registryID,
+		LocalImage:    local.Image,
+		RegistryImage: registryImage,
 	})
+}
+
+// RomsFolderSystemStatus reports one system of romsFolder alone, without
+// reading any other system. A system that is not a plain folder name directly
+// inside romsFolder answers an error wrapping os.ErrNotExist — a request
+// naming "../elsewhere" is as unknown as one naming a missing system.
+func RomsFolderSystemStatus(reg *Registry, romsFolder, system string) (SystemStatus, error) {
+	if system == "" || system == "." || system == ".." || strings.ContainsAny(system, `/\`) {
+		return SystemStatus{}, fmt.Errorf("system %q: %w", system, os.ErrNotExist)
+	}
+	info, err := os.Stat(filepath.Join(romsFolder, system))
+	if err != nil {
+		return SystemStatus{}, err
+	}
+	if !info.IsDir() {
+		return SystemStatus{}, fmt.Errorf("system %q: %w", system, os.ErrNotExist)
+	}
+	return systemStatus(reg, romsFolder, system), nil
+}
+
+// RomsFolderSystems lists, sorted, the system folders of romsFolder holding
+// at least one file — a cheap listing, reading no gamelist.xml, for
+// navigating between systems without computing every system's status.
+func RomsFolderSystems(romsFolder string) ([]string, error) {
+	dirEntries, err := os.ReadDir(romsFolder)
+	if err != nil {
+		return nil, err
+	}
+	var systems []string
+	for _, de := range dirEntries {
+		if !de.IsDir() {
+			continue
+		}
+		if holdsAFile(filepath.Join(romsFolder, de.Name())) {
+			systems = append(systems, de.Name())
+		}
+	}
+	return systems, nil
+}
+
+// holdsAFile reports whether folder directly holds at least one file other
+// than _info.txt; an unreadable folder holds nothing worth navigating to.
+func holdsAFile(folder string) bool {
+	dirEntries, err := os.ReadDir(folder)
+	if err != nil {
+		return false
+	}
+	for _, de := range dirEntries {
+		if !de.IsDir() && de.Name() != infoTxtFileName {
+			return true
+		}
+	}
+	return false
 }
 
 // registryGameOf looks up the registry entry matching system and romFilename
@@ -264,7 +334,7 @@ func gapFields(local gamelist.Game, registryGame *gamelist.Game) (missing, filla
 // gapSortKey orders a system's gaps by the best name known for them, falling
 // back to the ROM filename for the rare case neither the local entry nor the
 // registry names it.
-func gapSortKey(g GameGap) string {
+func gapSortKey(g GameStatus) string {
 	if g.Name != "" {
 		return g.Name
 	}

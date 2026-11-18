@@ -89,7 +89,7 @@ type systemStatusPage struct {
 	FolderURL  string
 	Name       string
 	Systems    []folderSystemLink
-	Retrieved  string
+	Changed    string
 	Problem    string
 	ROMCount   int
 	Complete   int
@@ -117,7 +117,7 @@ type folderSystemLink struct {
 // only ever names them by their internal identifiers.
 type gameStatusView struct {
 	// System is this game's Batocera system — every other identifier here is
-	// only unique within it, and the retrieve control needs it too.
+	// only unique within it.
 	System      string
 	ROMFilename string
 	Name        string
@@ -128,10 +128,11 @@ type gameStatusView struct {
 	// RegistryURL leads to this game's own page in the registry. Empty when
 	// the registry does not know this game at all — nothing to link to.
 	RegistryURL string
-	// SendURL leads straight to this game's existing send confirmation, this
-	// folder and the fill-the-gaps rule already chosen (decisions/040). Empty
-	// exactly when RegistryURL is.
-	SendURL string
+	// ToRegistryURL and ToFolderURL open the review copying chosen values
+	// one way or the other. Each is empty when its source holds nothing: no
+	// local entry, or no registry entry.
+	ToRegistryURL string
+	ToFolderURL   string
 	// FillURL leads to the form creating this game in the registry by hand.
 	// Empty exactly when RegistryURL is not: only a game the registry does
 	// not know can be filled in.
@@ -235,7 +236,7 @@ func (ui *webUI) serveRomsFolderSystemStatus(w http.ResponseWriter, r *http.Requ
 		FolderURL:  romsFolderStatusURLFor(folder),
 		Name:       system,
 		Systems:    links,
-		Retrieved:  retrievedConfirmation(query),
+		Changed:    statusConfirmation(query),
 		Problem:    st.Problem,
 		ROMCount:   st.ROMCount,
 		Complete:   st.CompleteCount,
@@ -278,11 +279,15 @@ func (ui *webUI) gameStatusViews(folder, system string, games []registry.GameSta
 			Missing:       fieldLabels(game.Missing),
 			Fillable:      fieldLabels(game.Fillable),
 			RegistryURL:   registryURLFor(system, game.RegistryID),
-			SendURL:       sendURLFor(system, game.RegistryID, folder),
 			LocalImageURL: localImageURL(folder, system, game.LocalImage),
 		}
 		if game.RegistryID == "" {
 			views[i].FillURL = fillURLFor(folder, system, game.ROMFilename)
+		} else {
+			views[i].ToFolderURL = transferURLFor(folder, system, game.ROMFilename, directionToFolder)
+		}
+		if game.Listed {
+			views[i].ToRegistryURL = transferURLFor(folder, system, game.ROMFilename, directionToRegistry)
 		}
 		if game.RegistryImage != "" && site.MediaFileExists(ui.registryFolder, system, game.RegistryImage) {
 			views[i].RegistryImageURL = mediaURL(site.EscapeMediaPath(system, game.RegistryImage))
@@ -361,19 +366,6 @@ func registryURLFor(system, registryID string) string {
 	return gameURL(system, registryID)
 }
 
-// sendURLFor builds the link straight to a gap's existing send confirmation,
-// this folder and the fill-the-gaps rule already chosen (decisions/040) — the
-// direct entry point a gap known to the registry offers next to the slower
-// path through its own page. Empty exactly when registryURLFor's is: a game
-// the registry does not know has nothing to send.
-func sendURLFor(system, registryID, folder string) string {
-	if registryID == "" {
-		return ""
-	}
-	query := url.Values{sendFolderParam: {folder}, sendModeParam: {sendModeFill}}
-	return gameURL(system, registryID) + "/send?" + query.Encode()
-}
-
 // fieldLabels turns a list of registry.Field*/registry.Medium identifiers
 // into the comma-separated labels a user already knows them by from the
 // edit form and the media section — rather than a table of its own repeating
@@ -438,7 +430,8 @@ var romsFolderStatusTemplate = newPage("roms-folder-status", `
 // romsFolderSystemStatusTemplate renders one page of one system's games
 // within a ROMs folder: every game, complete ones included, each with the
 // cover art the folder and the registry hold side by side, what it still
-// misses, and the retrieve and send controls.
+// misses, and the controls copying chosen values between the folder and
+// the registry, either way.
 var romsFolderSystemStatusTemplate = newPage("roms-folder-system-status", `
 {{define "title"}}{{.Name}} in {{.Folder}} - Registry{{end}}
 {{define "body"}}
@@ -453,10 +446,10 @@ var romsFolderSystemStatusTemplate = newPage("roms-folder-system-status", `
 </div>
 </nav>
 <main>
-{{if .Retrieved}}<p class="banner" id="retrieved" role="status" tabindex="-1">{{.Retrieved}}</p>{{end}}
+{{if .Changed}}<p class="banner" id="changed" role="status" tabindex="-1">{{.Changed}}</p>{{end}}
 <section class="system">
 <h2 class="system__title">{{.Name}} <span class="system__count">{{.Total}} games</span></h2>
-<p class="home__note">In <code>{{.Folder}}</code>. Read-only: retrieving or sending one game below changes that game alone.</p>
+<p class="home__note">In <code>{{.Folder}}</code>. Read-only: copying one game below changes that game alone.</p>
 {{if .Problem}}
 <p class="errors__title">{{.Problem}}</p>
 {{else}}
@@ -496,15 +489,8 @@ var romsFolderSystemStatusTemplate = newPage("roms-folder-system-status", `
 {{end}}
 {{if .RegistryURL}}<p class="status__gap-link"><a href="{{.RegistryURL}}">Open in the registry &rarr;</a></p>{{end}}
 <div class="status__gap-actions">
-{{if .Listed}}
-<form method="post" action="`+retrieveURL+`">
-<input type="hidden" name="`+statusFolderParam+`" value="{{$.Folder}}">
-<input type="hidden" name="`+retrieveSystemParam+`" value="{{.System}}">
-<input type="hidden" name="`+retrieveROMParam+`" value="{{.ROMFilename}}">
-<button class="button button--quiet" type="submit">Retrieve into the registry</button>
-</form>
-{{end}}
-{{if .SendURL}}<a class="button button--quiet" href="{{.SendURL}}">Send to this folder</a>{{end}}
+{{if .ToRegistryURL}}<a class="button button--quiet" href="{{.ToRegistryURL}}">Folder → Registry</a>{{end}}
+{{if .ToFolderURL}}<a class="button button--quiet" href="{{.ToFolderURL}}">Registry → Folder</a>{{end}}
 {{if .FillURL}}<a class="button button--quiet" href="{{.FillURL}}">Fill in by hand</a>{{end}}
 </div>
 </div>

@@ -18,14 +18,14 @@ import (
 // folder, with name and year as entered.
 func fillSubmission(folder, rom, name, year string) url.Values {
 	return url.Values{
-		statusFolderParam:   {folder},
-		retrieveSystemParam: {"megadrive"},
-		retrieveROMParam:    {rom},
-		"name":              {name},
-		"desc":              {"Typed by hand."},
-		"rating":            {"4"},
-		"year":              {year},
-		"developer":         {"Someone"},
+		statusFolderParam: {folder},
+		gameSystemParam:   {"megadrive"},
+		gameROMParam:      {rom},
+		"name":            {name},
+		"desc":            {"Typed by hand."},
+		"rating":          {"4"},
+		"year":            {year},
+		"developer":       {"Someone"},
 	}
 }
 
@@ -110,7 +110,7 @@ func TestFillGame_ValidSubmission_CreatesTheGameMarkedHandEditedAndConfirms(t *t
 	}
 	location, _, _ := strings.Cut(rec.Header().Get("Location"), "#")
 	page := get(t, handler, location).Body.String()
-	if !strings.Contains(html.UnescapeString(page), sendURLFor("megadrive", "Ghost", romsFolder)) {
+	if !strings.Contains(html.UnescapeString(page), transferURLFor(romsFolder, "megadrive", "Ghost.zip", directionToFolder)) {
 		t.Error("after filling in, the system page does not offer to send the game to this folder")
 	}
 }
@@ -191,7 +191,7 @@ func TestFillGame_RegistryCannotBeWritten_ShowsTheProblemAndKeepsTheServedRegist
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 	page := get(t, handler, romsFolderSystemStatusURLFor(romsFolder, "megadrive", 1)).Body.String()
-	if strings.Contains(html.UnescapeString(page), sendURLFor("megadrive", "Ghost", romsFolder)) {
+	if strings.Contains(html.UnescapeString(page), transferURLFor(romsFolder, "megadrive", "Ghost.zip", directionToFolder)) {
 		t.Error("the served registry holds a game that was never written to disk")
 	}
 }

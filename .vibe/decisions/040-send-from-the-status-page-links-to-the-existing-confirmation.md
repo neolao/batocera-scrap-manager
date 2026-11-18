@@ -1,6 +1,6 @@
 ---
 date: 2026-09-19
-status: accepted
+status: superseded by 045
 ---
 # Send from the ROMs folder status page links to the existing confirmation
 

@@ -19,7 +19,7 @@ const fillURL = romsFolderStatusURL + "/fill"
 
 // fillURLFor builds the URL of the fill-in form for rom of folder's system.
 func fillURLFor(folder, system, rom string) string {
-	query := url.Values{statusFolderParam: {folder}, retrieveSystemParam: {system}, retrieveROMParam: {rom}}
+	query := url.Values{statusFolderParam: {folder}, gameSystemParam: {system}, gameROMParam: {rom}}
 	return fillURL + "?" + query.Encode()
 }
 
@@ -85,8 +85,8 @@ func renderBadFill(w http.ResponseWriter) {
 func (ui *webUI) serveFillForm(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	folder := query.Get(statusFolderParam)
-	system := query.Get(retrieveSystemParam)
-	rom := query.Get(retrieveROMParam)
+	system := query.Get(gameSystemParam)
+	rom := query.Get(gameROMParam)
 
 	ui.mu.RLock()
 	fillable := fillableGame(ui.reg, ui.romsFolders, folder, system, rom)
@@ -118,8 +118,8 @@ func (ui *webUI) fillGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	folder := r.PostFormValue(statusFolderParam)
-	system := r.PostFormValue(retrieveSystemParam)
-	rom := r.PostFormValue(retrieveROMParam)
+	system := r.PostFormValue(gameSystemParam)
+	rom := r.PostFormValue(gameROMParam)
 
 	ui.mu.Lock()
 	defer ui.mu.Unlock()
@@ -152,7 +152,7 @@ func (ui *webUI) fillGame(w http.ResponseWriter, r *http.Request) {
 	}
 	ui.reg = candidate
 
-	http.Redirect(w, r, retrievedURL(folder, system, values.Name, retrievedFilled), http.StatusSeeOther)
+	http.Redirect(w, r, statusConfirmationURL(folder, system, values.Name, outcomeCreated), http.StatusSeeOther)
 }
 
 // fillTemplate renders the fill-in form: the ROM it creates a game for, and
@@ -185,8 +185,8 @@ var fillTemplate = newPage("fill", `
 {{end}}
 <form class="form" method="post" action="`+fillURL+`">
 <input type="hidden" name="`+statusFolderParam+`" value="{{.Folder}}">
-<input type="hidden" name="`+retrieveSystemParam+`" value="{{.System}}">
-<input type="hidden" name="`+retrieveROMParam+`" value="{{.ROM}}">
+<input type="hidden" name="`+gameSystemParam+`" value="{{.System}}">
+<input type="hidden" name="`+gameROMParam+`" value="{{.ROM}}">
 {{template "metadata-fields" .}}
 <div class="form__actions">
 <button class="button" type="submit">Create in the registry</button>

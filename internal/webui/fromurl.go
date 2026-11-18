@@ -179,8 +179,8 @@ func (ui *webUI) emptyReview(t importTarget, raw string) fromURLPage {
 func romFields(folder, system, rom string) []hiddenField {
 	return []hiddenField{
 		{statusFolderParam, folder},
-		{retrieveSystemParam, system},
-		{retrieveROMParam, rom},
+		{gameSystemParam, system},
+		{gameROMParam, rom},
 	}
 }
 
@@ -239,8 +239,8 @@ func (ui *webUI) serveGameFromURL(w http.ResponseWriter, r *http.Request) {
 func (ui *webUI) serveFillFromURL(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	folder := query.Get(statusFolderParam)
-	system := query.Get(retrieveSystemParam)
-	rom := query.Get(retrieveROMParam)
+	system := query.Get(gameSystemParam)
+	rom := query.Get(gameROMParam)
 
 	ui.mu.RLock()
 	fillable := fillableGame(ui.reg, ui.romsFolders, folder, system, rom)
@@ -411,8 +411,8 @@ func (ui *webUI) fillGameFromURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	folder := r.PostFormValue(statusFolderParam)
-	system := r.PostFormValue(retrieveSystemParam)
-	rom := r.PostFormValue(retrieveROMParam)
+	system := r.PostFormValue(gameSystemParam)
+	rom := r.PostFormValue(gameROMParam)
 	target := importTarget{system: system, folder: folder, rom: rom}
 
 	ui.mu.RLock()
@@ -456,7 +456,7 @@ func (ui *webUI) fillGameFromURL(w http.ResponseWriter, r *http.Request) {
 	if _, ok := ui.commitURLImport(w, target, raw, candidate, replaced); !ok {
 		return
 	}
-	http.Redirect(w, r, retrievedURL(folder, system, result.Name, retrievedFilled), http.StatusSeeOther)
+	http.Redirect(w, r, statusConfirmationURL(folder, system, result.Name, outcomeCreated), http.StatusSeeOther)
 }
 
 // commitURLImport saves candidate and makes it the served registry, then erases

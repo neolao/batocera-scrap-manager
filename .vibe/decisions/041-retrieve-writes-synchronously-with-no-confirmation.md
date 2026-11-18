@@ -1,6 +1,6 @@
 ---
 date: 2026-09-19
-status: accepted
+status: superseded by 045
 ---
 # Retrieve writes synchronously with no confirmation, gated to Listed gaps
 

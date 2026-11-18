@@ -88,7 +88,7 @@ func TestServeFillForm_OffersToImportFromAURLForThatRom(t *testing.T) {
 	body := get(t, newHandler(reg, registryFolder, []string{romsFolder}, fetcher), fillURLFor(romsFolder, "megadrive", "Ghost.zip")).Body.String()
 
 	if !strings.Contains(body, `action="`+fillFromURL+`"`) ||
-		!strings.Contains(body, `name="`+retrieveROMParam+`" value="Ghost.zip"`) {
+		!strings.Contains(body, `name="`+gameROMParam+`" value="Ghost.zip"`) {
 		t.Errorf("the fill-in form offers no lookup by URL for Ghost.zip\n--- page ---\n%s", body)
 	}
 }
@@ -233,7 +233,7 @@ func TestImportGameFromURL_CrossSiteSubmission_IsRefused(t *testing.T) {
 func TestFillFromURL_Review_TicksEveryValueTheSiteHas(t *testing.T) {
 	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
 	fetcher, _ := fakeRetrogaming(t)
-	query := url.Values{statusFolderParam: {romsFolder}, retrieveSystemParam: {"megadrive"}, retrieveROMParam: {"Ghost.zip"}, fromURLParam: {blueyPage}}
+	query := url.Values{statusFolderParam: {romsFolder}, gameSystemParam: {"megadrive"}, gameROMParam: {"Ghost.zip"}, fromURLParam: {blueyPage}}
 
 	rec := get(t, newHandler(reg, registryFolder, []string{romsFolder}, fetcher), fillFromURL+"?"+query.Encode())
 
@@ -254,8 +254,8 @@ func TestFillFromURL_Apply_CreatesTheGameWithItsMediaAndOffersToSendIt(t *testin
 	handler := newHandler(reg, registryFolder, []string{romsFolder}, fetcher)
 	form := importChoices(blueyPage, "name", "desc", "release_date", "publisher", "genre", "image", "thumbnail")
 	form.Set(statusFolderParam, romsFolder)
-	form.Set(retrieveSystemParam, "megadrive")
-	form.Set(retrieveROMParam, "Ghost.zip")
+	form.Set(gameSystemParam, "megadrive")
+	form.Set(gameROMParam, "Ghost.zip")
 
 	rec := post(t, handler, fillFromURL, form)
 
@@ -275,7 +275,7 @@ func TestFillFromURL_Apply_CreatesTheGameWithItsMediaAndOffersToSendIt(t *testin
 	}
 	location, _, _ := strings.Cut(rec.Header().Get("Location"), "#")
 	page := get(t, handler, location).Body.String()
-	if !strings.Contains(html.UnescapeString(page), sendURLFor("megadrive", "Ghost", romsFolder)) {
+	if !strings.Contains(html.UnescapeString(page), transferURLFor(romsFolder, "megadrive", "Ghost.zip", directionToFolder)) {
 		t.Error("the system page does not offer to send the created game")
 	}
 }
@@ -285,8 +285,8 @@ func TestFillFromURL_Apply_NameNotTicked_IsRefusedAndCreatesNothing(t *testing.T
 	fetcher, _ := fakeRetrogaming(t)
 	form := importChoices(blueyPage, "publisher")
 	form.Set(statusFolderParam, romsFolder)
-	form.Set(retrieveSystemParam, "megadrive")
-	form.Set(retrieveROMParam, "Ghost.zip")
+	form.Set(gameSystemParam, "megadrive")
+	form.Set(gameROMParam, "Ghost.zip")
 
 	rec := post(t, newHandler(reg, registryFolder, []string{romsFolder}, fetcher), fillFromURL, form)
 
@@ -302,7 +302,7 @@ func TestFillFromURL_Apply_NameNotTicked_IsRefusedAndCreatesNothing(t *testing.T
 func TestFillFromURL_GameAlreadyInRegistry_IsRefused(t *testing.T) {
 	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
 	fetcher, requests := fakeRetrogaming(t)
-	query := url.Values{statusFolderParam: {romsFolder}, retrieveSystemParam: {"megadrive"}, retrieveROMParam: {"Golden Axe.zip"}, fromURLParam: {blueyPage}}
+	query := url.Values{statusFolderParam: {romsFolder}, gameSystemParam: {"megadrive"}, gameROMParam: {"Golden Axe.zip"}, fromURLParam: {blueyPage}}
 
 	rec := get(t, newHandler(reg, registryFolder, []string{romsFolder}, fetcher), fillFromURL+"?"+query.Encode())
 

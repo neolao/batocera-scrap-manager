@@ -18,10 +18,49 @@ var (
 	// ErrUnsafeMediaPath is a medium reference pointing outside its system
 	// folder, which no transfer follows.
 	ErrUnsafeMediaPath = errors.New("registry: medium reference outside its system folder")
-	// ErrMediaNotCopied is a send whose values were written but one of whose
-	// media files could not be copied.
+	// ErrMediaNotCopied matches a *MediaNotCopiedError: at least one medium
+	// file of a transfer could not be copied.
 	ErrMediaNotCopied = errors.New("registry: a medium could not be copied")
 )
+
+// The step a medium copy failed at.
+const (
+	StepRead         = "read"
+	StepCreateFolder = "create-folder"
+	StepWrite        = "write"
+)
+
+// MediaCopyError is one medium file that could not be copied: which step
+// failed, and the operating system's own error, which names the file and
+// the cause. Medium is set by a transfer, which knows which of the game's
+// four media the file was.
+type MediaCopyError struct {
+	Medium Medium
+	Step   string
+	Err    error
+}
+
+func (e *MediaCopyError) Error() string {
+	return fmt.Sprintf("registry: %s medium (step %s): %v", e.Medium, e.Step, e.Err)
+}
+
+func (e *MediaCopyError) Unwrap() error { return e.Err }
+
+// MediaNotCopiedError is a transfer where at least one medium file could not
+// be copied. Every value that could be written was: Copied names them, so
+// the failures are all that is left to fix. A medium that failed is not
+// referenced by its destination entry.
+type MediaNotCopiedError struct {
+	Copied   []string
+	Failures []MediaCopyError
+}
+
+func (e *MediaNotCopiedError) Error() string {
+	return fmt.Sprintf("registry: %d medium file(s) could not be copied: %v", len(e.Failures), e.Failures[0].Err)
+}
+
+// Is makes errors.Is(err, ErrMediaNotCopied) true.
+func (e *MediaNotCopiedError) Is(target error) bool { return target == ErrMediaNotCopied }
 
 // validSystemName reports whether system names a folder directly inside a
 // ROMs folder, never a path reaching elsewhere.
@@ -70,15 +109,18 @@ func pickFields(fields []string) writeRule {
 		}
 
 		changed := false
+		notCopied := &MediaNotCopiedError{}
 		for _, gf := range gameFields {
 			value := *gf.field(&src)
 			if value == "" || !slices.Contains(fields, gf.id) {
 				continue
 			}
-			if _, isMedium := LookupMedium(gf.id); isMedium {
+			if m, isMedium := LookupMedium(gf.id); isMedium {
 				written, err := writeMediaFile(srcRoot, dstRoot, system, value)
-				if err != nil {
-					return changed, err
+				var copyErr *MediaCopyError
+				if errors.As(err, &copyErr) {
+					notCopied.Failures = append(notCopied.Failures, MediaCopyError{Medium: m, Step: copyErr.Step, Err: copyErr.Err})
+					continue
 				}
 				changed = changed || written
 			}
@@ -86,6 +128,10 @@ func pickFields(fields []string) writeRule {
 				*gf.field(dst) = value
 				changed = true
 			}
+			notCopied.Copied = append(notCopied.Copied, gf.id)
+		}
+		if len(notCopied.Failures) > 0 {
+			return changed, notCopied
 		}
 		return changed, nil
 	}
@@ -112,7 +158,7 @@ func RetrieveFields(reg *Registry, romsFolder, registryFolder, system, rom strin
 		added = true
 	}
 	if _, err := pickFields(fields)(&reg.Entries[j].Game, local, romsFolder, registryFolder, system); err != nil {
-		return added, fmt.Errorf("retrieve %s: %w", rom, err)
+		return added, err
 	}
 	return added, nil
 }
@@ -131,14 +177,18 @@ func SendFields(reg *Registry, romsFolder, registryFolder, system, rom string, f
 	if _, statErr := os.Stat(filepath.Join(romsFolder, system)); statErr != nil {
 		return false, false, ErrGameNotFound
 	}
-	changed, added, failed, err := sendGame(reg, romsFolder, registryFolder, system, rom, pickFields(fields), nil)
+	write := pickFields(fields)
+	var copyErr error
+	var wrote bool
+	_, added, _, err = sendGame(reg, romsFolder, registryFolder, system, rom, func(dst *gamelist.Game, src gamelist.Game, srcRoot, dstRoot, system string) (bool, error) {
+		written, err := write(dst, src, srcRoot, dstRoot, system)
+		wrote, copyErr = written, err
+		return written, err
+	}, nil)
 	if err != nil {
 		return false, false, err
 	}
-	if failed {
-		return changed, added, ErrMediaNotCopied
-	}
-	return changed, added, nil
+	return wrote, added, copyErr
 }
 
 // TransferFields lists the identifiers of every value a transfer may copy,

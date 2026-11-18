@@ -592,7 +592,7 @@ func writeMediaFile(srcRoot, dstRoot, system, relPath string) (written bool, err
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, &MediaCopyError{Step: StepRead, Err: err}
 	}
 
 	dst := filepath.Join(dstRoot, system, relPath)
@@ -600,10 +600,10 @@ func writeMediaFile(srcRoot, dstRoot, system, relPath string) (written bool, err
 		return false, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return false, err
+		return false, &MediaCopyError{Step: StepCreateFolder, Err: err}
 	}
 	if err := os.WriteFile(dst, data, 0o644); err != nil {
-		return false, err
+		return false, &MediaCopyError{Step: StepWrite, Err: err}
 	}
 	return true, nil
 }

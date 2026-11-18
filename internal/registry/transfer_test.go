@@ -2,8 +2,10 @@ package registry
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/neolao/batocera-scrap-manager/internal/gamelist"
@@ -266,4 +268,92 @@ func TestRomsFolderSystemStatus_Games_CarryBothSidesEntries(t *testing.T) {
 		return
 	}
 	t.Fatal("Golden Axe.zip missing")
+}
+
+// breakDir makes dir unusable for the rest of the test: nothing can be
+// created in it or read from it by a user who is not root.
+func breakDir(t *testing.T, dir string, mode os.FileMode) {
+	t.Helper()
+	if err := os.Chmod(dir, mode); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+}
+
+func TestSendFields_MediumCannotBeWritten_NamesTheMediumTheStepAndTheCause(t *testing.T) {
+	reg, romsFolder, registryFolder := writeTransferFixture(t)
+	breakDir(t, filepath.Join(romsFolder, "megadrive", "images"), 0o500)
+
+	changed, _, err := SendFields(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", []string{FieldName, string(MediumImage)})
+
+	var notCopied *MediaNotCopiedError
+	if !errors.As(err, &notCopied) || !errors.Is(err, ErrMediaNotCopied) {
+		t.Fatalf("error = %v, want a *MediaNotCopiedError matching ErrMediaNotCopied", err)
+	}
+	if len(notCopied.Failures) != 1 {
+		t.Fatalf("Failures = %v, want exactly the cover art", notCopied.Failures)
+	}
+	failure := notCopied.Failures[0]
+	if failure.Medium != MediumImage || failure.Step != StepWrite {
+		t.Errorf("failure = %s at step %s, want the image at %s", failure.Medium, failure.Step, StepWrite)
+	}
+	if !errors.Is(failure.Err, fs.ErrPermission) {
+		t.Errorf("cause = %v, want permission denied", failure.Err)
+	}
+	var pathErr *fs.PathError
+	if !errors.As(failure.Err, &pathErr) || filepath.Base(pathErr.Path) != "reg.png" {
+		t.Errorf("cause = %v, want the path of the file that could not be written", failure.Err)
+	}
+	if !changed || !slices.Contains(notCopied.Copied, FieldName) {
+		t.Errorf("changed = %v, Copied = %v, want the name reported as written", changed, notCopied.Copied)
+	}
+	local, _ := LocalGame(romsFolder, "megadrive", "Golden Axe.zip")
+	if local.Name != "Golden Axe" || local.Image != "./images/local.png" {
+		t.Errorf("local entry = %+v, want the name written and the cover art reference left alone", local)
+	}
+}
+
+func TestSendFields_SourceMediumCannotBeRead_NamesTheReadStep(t *testing.T) {
+	reg, romsFolder, registryFolder := writeTransferFixture(t)
+	if err := os.Chmod(filepath.Join(registryFolder, "megadrive", "images", "reg.png"), 0o000); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	_, _, err := SendFields(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", []string{string(MediumImage)})
+
+	var notCopied *MediaNotCopiedError
+	if !errors.As(err, &notCopied) || notCopied.Failures[0].Step != StepRead {
+		t.Errorf("error = %v, want the cover art failing at %s", err, StepRead)
+	}
+}
+
+func TestSendFields_SeveralMediaFail_EveryOneIsReported(t *testing.T) {
+	reg, romsFolder, registryFolder := writeTransferFixture(t)
+	reg.Entries[0].Game.Thumbnail = "images/thumb.png"
+	if err := os.WriteFile(filepath.Join(registryFolder, "megadrive", "images", "thumb.png"), []byte("t"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	breakDir(t, filepath.Join(romsFolder, "megadrive", "images"), 0o500)
+
+	_, _, err := SendFields(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", []string{string(MediumImage), string(MediumThumbnail)})
+
+	var notCopied *MediaNotCopiedError
+	if !errors.As(err, &notCopied) || len(notCopied.Failures) != 2 {
+		t.Fatalf("error = %v, want both media reported, not only the first", err)
+	}
+}
+
+func TestRetrieveFields_MediumCannotBeWritten_NamesTheMediumAndTheCause(t *testing.T) {
+	reg, romsFolder, registryFolder := writeTransferFixture(t)
+	breakDir(t, filepath.Join(registryFolder, "megadrive", "images"), 0o500)
+
+	_, err := RetrieveFields(reg, romsFolder, registryFolder, "megadrive", "Golden Axe.zip", []string{FieldGenre, string(MediumImage)})
+
+	var notCopied *MediaNotCopiedError
+	if !errors.As(err, &notCopied) || len(notCopied.Failures) != 1 {
+		t.Fatalf("error = %v, want a *MediaNotCopiedError naming the cover art", err)
+	}
+	if f := notCopied.Failures[0]; f.Medium != MediumImage || !errors.Is(f.Err, fs.ErrPermission) {
+		t.Errorf("failure = %+v, want the image refused for permission", f)
+	}
 }

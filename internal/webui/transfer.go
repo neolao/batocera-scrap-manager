@@ -2,9 +2,12 @@ package webui
 
 import (
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"slices"
+	"syscall"
 
 	"github.com/neolao/batocera-scrap-manager/internal/gamelist"
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
@@ -128,7 +131,10 @@ type transferPage struct {
 	// NothingToCopy is a review where every value the source holds is already
 	// in the destination: shown as such, with no form.
 	NothingToCopy bool
-	Problem       string
+	// Problem is the sentence saying what went wrong, and Details the lines
+	// saying, one per file or step, exactly what to fix.
+	Problem string
+	Details []string
 }
 
 // transferRequest is one transfer's coordinates, read from a request.
@@ -338,44 +344,144 @@ func (ui *webUI) transfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outcome, status, problem := ui.applyTransfer(t, take)
-	if problem != "" {
-		page.Problem = problem
-		render(w, status, transferTemplate, page)
+	outcome, failure := ui.applyTransfer(t, take)
+	if failure != nil {
+		page.Problem, page.Details = failure.summary, failure.details
+		render(w, failure.status, transferTemplate, page)
 		return
 	}
 	http.Redirect(w, r, statusConfirmationURL(t.folder, t.system, t.filter, page.Name, outcome), http.StatusSeeOther)
 }
 
+// transferFailure is a transfer that did not complete: the status to answer
+// with, the sentence saying what went wrong, and the lines saying what to
+// fix.
+type transferFailure struct {
+	status  int
+	summary string
+	details []string
+}
+
 // applyTransfer copies the ticked values of t, returning the outcome to
-// confirm, or the status and sentence of a failure that wrote nothing worth
-// keeping. Called under ui.mu's write lock.
-func (ui *webUI) applyTransfer(t transferRequest, take []string) (outcome string, status int, problem string) {
+// confirm, or the failure that stopped it. Called under ui.mu's write lock.
+func (ui *webUI) applyTransfer(t transferRequest, take []string) (outcome string, failure *transferFailure) {
 	if t.direction == directionToFolder {
 		changed, added, err := registry.SendFields(ui.reg, t.folder, ui.registryFolder, t.system, t.rom, take)
+		var notCopied *registry.MediaNotCopiedError
 		switch {
-		case errors.Is(err, registry.ErrMediaNotCopied):
-			return "", http.StatusInternalServerError, "The values were written, but a medium could not be copied into this folder."
+		case errors.As(err, &notCopied):
+			return "", &transferFailure{
+				status:  http.StatusInternalServerError,
+				summary: "Some media could not be copied into this folder. " + writtenSentence(notCopied.Copied, changed, "Nothing else was written."),
+				details: mediaFailureLines(notCopied.Failures),
+			}
 		case err != nil:
-			return "", http.StatusInternalServerError, "This folder's gamelist.xml could not be written, so nothing was copied."
+			return "", &transferFailure{
+				status:  http.StatusInternalServerError,
+				summary: "This folder's gamelist.xml could not be written, so nothing was copied.",
+				details: []string{"Could not write " + filepath.Join(t.folder, t.system, "gamelist.xml") + ": " + describeCauseWith(err, "write")},
+			}
 		case added:
-			return outcomeFolderAdded, 0, ""
+			return outcomeFolderAdded, nil
 		case changed:
-			return outcomeToFolder, 0, ""
+			return outcomeToFolder, nil
 		}
-		return outcomeUnchanged, 0, ""
+		return outcomeUnchanged, nil
 	}
 
 	candidate := ui.reg.Clone()
 	if _, err := registry.RetrieveFields(candidate, t.folder, ui.registryFolder, t.system, t.rom, take); err != nil {
-		return "", http.StatusInternalServerError, "A value or a medium could not be copied into the registry, so nothing was saved."
+		var notCopied *registry.MediaNotCopiedError
+		if errors.As(err, &notCopied) {
+			return "", &transferFailure{
+				status:  http.StatusInternalServerError,
+				summary: "Some media could not be copied into the registry. Nothing was saved.",
+				details: mediaFailureLines(notCopied.Failures),
+			}
+		}
+		return "", &transferFailure{
+			status:  http.StatusInternalServerError,
+			summary: "A value could not be copied into the registry. Nothing was saved.",
+			details: []string{describeCause(err)},
+		}
 	}
 	saveErr := store.Save(candidate, ui.registryFolder)
 	if saveErr != nil && !errors.Is(saveErr, store.ErrSiteNotRegenerated) {
-		return "", http.StatusInternalServerError, "The registry folder could not be written to, so nothing was copied."
+		return "", &transferFailure{
+			status:  http.StatusInternalServerError,
+			summary: "The registry folder could not be written to, so nothing was copied.",
+			details: []string{"Could not write in " + ui.registryFolder + ": " + describeCauseWith(saveErr, "write")},
+		}
 	}
 	ui.reg = candidate
-	return outcomeToRegistry, 0, ""
+	return outcomeToRegistry, nil
+}
+
+// writtenSentence says which values a partly failed transfer did write, or
+// none says what to report when it wrote nothing at all.
+func writtenSentence(copied []string, wrote bool, none string) string {
+	if !wrote || len(copied) == 0 {
+		return none
+	}
+	return "Written: " + fieldLabels(copied) + "."
+}
+
+// mediaFailureLines words each medium that could not be copied: which one,
+// which file, at what step, and why.
+func mediaFailureLines(failures []registry.MediaCopyError) []string {
+	lines := make([]string, len(failures))
+	for i, f := range failures {
+		action, access := "write", "write"
+		switch f.Step {
+		case registry.StepRead:
+			action, access = "read", "read"
+		case registry.StepCreateFolder:
+			action = "create the folder of"
+		}
+		lines[i] = mediaLabels[f.Medium] + ": could not " + action + " " + causePath(f.Err) + " — " + describeCauseWith(f.Err, access)
+	}
+	return lines
+}
+
+// causePath returns the file or folder an operating system error names, or
+// nothing.
+func causePath(err error) string {
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		return pathErr.Path
+	}
+	return "the file"
+}
+
+// describeCause words an error for the user: why it happened in plain words,
+// and what to do about it — falling back to the error's own text for a cause
+// it has no advice for.
+func describeCause(err error) string {
+	return describeCauseWith(err, "the needed")
+}
+
+// describeCauseWith is describeCause where a permission error names the
+// access (read or write) the user running the tool is missing.
+func describeCauseWith(err error, access string) string {
+	switch {
+	case errors.Is(err, fs.ErrPermission):
+		return "permission denied. Give the user running this tool " + access + " access to it."
+	case errors.Is(err, syscall.ENOSPC):
+		return "no space left on the disk. Free some space there."
+	case errors.Is(err, syscall.EROFS):
+		return "the disk is read-only. Mount it with write access."
+	case errors.Is(err, syscall.ENOTDIR):
+		return "a name on the way is a file, not a folder. Rename or remove that file."
+	case errors.Is(err, syscall.ENAMETOOLONG):
+		return "the file name is too long for that disk. Shorten the name."
+	case errors.Is(err, fs.ErrNotExist):
+		return "it does not exist. It may have been moved since this page was opened."
+	}
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		return pathErr.Err.Error() + "."
+	}
+	return err.Error() + "."
 }
 
 // transferTemplate renders the review of a transfer: one row per value the
@@ -395,6 +501,9 @@ var transferTemplate = newPage("transfer", `
 <div class="errors" role="alert" tabindex="-1" id="errors">
 <p class="errors__title">Not copied</p>
 <p>{{.Problem}}</p>
+{{if .Details}}<ul>
+{{range .Details}}<li>{{.}}</li>
+{{end}}</ul>{{end}}
 </div>
 {{end}}
 {{if not .Rows}}

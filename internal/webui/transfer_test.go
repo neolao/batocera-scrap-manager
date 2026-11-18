@@ -1,13 +1,16 @@
 package webui
 
 import (
+	"errors"
 	"html"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/neolao/batocera-scrap-manager/internal/gamelist"
@@ -329,5 +332,141 @@ func TestServeTransfer_MediumFileOfAnotherSize_IsOfferedTicked(t *testing.T) {
 	}
 	if !strings.Contains(review, `name="`+takeParam+`" value="image">`) {
 		t.Errorf("the different cover art is not offered (unticked, since the folder has one)\n--- page ---\n%s", review)
+	}
+}
+
+// registryWithCoverArt gives the transfer fixture's Golden Axe a cover art
+// file in the registry, which the folder does not have.
+func registryWithCoverArt(t *testing.T) (*registry.Registry, string, string) {
+	t.Helper()
+	reg, registryFolder, romsFolder := registryAndRomsFolderForTransfer(t)
+	reg.Entries[0].Game.Image = "images/golden.png"
+	reg.Entries[0].Game.Genre = "Beat 'em up"
+	writeFile(t, filepath.Join(registryFolder, "megadrive", "images", "golden.png"), "art")
+	return reg, registryFolder, romsFolder
+}
+
+// breakFolder makes dir unusable to a user who is not root until the test ends.
+func breakFolder(t *testing.T, dir string, mode os.FileMode) {
+	t.Helper()
+	if err := os.Chmod(dir, mode); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+}
+
+func TestTransfer_ToFolder_MediumCannotBeWritten_SaysWhichFileWhyWhatWasWrittenAndWhatToDo(t *testing.T) {
+	reg, registryFolder, romsFolder := registryWithCoverArt(t)
+	imagesFolder := filepath.Join(romsFolder, "megadrive", "images")
+	breakFolder(t, imagesFolder, 0o500)
+
+	rec := post(t, Handler(reg, registryFolder, []string{romsFolder}), transferURL,
+		transferChoices(romsFolder, "Golden Axe.zip", directionToFolder, "genre", "image"))
+
+	body := html.UnescapeString(rec.Body.String())
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	for _, want := range []string{
+		"Cover art",
+		filepath.Join(imagesFolder, "golden.png"),
+		"permission denied",
+		"Written: Genre",
+		"write access",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the message does not say %q\n--- page ---\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "a medium could not be copied into this folder") {
+		t.Error("the former vague sentence is still shown")
+	}
+}
+
+func TestTransfer_ToFolder_SourceMediumCannotBeRead_SaysItCouldNotBeRead(t *testing.T) {
+	reg, registryFolder, romsFolder := registryWithCoverArt(t)
+	source := filepath.Join(registryFolder, "megadrive", "images", "golden.png")
+	if err := os.Chmod(source, 0o000); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	rec := post(t, Handler(reg, registryFolder, []string{romsFolder}), transferURL,
+		transferChoices(romsFolder, "Golden Axe.zip", directionToFolder, "image"))
+
+	body := html.UnescapeString(rec.Body.String())
+	if !strings.Contains(body, "read") || !strings.Contains(body, source) || !strings.Contains(body, "read access") {
+		t.Errorf("the message does not say the registry's file could not be read, nor which\n--- page ---\n%s", body)
+	}
+}
+
+func TestTransfer_ToRegistry_MediumCannotBeWritten_SaysWhichFileAndThatNothingWasSaved(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForTransfer(t)
+	handler := Handler(reg, registryFolder, []string{romsFolder})
+	imagesFolder := filepath.Join(registryFolder, "megadrive", "images")
+	if err := os.MkdirAll(imagesFolder, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	breakFolder(t, imagesFolder, 0o500)
+
+	rec := post(t, handler, transferURL, transferChoices(romsFolder, "Streets.zip", directionToRegistry, "name", "image"))
+
+	body := html.UnescapeString(rec.Body.String())
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	for _, want := range []string{"Cover art", filepath.Join(imagesFolder, "streets.png"), "permission denied", "Nothing was saved"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the message does not say %q\n--- page ---\n%s", want, body)
+		}
+	}
+	if _, found := reg.FindByID("megadrive", "Streets"); found {
+		t.Error("a failed copy left the game in the served registry")
+	}
+}
+
+func TestTransfer_ToFolder_GamelistCannotBeWritten_NamesTheFile(t *testing.T) {
+	reg, registryFolder, romsFolder := registryWithCoverArt(t)
+	breakFolder(t, filepath.Join(romsFolder, "megadrive"), 0o500)
+
+	rec := post(t, Handler(reg, registryFolder, []string{romsFolder}), transferURL,
+		transferChoices(romsFolder, "Golden Axe.zip", directionToFolder, "genre"))
+
+	body := html.UnescapeString(rec.Body.String())
+	if !strings.Contains(body, "gamelist.xml") || !strings.Contains(body, filepath.Join(romsFolder, "megadrive")) || !strings.Contains(body, "permission denied") {
+		t.Errorf("the message does not name the gamelist.xml, its folder and the cause\n--- page ---\n%s", body)
+	}
+}
+
+func TestTransfer_ToRegistry_RegistryFolderCannotBeWritten_NamesTheCause(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForTransfer(t)
+	breakFolder(t, filepath.Join(registryFolder, "megadrive"), 0o500)
+
+	rec := post(t, Handler(reg, registryFolder, []string{romsFolder}), transferURL,
+		transferChoices(romsFolder, "Streets.zip", directionToRegistry, "name", "desc"))
+
+	body := html.UnescapeString(rec.Body.String())
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	if !strings.Contains(body, "permission denied") || !strings.Contains(body, registryFolder) {
+		t.Errorf("the message does not name the registry folder and the cause\n--- page ---\n%s", body)
+	}
+}
+
+func TestDescribeCause_KnownCauses_AreExplainedWithWhatToDo(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{&fs.PathError{Op: "open", Path: "/x/a.png", Err: syscall.EACCES}, "permission denied"},
+		{&fs.PathError{Op: "open", Path: "/x/a.png", Err: syscall.ENOSPC}, "no space left"},
+		{&fs.PathError{Op: "open", Path: "/x/a.png", Err: syscall.EROFS}, "read-only"},
+		{&fs.PathError{Op: "mkdir", Path: "/x/images", Err: syscall.ENOTDIR}, "not a folder"},
+		{&fs.PathError{Op: "open", Path: "/x/a.png", Err: syscall.ENAMETOOLONG}, "name is too long"},
+		{errors.New("something unexpected"), "something unexpected"},
+	} {
+		if got := describeCause(c.err); !strings.Contains(got, c.want) {
+			t.Errorf("describeCause(%v) = %q, want it to say %q", c.err, got, c.want)
+		}
 	}
 }

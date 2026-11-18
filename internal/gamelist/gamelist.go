@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Game is a single entry of a gamelist.xml file.
@@ -156,6 +157,9 @@ func writeDocument(w io.Writer, games []documentGame) error {
 func documentGames(games []Game, preserved map[string]documentGame) []documentGame {
 	document := make([]documentGame, len(games))
 	for i, game := range games {
+		for _, ref := range []*string{&game.Image, &game.Video, &game.Marquee, &game.Thumbnail} {
+			*ref = RelativeReference(*ref)
+		}
 		document[i] = documentGame{
 			Game:       game,
 			Hidden:     preserved[game.Path].Hidden,
@@ -164,6 +168,17 @@ func documentGames(games []Game, preserved map[string]documentGame) []documentGa
 		}
 	}
 	return document
+}
+
+// RelativeReference returns p as Batocera needs a gamelist.xml to write a
+// path relative to the system folder: with a leading "./". Batocera ignores a
+// media path written without it. An empty, absolute, or already "./" or
+// "../" anchored path is returned as is.
+func RelativeReference(p string) string {
+	if p == "" || strings.HasPrefix(p, "./") || strings.HasPrefix(p, "../") || filepath.IsAbs(p) {
+		return p
+	}
+	return "./" + p
 }
 
 // preservedOf indexes, by ROM path, what each game of the document at path

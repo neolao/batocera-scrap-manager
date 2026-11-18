@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - On a ROMs folder's system page, "Folder → Registry" and "Registry → Folder" are no longer offered for a game where that copy would change nothing. Before, a game whose folder and registry held the same values still showed the buttons, and its review offered to copy the cover art and thumbnail even when they were the very same files on both sides. Such a review now says there is nothing to copy. A medium counts as the same when both sides reference it identically with a file of the same size.
+- Copying a game into a ROMs folder now writes its media paths in `gamelist.xml` with a leading `./` (`./images/…`). Without it, Batocera does not show them. A `gamelist.xml` already holding such paths is repaired the next time the tool writes to it.
 
 
 ## [0.7.0] - 2026-09-19

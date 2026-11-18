@@ -1,6 +1,7 @@
 package gamelist
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -537,5 +538,89 @@ func TestUpdateFile_RewrittenTwice_DoesNotDuplicateWhatItPreserves(t *testing.T)
 	}
 	if count := strings.Count(string(content), "<playcount>17</playcount>"); count != 1 {
 		t.Errorf("<playcount> appears %d times after two rewrites, want 1\n--- file ---\n%s", count, string(content))
+	}
+}
+
+func TestUpdateFile_MediaReferencesWithoutDotSlash_AreWrittenWithIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gamelist.xml")
+	games := []Game{{
+		Path:      "./Bluey.nsp",
+		Name:      "Bluey",
+		Image:     "images/Bluey-image.jpg",
+		Video:     "videos/Bluey-video.mp4",
+		Marquee:   "images/Bluey-marquee.png",
+		Thumbnail: "images/Bluey-thumb.jpg",
+	}}
+
+	if err := UpdateFile(path, games); err != nil {
+		t.Fatalf("UpdateFile() error = %v", err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	for _, want := range []string{
+		"<image>./images/Bluey-image.jpg</image>",
+		"<video>./videos/Bluey-video.mp4</video>",
+		"<marquee>./images/Bluey-marquee.png</marquee>",
+		"<thumbnail>./images/Bluey-thumb.jpg</thumbnail>",
+	} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("gamelist.xml does not hold %s — Batocera ignores a media path without ./\n%s", want, raw)
+		}
+	}
+}
+
+func TestWrite_MediaReferencesAlreadyAnchoredOrEmpty_AreLeftAsIs(t *testing.T) {
+	var buf bytes.Buffer
+	games := []Game{{
+		Path:      "./A.zip",
+		Image:     "./images/a.png",
+		Video:     "/userdata/roms/snes/videos/a.mp4",
+		Marquee:   "../shared/a-marquee.png",
+		Thumbnail: "",
+	}}
+
+	if err := Write(&buf, games); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	out := buf.String()
+	for _, want := range []string{
+		"<image>./images/a.png</image>",
+		"<video>/userdata/roms/snes/videos/a.mp4</video>",
+		"<marquee>../shared/a-marquee.png</marquee>",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("Write() changed an anchored reference, want %s\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "<thumbnail>") || strings.Contains(out, "././") {
+		t.Errorf("Write() invented a thumbnail or doubled a prefix\n%s", out)
+	}
+}
+
+func TestUpdateFile_GameWithMediaFixed_KeepsItsUnmodelledData(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gamelist.xml")
+	original := `<?xml version="1.0"?>
+<gameList>
+  <game><path>./Bluey.nsp</path><name>Bluey</name><image>images/old.jpg</image><playcount>3</playcount></game>
+</gameList>`
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	games, err := ParseFile(path)
+	if err != nil {
+		t.Fatalf("ParseFile() error = %v", err)
+	}
+
+	if err := UpdateFile(path, games); err != nil {
+		t.Fatalf("UpdateFile() error = %v", err)
+	}
+
+	raw, _ := os.ReadFile(path)
+	if !strings.Contains(string(raw), "<image>./images/old.jpg</image>") || !strings.Contains(string(raw), "<playcount>3</playcount>") {
+		t.Errorf("rewrite lost the play count or did not fix the image path\n%s", raw)
 	}
 }

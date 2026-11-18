@@ -651,22 +651,6 @@ func ImportGame(reg *Registry, romsFolder, registryFolder, system, romFilename s
 	}
 }
 
-// withConventionalRelativePrefix returns p as a gamelist.xml entry
-// conventionally writes a ROM path: relative to its system folder with a
-// leading "./", matching both Batocera's own scraper and every existing
-// entry in this codebase's fixtures. gamelist.Write never reformats a Path
-// string on its own, so a brand-new entry built from a bare filename (as
-// the CLI's targeted mode gives one, see resolveGamePath) would otherwise
-// stand out from its neighbours. A path already relative in that form, or
-// one this package would never be handed as a fresh romFilename (absolute,
-// or reaching outside the system folder), is left untouched.
-func withConventionalRelativePrefix(p string) string {
-	if p == "" || strings.HasPrefix(p, "./") || strings.HasPrefix(p, "../") || filepath.IsAbs(p) {
-		return p
-	}
-	return "./" + p
-}
-
 // findGameByFilename returns the index in games of the entry whose ROM path
 // has the given base filename (ignoring any directory prefix), or -1 if none
 // matches.
@@ -925,7 +909,7 @@ func sendGame(reg *Registry, romsFolder, registryFolder, system, romFilename str
 		if _, statErr := os.Stat(romPath); statErr != nil {
 			return false, false, false, ErrGameNotFound
 		}
-		games = append(games, gamelist.Game{Path: withConventionalRelativePrefix(romFilename)})
+		games = append(games, gamelist.Game{Path: gamelist.RelativeReference(romFilename)})
 		i = len(games) - 1
 		added = true
 	}

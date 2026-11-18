@@ -125,7 +125,10 @@ type transferPage struct {
 	To        string
 	StatusURL string
 	Rows      []transferRow
-	Problem   string
+	// NothingToCopy is a review where every value the source holds is already
+	// in the destination: shown as such, with no form.
+	NothingToCopy bool
+	Problem       string
 }
 
 // transferRequest is one transfer's coordinates, read from a request.
@@ -198,19 +201,27 @@ func (ui *webUI) transferForm(t transferRequest, source, destination gamelist.Ga
 		page.From, page.To = "Registry", "This ROMs folder"
 	}
 
+	srcRoot, dstRoot := t.folder, ui.registryFolder
+	if t.direction == directionToFolder {
+		srcRoot, dstRoot = ui.registryFolder, t.folder
+	}
+	differ := registry.Differences(source, destination, srcRoot, dstRoot, t.system)
+	page.NothingToCopy = len(differ) == 0
+
 	for _, id := range registry.TransferFields() {
 		proposed := registry.FieldValue(source, id)
 		if proposed == "" {
 			continue
 		}
 		current := registry.FieldValue(destination, id)
+		same := !slices.Contains(differ, id)
 		row := transferRow{
 			Key:      id,
 			Label:    fieldLabel(id),
 			Current:  transferDisplayed(id, current),
 			Proposed: transferDisplayed(id, proposed),
-			Same:     current == proposed,
-			Checked:  current == "",
+			Same:     same,
+			Checked:  !same && current == "",
 		}
 		if m, isMedium := registry.LookupMedium(id); isMedium && m != registry.MediumVideo {
 			localURL := localImageURL(t.folder, t.system, registry.FieldValue(sideOf(t, true, source, destination), id))
@@ -220,10 +231,7 @@ func (ui *webUI) transferForm(t transferRequest, source, destination gamelist.Ga
 			} else {
 				row.ProposedURL, row.CurrentURL = registryURL, localURL
 			}
-			// The same reference may name two different files, one in each
-			// folder: a medium is never "the same" on the reference alone.
-			row.Same = false
-			row.Checked = row.CurrentURL == ""
+			row.Checked = !same && row.CurrentURL == ""
 		}
 		page.Rows = append(page.Rows, row)
 	}
@@ -391,6 +399,8 @@ var transferTemplate = newPage("transfer", `
 {{end}}
 {{if not .Rows}}
 <p class="empty-state">{{.From}} holds nothing for this game.</p>
+{{else if .NothingToCopy}}
+<p class="empty-state">Both sides already hold the same values — nothing to copy. What this game still misses is missing from {{.From}} too.</p>
 {{else}}
 <form class="form" method="post" action="`+transferURL+`">
 <input type="hidden" name="`+statusFolderParam+`" value="{{.Folder}}">

@@ -161,3 +161,58 @@ func FieldValue(g gamelist.Game, id string) string {
 	}
 	return ""
 }
+
+// Differences lists, in TransferFields order, the values source holds that a
+// transfer would change in destination: a metadata value destination lacks
+// or holds differently, or a medium whose file source has and destination
+// either references elsewhere or holds at a different size. A value source
+// does not hold, or a medium source references without its file, is never
+// one — there is nothing to copy. This is the one rule deciding both whether
+// a transfer is offered and which of its values a review calls "Same".
+//
+// shortcut: two media files are compared by size, not by bytes — reading
+// every file of a page of games at each display would be slow on a NAS; two
+// images of the same size and different content are reported identical, and
+// the copy itself still compares bytes before writing.
+func Differences(source, destination gamelist.Game, srcRoot, dstRoot, system string) []string {
+	var differ []string
+	for _, gf := range gameFields {
+		value := *gf.field(&source)
+		if value == "" {
+			continue
+		}
+		current := *gf.field(&destination)
+		if _, isMedium := LookupMedium(gf.id); isMedium {
+			if mediumDiffers(value, current, srcRoot, dstRoot, system) {
+				differ = append(differ, gf.id)
+			}
+			continue
+		}
+		if value != current {
+			differ = append(differ, gf.id)
+		}
+	}
+	return differ
+}
+
+// mediumDiffers reports whether copying the medium source references from
+// srcRoot would change what destination references in dstRoot.
+func mediumDiffers(source, destination, srcRoot, dstRoot, system string) bool {
+	srcPath, inside := mediumPath(filepath.Join(srcRoot, system), source)
+	if !inside {
+		return false
+	}
+	srcInfo, err := os.Stat(srcPath)
+	if err != nil || srcInfo.IsDir() {
+		return false
+	}
+	if filepath.Clean(source) != filepath.Clean(destination) {
+		return true
+	}
+	dstPath, inside := mediumPath(filepath.Join(dstRoot, system), destination)
+	if !inside {
+		return true
+	}
+	dstInfo, err := os.Stat(dstPath)
+	return err != nil || dstInfo.Size() != srcInfo.Size()
+}

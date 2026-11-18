@@ -107,8 +107,8 @@ func TestServeRomsFolderSystemStatus_OffersEachDirectionOnlyWhenItsSourceExists(
 	}{
 		{"Streets.zip", directionToRegistry, true},
 		{"Streets.zip", directionToFolder, false},
-		{"Golden Axe.zip", directionToRegistry, true},
-		{"Golden Axe.zip", directionToFolder, true},
+		{"Golden Axe.zip", directionToRegistry, false},
+		{"Golden Axe.zip", directionToFolder, false},
 		{"Unscraped.zip", directionToRegistry, false},
 	}
 	for _, c := range cases {
@@ -284,5 +284,50 @@ func TestTransfer_FromTheIncompleteFilter_ReturnsToIt(t *testing.T) {
 	}
 	if banner := statusBannerAfter(t, handler, rec); !strings.Contains(banner, "Streets of Rage") {
 		t.Errorf("banner = %q on the filtered list", banner)
+	}
+}
+
+func TestServeTransfer_SameValuesAndSameMediaFiles_OfferNothingToCopy(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForTransfer(t)
+	reg.Entries[0].Game.Image = "images/golden.png"
+	writeFile(t, filepath.Join(registryFolder, "megadrive", "images", "golden.png"), "same-art")
+	writeFile(t, filepath.Join(romsFolder, "megadrive", "images", "golden.png"), "same-art")
+	local := []gamelist.Game{{Path: "./Golden Axe.zip", Name: "Golden Axe", Desc: "Two warriors against an evil sorcerer.", Image: "./images/golden.png"}}
+	writeSystemGames(t, romsFolder, "megadrive", local)
+	handler := Handler(reg, registryFolder, []string{romsFolder})
+
+	statusPage := html.UnescapeString(get(t, handler, romsFolderSystemStatusURLFor(romsFolder, "megadrive", 1)).Body.String())
+	review := get(t, handler, transferURLFor(romsFolder, "megadrive", "Golden Axe.zip", directionToFolder)).Body.String()
+
+	for _, direction := range []string{directionToFolder, directionToRegistry} {
+		if strings.Contains(statusPage, transferURLFor(romsFolder, "megadrive", "Golden Axe.zip", direction)) {
+			t.Errorf("the status page offers a %s copy although both sides hold the same values", direction)
+		}
+	}
+	if strings.Contains(review, `name="`+takeParam+`"`) {
+		t.Errorf("the review offers values to copy although both sides are identical\n--- page ---\n%s", review)
+	}
+	if !strings.Contains(review, "nothing to copy") {
+		t.Error("the review does not say there is nothing to copy")
+	}
+}
+
+func TestServeTransfer_MediumFileOfAnotherSize_IsOfferedTicked(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForTransfer(t)
+	reg.Entries[0].Game.Image = "images/golden.png"
+	writeFile(t, filepath.Join(registryFolder, "megadrive", "images", "golden.png"), "better, larger art")
+	writeFile(t, filepath.Join(romsFolder, "megadrive", "images", "golden.png"), "old art")
+	local := []gamelist.Game{{Path: "./Golden Axe.zip", Name: "Golden Axe", Desc: "Two warriors against an evil sorcerer.", Image: "./images/golden.png"}}
+	writeSystemGames(t, romsFolder, "megadrive", local)
+	handler := Handler(reg, registryFolder, []string{romsFolder})
+
+	statusPage := html.UnescapeString(get(t, handler, romsFolderSystemStatusURLFor(romsFolder, "megadrive", 1)).Body.String())
+	review := get(t, handler, transferURLFor(romsFolder, "megadrive", "Golden Axe.zip", directionToFolder)).Body.String()
+
+	if !strings.Contains(statusPage, transferURLFor(romsFolder, "megadrive", "Golden Axe.zip", directionToFolder)) {
+		t.Error("the status page does not offer to copy the registry's different cover art")
+	}
+	if !strings.Contains(review, `name="`+takeParam+`" value="image">`) {
+		t.Errorf("the different cover art is not offered (unticked, since the folder has one)\n--- page ---\n%s", review)
 	}
 }

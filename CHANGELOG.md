@@ -17,6 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - On a ROMs folder's system page, the "Retrieve into the registry" button and the "Send to this folder" link are replaced by two buttons that say which way they copy: "Folder → Registry" and "Registry → Folder". Each opens a review listing every value the source holds (name, description, rating, year, developer, publisher, genre, players, and the four media with their images). The destination's current value is shown next to the source's, each with a tick box. A missing value is ticked, a value that would overwrite another is not, and an identical one is marked "Same". Only the ticked values are copied. Copying into the registry no longer replaces the whole entry with the folder's version, which used to erase values the folder did not have. Copying into the folder creates the game's `gamelist.xml` entry when the ROM is there but not listed yet.
 
+### Fixed
+
+- On a ROMs folder's system page, "Folder → Registry" and "Registry → Folder" are no longer offered for a game where that copy would change nothing. Before, a game whose folder and registry held the same values still showed the buttons, and its review offered to copy the cover art and thumbnail even when they were the very same files on both sides. Such a review now says there is nothing to copy. A medium counts as the same when both sides reference it identically with a file of the same size.
+
+
 ## [0.7.0] - 2026-09-19
 
 ### Added

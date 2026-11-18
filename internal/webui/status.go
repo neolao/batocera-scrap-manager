@@ -173,8 +173,8 @@ type gameStatusView struct {
 	// the registry does not know this game at all — nothing to link to.
 	RegistryURL string
 	// ToRegistryURL and ToFolderURL open the review copying chosen values
-	// one way or the other. Each is empty when its source holds nothing: no
-	// local entry, or no registry entry.
+	// one way or the other. Each is empty when that copy would change
+	// nothing — no source entry, or every value it holds already there.
 	ToRegistryURL string
 	ToFolderURL   string
 	// FillURL leads to the form creating this game in the registry by hand.
@@ -349,10 +349,11 @@ func (ui *webUI) gameStatusViews(folder, system, filter string, games []registry
 		}
 		if game.RegistryID == "" {
 			views[i].FillURL = fillURLFor(folder, system, game.ROMFilename)
-		} else {
+		}
+		if game.RegistryID != "" && len(registry.Differences(game.RegistryGame, game.LocalGame, ui.registryFolder, folder, system)) > 0 {
 			views[i].ToFolderURL = withFilter(transferURLFor(folder, system, game.ROMFilename, directionToFolder), filter)
 		}
-		if game.Listed {
+		if game.Listed && len(registry.Differences(game.LocalGame, game.RegistryGame, folder, ui.registryFolder, system)) > 0 {
 			views[i].ToRegistryURL = withFilter(transferURLFor(folder, system, game.ROMFilename, directionToRegistry), filter)
 		}
 		if game.RegistryImage != "" && site.MediaFileExists(ui.registryFolder, system, game.RegistryImage) {

@@ -85,6 +85,11 @@ type GameStatus struct {
 	// RegistryImage is the cover art reference of the matching registry
 	// entry, relative to its system's folder in the registry; empty when none.
 	RegistryImage string
+	// LocalGame is the local gamelist.xml entry, a zero value when Listed is
+	// false; RegistryGame the matching registry entry, a zero value when
+	// RegistryID is empty. Both are what a transfer between them compares.
+	LocalGame    gamelist.Game
+	RegistryGame gamelist.Game
 }
 
 // Complete reports whether nothing is missing locally.
@@ -228,7 +233,9 @@ func (st *SystemStatus) addGap(romFilename string, local gamelist.Game, localNam
 	name := localName
 	registryID := ""
 	registryImage := ""
+	var registryCopy gamelist.Game
 	if registryGame != nil {
+		registryCopy = *registryGame
 		if name == "" {
 			name = registryGame.Name
 		}
@@ -244,6 +251,8 @@ func (st *SystemStatus) addGap(romFilename string, local gamelist.Game, localNam
 		RegistryID:    registryID,
 		LocalImage:    local.Image,
 		RegistryImage: registryImage,
+		LocalGame:     local,
+		RegistryGame:  registryCopy,
 	})
 }
 

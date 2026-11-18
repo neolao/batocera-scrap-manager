@@ -202,3 +202,68 @@ func TestTransferFields_ListsTheTwelveValuesReadableByFieldValue(t *testing.T) {
 		t.Error("FieldValue of an unknown identifier is not empty")
 	}
 }
+
+func TestDifferences_IdenticalValuesAndMediaFiles_ReportNothing(t *testing.T) {
+	srcRoot, dstRoot := t.TempDir(), t.TempDir()
+	for _, root := range []string{srcRoot, dstRoot} {
+		if err := os.MkdirAll(filepath.Join(root, "switch", "images"), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "switch", "images", "a.png"), []byte("same-art"), 0o644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	}
+	source := gamelist.Game{Name: "Aarik", Genre: "Puzzle", Image: "images/a.png"}
+	destination := gamelist.Game{Name: "Aarik", Genre: "Puzzle", Image: "./images/a.png", Rating: "0.5"}
+
+	if got := Differences(source, destination, srcRoot, dstRoot, "switch"); len(got) != 0 {
+		t.Errorf("Differences() = %v, want none: every value the source holds is already there", got)
+	}
+}
+
+func TestDifferences_ChangedValueOrMedium_IsReported(t *testing.T) {
+	srcRoot, dstRoot := t.TempDir(), t.TempDir()
+	write := func(root, name, content string) {
+		if err := os.MkdirAll(filepath.Join(root, "switch", "images"), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "switch", "images", name), []byte(content), 0o644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	}
+	write(srcRoot, "a.png", "new-art-bigger")
+	write(dstRoot, "a.png", "old-art")
+	write(srcRoot, "t.png", "thumb")
+	source := gamelist.Game{Name: "Aarik", Desc: "Text", Image: "images/a.png", Thumbnail: "images/t.png", Marquee: "images/missing.png"}
+	destination := gamelist.Game{Name: "Aarik", Image: "images/a.png"}
+
+	got := Differences(source, destination, srcRoot, dstRoot, "switch")
+
+	want := []string{FieldDesc, string(MediumImage), string(MediumThumbnail)}
+	if len(got) != len(want) {
+		t.Fatalf("Differences() = %v, want %v (a marquee with no file to copy is not one)", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("Differences()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestRomsFolderSystemStatus_Games_CarryBothSidesEntries(t *testing.T) {
+	st, err := RomsFolderSystemStatus(statusRegistry(), writeStatusRomsFolder(t), "megadrive")
+
+	if err != nil {
+		t.Fatalf("RomsFolderSystemStatus() error = %v", err)
+	}
+	for _, g := range st.Games {
+		if g.ROMFilename != "Golden Axe.zip" {
+			continue
+		}
+		if g.LocalGame.Genre != "Beat 'em up" || g.RegistryGame.Desc != "Two warriors against an evil sorcerer." {
+			t.Errorf("Golden Axe local %+v / registry %+v, want both entries carried", g.LocalGame, g.RegistryGame)
+		}
+		return
+	}
+	t.Fatal("Golden Axe.zip missing")
+}

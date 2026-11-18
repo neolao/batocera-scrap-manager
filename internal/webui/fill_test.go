@@ -195,4 +195,3 @@ func TestFillGame_RegistryCannotBeWritten_ShowsTheProblemAndKeepsTheServedRegist
 		t.Error("the served registry holds a game that was never written to disk")
 	}
 }
-

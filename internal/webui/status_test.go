@@ -406,13 +406,13 @@ func TestServeRomsFolderSystemStatus_IncompleteFilter_PaginatesAndKeepsTheFilter
 	}
 }
 
-func TestServeRomsFolderSystemStatus_IncompleteFilterOnACompleteSystem_SaysNothingIsMissing(t *testing.T) {
+func TestServeRomsFolderSystemStatus_IncompleteFilterOnACompleteSystem_SaysNoGameMatches(t *testing.T) {
 	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
 	writeMixedSystem(t, romsFolder, 2, 2)
 
 	rec := get(t, Handler(reg, registryFolder, []string{romsFolder}), filteredStatusURL(romsFolder, "mixed", filterIncomplete, 1))
 
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Nothing missing here") {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "No game matches this filter here") {
 		t.Errorf("status = %d, want 200 and an empty-state message\n%s", rec.Code, rec.Body.String())
 	}
 }
@@ -425,5 +425,75 @@ func TestServeRomsFolderSystemStatus_UnknownFilter_ListsEveryGame(t *testing.T) 
 
 	if !strings.Contains(body, "Game 000") || !strings.Contains(body, `aria-current="page">All (3)`) {
 		t.Error("an unknown filter does not fall back to every game")
+	}
+}
+
+// writeFilterFixture lists, in megadrive, beside the fixture's Golden Axe
+// (known to the registry) and Ghost.zip (no local entry):
+//   - Golden Axe with a description differing from the registry's;
+//   - "Named.zip", listed with a name only;
+//   - "Scraped.zip", listed with a description, unknown to the registry;
+//   - "Twin.zip", identical in the folder and the registry.
+func writeFilterFixture(t *testing.T, reg *registry.Registry, romsFolder string) {
+	t.Helper()
+	reg.Entries = append(reg.Entries, registry.Entry{System: "megadrive", Game: gamelist.Game{Path: "./Twin.zip", Name: "Twin", Desc: "Same here."}})
+	writeSystemGames(t, romsFolder, "megadrive", []gamelist.Game{
+		{Path: "./Golden Axe.zip", Name: "Golden Axe", Desc: "A local, different story."},
+		{Path: "./Named.zip", Name: "Named"},
+		{Path: "./Scraped.zip", Name: "Scraped", Desc: "Scraped locally."},
+		{Path: "./Twin.zip", Name: "Twin", Desc: "Same here."},
+	})
+}
+
+// listedROMs returns the ROM filenames a status page lists, in order.
+func listedROMs(body string) []string {
+	var roms []string
+	for _, part := range strings.Split(body, `<code class="status__gap-file">`)[1:] {
+		rom, _, _ := strings.Cut(part, "</code>")
+		roms = append(roms, rom)
+	}
+	return roms
+}
+
+func TestServeRomsFolderSystemStatus_EmptyFilter_ListsGamesWithNothingButAName(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
+	writeFilterFixture(t, reg, romsFolder)
+
+	body := get(t, Handler(reg, registryFolder, []string{romsFolder}), filteredStatusURL(romsFolder, "megadrive", filterEmpty, 1)).Body.String()
+
+	got := strings.Join(listedROMs(body), ", ")
+	if got != "Ghost.zip, Named.zip" {
+		t.Errorf("listed = %s, want Ghost.zip (no local entry) and Named.zip (a name only)", got)
+	}
+	if !strings.Contains(body, `aria-current="page">Empty (2)`) {
+		t.Errorf("the Empty tab is not current with its count\n--- page ---\n%s", body)
+	}
+}
+
+func TestServeRomsFolderSystemStatus_DiffersFilter_ListsGamesWithSomethingToCopyEitherWay(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
+	writeFilterFixture(t, reg, romsFolder)
+
+	body := get(t, Handler(reg, registryFolder, []string{romsFolder}), filteredStatusURL(romsFolder, "megadrive", filterDiffers, 1)).Body.String()
+
+	got := strings.Join(listedROMs(body), ", ")
+	if got != "Golden Axe.zip" {
+		t.Errorf("listed = %s, want only Golden Axe.zip (Twin is identical, Scraped and Named are unknown to the registry)", got)
+	}
+	if !strings.Contains(body, `aria-current="page">Differs from registry (1)`) {
+		t.Errorf("the Differs tab is not current with its count\n--- page ---\n%s", body)
+	}
+}
+
+func TestServeRomsFolderSystemStatus_EveryTab_ShowsItsSystemWideCount(t *testing.T) {
+	reg, registryFolder, romsFolder := registryAndRomsFolderForStatus(t)
+	writeFilterFixture(t, reg, romsFolder)
+
+	body := get(t, Handler(reg, registryFolder, []string{romsFolder}), romsFolderSystemStatusURLFor(romsFolder, "megadrive", 1)).Body.String()
+
+	for _, tab := range []string{"All (5)", "Incomplete (5)", "Empty (2)", "Differs from registry (1)"} {
+		if !strings.Contains(body, ">"+tab+"<") {
+			t.Errorf("tab %q missing\n--- page ---\n%s", tab, body)
+		}
 	}
 }

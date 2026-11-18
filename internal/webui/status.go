@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/neolao/batocera-scrap-manager/internal/gamelist"
 	"github.com/neolao/batocera-scrap-manager/internal/registry"
 	"github.com/neolao/batocera-scrap-manager/internal/site"
 )
@@ -52,20 +53,102 @@ func romsFolderLinksOf(romsFolders []string) []romsFolderLink {
 // system status page is about. Its absence means the folder's summary.
 const statusSystemParam = "system"
 
-// filterParam narrows a system status page to some of its games; its only
-// value today is filterIncomplete, every game missing at least one value.
-// Absent, or any other value, lists every game.
+// filterParam narrows a system status page to some of its games, named by
+// one of statusFilters' keys. Absent, or any other value, lists every game.
 const (
 	filterParam      = "show"
 	filterIncomplete = "incomplete"
+	filterEmpty      = "empty"
+	filterDiffers    = "differs"
 )
+
+// statusFilter is one tab of a system status page: its label, and which
+// games it keeps.
+type statusFilter struct {
+	key   string
+	label string
+	keep  func(ui *webUI, folder, system string, game registry.GameStatus) bool
+}
+
+// statusFilters lists the tabs after "All", in the order they are shown.
+var statusFilters = []statusFilter{
+	{filterIncomplete, "Incomplete", func(_ *webUI, _, _ string, g registry.GameStatus) bool { return !g.Complete() }},
+	{filterEmpty, "Empty", func(_ *webUI, _, _ string, g registry.GameStatus) bool { return emptyLocally(g.LocalGame) }},
+	{filterDiffers, "Differs from registry", func(ui *webUI, folder, system string, g registry.GameStatus) bool {
+		return ui.differsFromRegistry(folder, system, g)
+	}},
+}
 
 // requestedFilter reads which filter the query asks for, "" meaning none.
 func requestedFilter(query url.Values) string {
-	if query.Get(filterParam) == filterIncomplete {
-		return filterIncomplete
+	for _, f := range statusFilters {
+		if query.Get(filterParam) == f.key {
+			return f.key
+		}
 	}
 	return ""
+}
+
+// emptyLocally reports whether a local entry holds nothing but, at most, a
+// name — which is all a game with no local entry at all holds too.
+func emptyLocally(local gamelist.Game) bool {
+	for _, id := range registry.TransferFields() {
+		if id != registry.FieldName && registry.FieldValue(local, id) != "" {
+			return false
+		}
+	}
+	return true
+}
+
+// differsFromRegistry reports whether a game the registry knows has at least
+// one value a copy would change, in either direction — the same rule the
+// copy buttons are offered by.
+func (ui *webUI) differsFromRegistry(folder, system string, g registry.GameStatus) bool {
+	if g.RegistryID == "" {
+		return false
+	}
+	if len(registry.Differences(g.RegistryGame, g.LocalGame, ui.registryFolder, folder, system)) > 0 {
+		return true
+	}
+	return g.Listed && len(registry.Differences(g.LocalGame, g.RegistryGame, folder, ui.registryFolder, system)) > 0
+}
+
+// filteredGames keeps, in order, the games filter keeps — every one for "".
+func (ui *webUI) filteredGames(folder, system, filter string, games []registry.GameStatus) []registry.GameStatus {
+	if filter == "" {
+		return games
+	}
+	var keep func(*webUI, string, string, registry.GameStatus) bool
+	for _, f := range statusFilters {
+		if f.key == filter {
+			keep = f.keep
+		}
+	}
+	var kept []registry.GameStatus
+	for _, g := range games {
+		if keep(ui, folder, system, g) {
+			kept = append(kept, g)
+		}
+	}
+	return kept
+}
+
+// statusTabs builds the tabs of a system status page: "All", then one per
+// filter, each with how many of the system's games it keeps.
+func (ui *webUI) statusTabs(folder, system, current string, games []registry.GameStatus) []statusTab {
+	tabs := []statusTab{{
+		Label:   "All (" + strconv.Itoa(len(games)) + ")",
+		URL:     filteredStatusURL(folder, system, "", 1),
+		Current: current == "",
+	}}
+	for _, f := range statusFilters {
+		tabs = append(tabs, statusTab{
+			Label:   f.label + " (" + strconv.Itoa(len(ui.filteredGames(folder, system, f.key, games))) + ")",
+			URL:     filteredStatusURL(folder, system, f.key, 1),
+			Current: current == f.key,
+		})
+	}
+	return tabs
 }
 
 // withFilter appends filter to target, which already carries a query.
@@ -255,10 +338,7 @@ func (ui *webUI) serveRomsFolderSystemStatus(w http.ResponseWriter, r *http.Requ
 	}
 
 	filter := requestedFilter(query)
-	games := st.Games
-	if filter == filterIncomplete {
-		games = incompleteGames(st.Games)
-	}
+	games := ui.filteredGames(folder, system, filter, st.Games)
 
 	pageCount := max(1, (len(games)+gamesPerPage-1)/gamesPerPage)
 	page, ok := requestedPage(query, pageCount)
@@ -294,18 +374,15 @@ func (ui *webUI) serveRomsFolderSystemStatus(w http.ResponseWriter, r *http.Requ
 		NotListed:  st.NotListedCount,
 		Fillable:   st.FillableCount,
 		Filter:     filter,
-		Tabs: []statusTab{
-			{Label: "All (" + strconv.Itoa(len(st.Games)) + ")", URL: filteredStatusURL(folder, system, "", 1), Current: filter == ""},
-			{Label: "Incomplete (" + strconv.Itoa(len(incompleteGames(st.Games))) + ")", URL: filteredStatusURL(folder, system, filterIncomplete, 1), Current: filter == filterIncomplete},
-		},
-		Games:     ui.gameStatusViews(folder, system, filter, games[first:last]),
-		Page:      page,
-		PageCount: pageCount,
-		PrevURL:   statusPageURL(folder, system, filter, page-1, pageCount),
-		NextURL:   statusPageURL(folder, system, filter, page+1, pageCount),
-		First:     first + 1,
-		Last:      last,
-		Total:     len(games),
+		Tabs:       ui.statusTabs(folder, system, filter, st.Games),
+		Games:      ui.gameStatusViews(folder, system, filter, games[first:last]),
+		Page:       page,
+		PageCount:  pageCount,
+		PrevURL:    statusPageURL(folder, system, filter, page-1, pageCount),
+		NextURL:    statusPageURL(folder, system, filter, page+1, pageCount),
+		First:      first + 1,
+		Last:       last,
+		Total:      len(games),
 	}
 	render(w, http.StatusOK, romsFolderSystemStatusTemplate, view)
 }
@@ -318,17 +395,6 @@ func statusPageURL(folder, system, filter string, page, pageCount int) string {
 		return ""
 	}
 	return filteredStatusURL(folder, system, filter, page)
-}
-
-// incompleteGames keeps, in order, the games missing at least one value.
-func incompleteGames(games []registry.GameStatus) []registry.GameStatus {
-	var kept []registry.GameStatus
-	for _, g := range games {
-		if !g.Complete() {
-			kept = append(kept, g)
-		}
-	}
-	return kept
 }
 
 // gameStatusViews turns one page of a system's games into what the template
@@ -532,7 +598,7 @@ var romsFolderSystemStatusTemplate = newPage("roms-folder-system-status", `
 {{end}}
 </nav>
 {{if not .Games}}
-<p class="empty-state">{{if .Filter}}Nothing missing here.{{else}}No game in this system.{{end}}</p>
+<p class="empty-state">{{if .Filter}}No game matches this filter here.{{else}}No game in this system.{{end}}</p>
 {{else}}
 {{template "pager" .}}
 <ul class="status__gaps">

@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-const version = "0.7.0"
+const version = "0.8.0"
 
 const usage = `batocera-scrap-manager - manage game scraping data for Batocera
 

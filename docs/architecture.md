@@ -21,6 +21,9 @@ The heart of the tool: a centralized index of all already-known games, along wit
 **Consultation site**
 Turns the registry's content into HTML, so it can be browsed in a web browser without opening individual metadata files. It is the shared presentation layer: it both writes the static site regenerated on every update, and provides the theme, the grouping by system and the formatting (rating stars, release year, safely encoded media links) reused by the web server, so both renderings stay consistent.
 
+**Page reader (scrape)**
+The only part that reaches the network: reads a game's values and images off a supported web page, after checking the address against the sites it knows.
+
 **Web server**
 Serves the registry's content over HTTP on demand: a summary of the systems, one paginated list of games per system, one page per game, the form correcting a game's metadata and the ROM file identifying it, the controls managing a game's four media and the page confirming one of them be erased, the page confirming a game's deletion, the page confirming that one game be sent to one chosen ROMs folder, one page per long operation on the ROMs folders (importing them into the registry, completing them from it), a read-only status report of one configured ROMs folder, and the media files themselves. Unlike the static site, each game and each system has its own address, which is what makes a game reachable, linkable, editable and deletable.
 
@@ -83,10 +86,13 @@ flowchart LR
   SRV --> MEDIA["Media: serve the files, upload one, erase one"]
   MEDIA --> COMMIT
   SRV --> NF["Not-found page"]
-  SRV --> STATUS["ROMs folder status: read-only report"]
-  STATUS --> RETRIEVE["Retrieve one game: import, no confirmation"]
-  RETRIEVE --> COMMIT
-  STATUS -. direct link, folder+mode preset .-> SEND
+  SRV --> STATUS["ROMs folder status: read-only, one page per system"]
+  STATUS --> COPY["Copy chosen values, either way: per-value review"]
+  COPY --> COMMIT
+  COPY --> ROMS
+  STATUS --> FILL["Fill in by hand, or import from a web page"]
+  FILL --> COMMIT
+  FILL -. supported sites only .-> SCRAPE["Page reader"]
   EDIT --> COMMIT["Commit: registry + consultation site"]
   SITE["Consultation site"] -. shared theme and formatting .-> SRV
 ```
@@ -220,21 +226,43 @@ Two boundaries are deliberate. The preserved remainder never leaves the game-she
 
 ## Checking a ROMs folder's status
 
-The registry aggregates every configured ROMs folder into one view, which is exactly what makes it unable to say what *one particular* folder still lacks — a game complete there because another folder already scraped it reads as complete in the registry regardless. Each configured folder therefore has its own read-only status page, reached from the home page, that looks at that folder alone and tells apart a gap the registry could already close from one it cannot.
+The registry aggregates every configured ROMs folder into one view, which is exactly what makes it unable to say what *one particular* folder still lacks. Each configured folder therefore has its own read-only status pages, reached from the home page, that look at that folder alone.
 
-For each system subfolder it holds, the report counts: the ROM files found, how many already have a fully complete local `gamelist.xml` entry (every field this tool models present), how many have an entry but it is missing something, and how many ROM files have no local entry at all. A ROM file with no entry is found by listing whatever sits directly in the system's folder, excluding `gamelist.xml`, an `_info.txt` note some setups leave there, and any subfolder such as `images/`/`videos/` — the same layout every other flow already assumes, with no check on file extension, since the tool holds no per-system list of valid ones (see [`decisions/038`](../.vibe/decisions/038-roms-folder-status-detects-orphan-roms-by-flat-file-heuristic.md)). Systems are listed worst first — the one holding the most gaps at the top — rather than alphabetically, so a folder spanning many systems says at a glance where the problems are; a system with neither a ROM file nor a local entry has nothing to report and is left out entirely.
+```mermaid
+flowchart LR
+    Summary["/roms-folder<br/>summary, one row per system"] --> System["/roms-folder?system=S<br/>paginated games + tabs"]
+    System --> Review["/roms-folder/transfer<br/>per-value review"]
+    System --> Fill["/roms-folder/fill<br/>fill in by hand"]
+    Fill --> FromURL["/roms-folder/fill/from-url<br/>review of a web page"]
+    Review -->|apply| System
+    Fill -->|create| System
+```
 
-A game EmulationStation itself marks `<hidden>true</hidden>` is left out of the report **entirely** — not counted as complete, incomplete, or not-listed, and its ROM file dropped from the ROM-file count too — exactly as EmulationStation itself leaves it out of Batocera's own list. `Hidden` is not one of the fields `gamelist.Game` models: modelling it there would have grown the registry's own on-disk shape for a value that belongs to local curation, not to scraped metadata, so it is read by a narrow, separate entry point used only by this report (see [`decisions/039`](../.vibe/decisions/039-hidden-is-modelled-on-documentgame-not-on-game.md)).
+**Summary.** `registry.RomsFolderStatus` reads every system subfolder and counts: the ROM files found, the complete local entries (every one of the twelve fields `gameFields` walks present), the incomplete ones, and the ROM files with no local entry. A ROM file with no entry is found by listing what sits directly in the system's folder, excluding `gamelist.xml`, `_info.txt` and subfolders, with no check on extension (see [`decisions/038`](../.vibe/decisions/038-roms-folder-status-detects-orphan-roms-by-flat-file-heuristic.md)). Systems are listed worst first. A game marked `<hidden>true</hidden>` is left out entirely (see [`decisions/039`](../.vibe/decisions/039-hidden-is-modelled-on-documentgame-not-on-game.md)).
 
-Below the counts, every problem game is named, each saying what a **Completion** run would already fill from the registry apart from what it needs real scraping for — the registry not knowing a value either is told apart from the local sheet simply not holding it yet, which is the one distinction this page exists to draw. When the registry already holds a matching entry, the game's name also links straight to that entry's own page, so a scrape can be finished or corrected by hand right there instead of being hunted down by system and filename. It writes nothing, in the ROMs folder or in the registry: opening it is a pure read, unlike every other page that starts one of the long operations. A folder no longer configured is refused; one that was configured but can no longer be read — removed, a network share gone — is named with a clear message instead of a broken page, and one bad system's own `gamelist.xml` failing to parse is reported next to it without hiding the rest of the folder's report.
+**One system.** `registry.RomsFolderSystemStatus` reads one system alone, so a page costs one system, not the folder. It returns every visible game, complete ones included, each carrying both entries (`LocalGame` and `RegistryGame`). The page shows 60 per page. Each game shows two cover arts side by side: the registry's through `/media/`, the folder's through `/roms-folder/media/{system}/{path}`, which opens files through an `os.Root` confined to the system's folder and serves only image extensions (see [`decisions/042`](../.vibe/decisions/042-roms-folder-status-split-by-system-with-local-cover-art.md)).
 
-### Acting on one game from its status row
+**Tabs.** `statusFilters` is the one table of filters, each a label and a rule over a game: Incomplete (`!Complete()`), Empty (nothing but a name locally) and Differs from registry. The `show` query parameter carries the filter, and every link built from the page — paging, other systems, a review, the return after a copy — keeps it, so working through a list does not lose its place.
 
-Two per-game actions sit directly on this page, so a problem game does not have to be chased down elsewhere first.
+### Copying values between the folder and the registry
 
-**Retrieve** is the reverse of Completion for one game: it imports that one ROM's already-scraped local entry into the registry, reusing the same single-game import the `update <path>` command already exposes. It is offered only on a game whose local `gamelist.xml` genuinely has an entry (`Listed`) — a ROM with no local entry has nothing to pull, since this tool never scrapes on its own. Because it writes only the registry, which the tool can always rebuild from the ROMs folders, it runs inside its own request with no confirmation page — the same reasoning that already lets a correction or a protection change apply on one submit (see [`decisions/041`](../.vibe/decisions/041-retrieve-writes-synchronously-with-no-confirmation.md)). The `(folder, system, ROM filename)` a submission names is never trusted as a path: it is checked against the folder's status, recomputed fresh, before anything is imported — so a stale page, or a forged request, degrades to a clear refusal rather than a wrong write. The status page then reports, by name, whether the game was added, refreshed, already matched, had nothing worth keeping locally, or could not be retrieved.
+`registry.Differences(source, destination, …)` is the single rule for "what would a copy change": a metadata value the destination lacks or holds differently, or a medium the source has whose reference or file size differs. It decides both whether a button is offered and which rows of a review say "Same", so the two cannot disagree. Media are compared by size, not bytes, to keep a page of games fast on a NAS; the copy itself still compares bytes before writing.
 
-**Send**, for a game the registry already knows, is a direct link to that game's own existing send confirmation (see "Sending one game to a chosen ROMs folder" below), with this folder and the "fill the gaps only" rule already chosen in the query — one click from the status row instead of first opening the game's page and picking the folder there. No new write path is introduced for it: it is the same flow, reached from a second place (see [`decisions/040`](../.vibe/decisions/040-send-from-the-status-page-links-to-the-existing-confirmation.md)).
+Both directions share one write rule, `pickFields`: only the ticked fields are written, an empty source value never erases, every medium reference is checked to stay inside its system folder, and a medium that cannot be copied is recorded without stopping the others. `RetrieveFields` writes into a clone of the registry that the web layer commits only after a successful save. `SendFields` goes through `sendGame`, so it still creates the missing `gamelist.xml` entry when the ROM is present ([`decisions/037`](../.vibe/decisions/037-a-send-may-create-a-missing-gamelist-entry-when-the-rom-is-present.md)). The review is itself the confirmation, which replaced the one-click retrieve and the link to the send confirmation (see [`decisions/045`](../.vibe/decisions/045-copying-between-folder-and-registry-is-chosen-value-by-value.md)).
+
+A failed medium copy is a `*MediaNotCopiedError`: the values written, and for each failure the medium, the step (read, create-folder, write) and the operating system's own error. The web layer words it with the file, the cause in plain words and what to do.
+
+`gamelist.UpdateFile` writes every media reference with a leading `./` (`gamelist.RelativeReference`), which Batocera requires; a file already holding bare paths is repaired the next time it is written.
+
+### Filling in a game nobody has scraped
+
+For a game the registry does not know, a form creates its entry from typed values. It reuses the metadata controls of the edit form and records each typed value as hand-edited through `UpdateMetadata`; only the registry is written, and the game reaches the folder through the copy above ([`decisions/043`](../.vibe/decisions/043-a-game-filled-in-by-hand-is-created-in-the-registry-only.md)).
+
+### Importing a game's values from a web page
+
+`internal/scrape` is the only package that makes network requests. A `Fetcher` accepts an address only if it is `https`, on a default port, without credentials, on a host one of its site parsers reads (today `retrogaming.neolao.com`); redirects must stay on that host, pages are capped at 2 MB, images at 20 MB and must sniff as images, and each request times out. A new site is a parser added to the `sites` list.
+
+The web layer first shows a review of what the page says against what the game holds, with a tick box per value. Applying fetches the page and the ticked images again, outside the registry lock, then writes only the ticked values and media. The browser is never trusted with the values themselves (see [`decisions/044`](../.vibe/decisions/044-importing-from-a-url-reaches-only-supported-sites.md)).
 
 ## Removing an entry from the registry
 

@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-18
+
 ### Added
 
 - A ROMs folder's status page is now a summary table, with one row per system and its counts. Each system opens on its own page, 60 games per page with previous/next navigation and a bar to jump between the folder's systems. That page now lists every game, complete ones included, and shows the cover art the ROMs folder holds next to the cover art the registry holds, so the two can be compared at a glance.
@@ -134,7 +136,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Users can configure the registry folder and one or more Batocera ROMs folders to watch, via `batocera-scrap-manager config set-registry`, `config add-roms-folder`, and `config list`.
 
-[Unreleased]: https://github.com/neolao/batocera-scrap-manager/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/neolao/batocera-scrap-manager/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/neolao/batocera-scrap-manager/compare/v0.4.0...v0.5.0
